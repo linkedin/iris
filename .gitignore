@@ -1,0 +1,12 @@
+*pyc
+*swp
+/env
+*egg-info
+/iris-api/docker/logs
+/build
+/dist
+*swo
+.cache
+.coverage
+htmlcov
+venv

@@ -1,0 +1,77 @@
+server:
+  host: 127.0.0.1
+  port: 16649
+  disable_auth: True
+role_lookup: dummy
+metrics: influx
+
+# use this for LDAP settings for sync script lookup
+# init_config_hook: iris_internal.api.init_config
+
+#metrics: prometheus
+#prometheus:
+#  iris-sync-targets:
+#    server_port: 8001
+#  iris-sender:
+#    server_port: 8002
+#
+#
+
+#metrics: influx
+#influxdb:
+#  connect:
+#    host: localhost
+#    port: 8086
+#    database: iris
+
+db: &db
+  conn:
+    kwargs:
+      scheme: mysql+pymysql
+      user: root
+      password: ""
+      host: 127.0.0.1
+      database: iris
+      charset: utf8
+    str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+  query_limit: 500
+  kwargs:
+    pool_recycle: 3600
+    echo: False
+    pool_size: 100
+    max_overflow: 100
+    pool_timeout: 60
+sender:
+  debug: True
+  host: 127.0.0.1
+  port: 2321
+  is_master: True
+#  slaves:
+#    - host: 127.0.0.1
+#      port: 2322
+#    - host: 127.0.0.1
+#      port: 2323
+
+vendors: []
+#- type: iris_slack
+#  name: slack
+#  auth_token: ''
+#  base_url: 'https://slack.com/api/chat.postMessage'
+#  proxy: *proxy_shared
+#  message_attachments:
+#    fallback: 'Iris Alert Fired!'
+#    color: 'danger'
+#    pretext: '<!here> _Iris_ _Alert!_'
+
+#  - type: iris_twilio
+#    name: twilio_1
+#    account_sid: ''
+#    auth_token: ''
+#    twilio_number: ''
+#    relay_base_url: ''
+
+healthcheck_path: /tmp/status
+
+enable_gmail_oneclick: True
+gmail_one_click_url_key: 'foo'
+gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/relay'

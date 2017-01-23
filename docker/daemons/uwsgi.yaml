@@ -1,0 +1,43 @@
+prod:
+    plugins: python,logfile
+    chdir: /home/iris/src
+    socket: /home/iris/var/run/uwsgi.sock
+    chmod-socket: 666
+    master: True
+    uid: 1000
+    gid: 1000
+    workers: 12
+    master-fifo: /home/iris/var/run/uwsgi_master_fifo
+    touch-reload: /home/iris/var/run/uwsgi_touch_reload
+    stats: /home/iris/var/run/uwsgi_stats.sock
+    pidfile: /home/iris/var/run/uwsgi.pid
+    module: iris_api.api:get_api_app()
+    virtualenv: /home/iris/env
+    pyargv: /home/iris/config/config.yaml
+    buffer-size: 32768
+
+    # Enable memory reporting
+    memory-report: true
+
+    # Logging
+    logformat: '%(ltime) [%(status)] %(method) %(uri) %(addr) [%(uagent)] RT:%(msecs) REF:%(referer) SZ:%(size) %(proto)'
+    log-4xx: true
+    log-5xx: true
+    log-x-forwarded-for: true
+    log-slow: 1500
+
+    # access log
+    req-logger: file:/home/iris/var/log/uwsgi/access.log
+
+    # error log
+    logger: file:/home/iris/var/log/uwsgi/error.log
+
+    # put timestamp in the error log
+    logdate: true
+
+    # control nginx and iris sender
+    attach-daemon2:
+      - cmd=/usr/sbin/nginx -c /home/iris/daemons/nginx.conf,pidfile=/home/iris/var/run/nginx.pid
+      - cmd=/home/iris/env/bin/iris-sender /home/iris/config/config.yaml
+
+# vim:filetype=yaml
