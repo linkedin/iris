@@ -303,6 +303,26 @@ CREATE TABLE `target_application_mode` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `target_default_application_mode`
+--
+
+DROP TABLE IF EXISTS `default_application_mode`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `default_application_mode` (
+  `application_id` int(11) NOT NULL,
+  `priority_id` int(11) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  PRIMARY KEY (`mode_id`,`application_id`,`priority_id`),
+  KEY `default_application_mode_ibfk_1` (`application_id`),
+  KEY `default_application_mode_ibfk_2` (`priority_id`),
+  KEY `default_application_mode_ibfk_3` (`mode_id`),
+  CONSTRAINT `default_application_mode_ibfk_1` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`),
+  CONSTRAINT `default_application_mode_ibfk_2` FOREIGN KEY (`priority_id`) REFERENCES `priority` (`id`),
+  CONSTRAINT `default_application_mode_ibfk_3` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `target_contact`
 --
 

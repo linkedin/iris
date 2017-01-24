@@ -390,6 +390,14 @@ JOIN `target` on `target`.`id` =  `target_application_mode`.`target_id`
 JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
 WHERE `target`.`name` = :username AND `application`.`name` = :app'''
 
+get_default_application_modes_query = '''
+SELECT `priority`.`name` as priority, `mode`.`name` as mode
+FROM `default_application_mode`
+JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
+JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
+JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
+WHERE `application`.`name` = %s'''
+
 insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
 VALUES (
@@ -1387,6 +1395,10 @@ class Application(object):
             app['variables'].append(row['name'])
             if row['required']:
                 app['required_variables'].append(row['name'])
+
+        cursor.execute(get_default_application_modes_query, app_name)
+        app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+
         cursor.close()
         connection.close()
 

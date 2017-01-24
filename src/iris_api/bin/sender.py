@@ -598,40 +598,46 @@ def set_target_fallback_mode(message):
 
 
 def set_target_contact_by_priority(message):
-    connection = db.engine.raw_connection()
-    cursor = connection.cursor()
-    cursor.execute('''
+    session = db.Session()
+    result = session.execute('''
         SELECT `destination`, `mode`.`name`, `mode`.`id`
         FROM `target` JOIN `target_contact` ON `target_contact`.`target_id` = `target`.`id`
         JOIN `mode` ON `mode`.`id` = `target_contact`.`mode_id`
-        WHERE `target`.`name` = %s AND `target_contact`.`mode_id` = IFNULL(
+        WHERE `target`.`name` = :target AND `target_contact`.`mode_id` = IFNULL(
             -- 1. lookup per application user setting
             (
                 SELECT `target_application_mode`.`mode_id`
                 FROM `target_application_mode`
                 JOIN `application` ON `target_application_mode`.`application_id` = `application`.`id`
                 WHERE `target_application_mode`.`target_id` = `target`.`id` AND
-                        `application`.`name` = %s AND
-                        `target_application_mode`.`priority_id` = %s
+                        `application`.`name` = :application AND
+                        `target_application_mode`.`priority_id` = :priority_id
             ), IFNULL(
-            -- 2. lookup default user setting
-                (
-                    SELECT `target_mode`.`mode_id`
-                    FROM `target_mode`
-                    WHERE `target_mode`.`target_id` = `target`.`id` AND
-                            `target_mode`.`priority_id` = %s
-                ), (
-            -- 3. lookup default iris setting
-                    SELECT `mode_id`
-                    FROM `priority`
-                    WHERE `id` = %s
+              -- 2. Lookup default setting for this app
+              (
+                  SELECT `default_application_mode`.`mode_id`
+                  FROM `default_application_mode`
+                  JOIN `application` ON `default_application_mode`.`application_id` = `application`.`id`
+                  WHERE `default_application_mode`.`priority_id` = :priority_id AND
+                        `application`.`name` = :application
+              ), IFNULL(
+                -- 3. lookup default user setting
+                    (
+                        SELECT `target_mode`.`mode_id`
+                        FROM `target_mode`
+                        WHERE `target_mode`.`target_id` = `target`.`id` AND
+                                `target_mode`.`priority_id` = :priority_id
+                    ), (
+                -- 4. lookup default iris setting
+                        SELECT `mode_id`
+                        FROM `priority`
+                        WHERE `id` = :priority_id
+                    )
                 )
-            )
-        )''', (message['target'], message['application'], message['priority_id'],
-               message['priority_id'], message['priority_id']))
-    [(destination, mode, mode_id)] = cursor
-    cursor.close()
-    connection.close()
+           )
+        )''', message)
+    [(destination, mode, mode_id)] = result
+    session.close()
 
     message['destination'] = destination
     message['mode'] = mode
