@@ -7,6 +7,7 @@ Iris API core and sender service
 Setup database
 --------------
 
+1. remove `ONLY_FULL_GROUP_BY` from MySQL config `sql_mode`
 1. create mysql schema: `mysql -u USER -p < ./db/schema_0.sql`
 1. import dummy data: `mysql -u USER -p -o iris < ./db/dummy_data.sql`
 
