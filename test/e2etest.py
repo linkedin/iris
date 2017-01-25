@@ -64,6 +64,8 @@ def fake_batch_id():
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('SELECT `batch` FROM `message` WHERE NOT ISNULL(`incident_id`) AND NOT ISNULL(`batch`) LIMIT 1')
         result = cursor.fetchall()
+        if not result:
+            return None
         return result[0][0]
 
 
@@ -904,6 +906,9 @@ def test_get_messages_not_found():
 
 
 def test_get_incident(iris_incidents):
+    if len(iris_incidents) < 3:
+        pytest.skip('Skipping this test as we don\'t have enough incidents')
+
     re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json()
     assert len(re) == 3
 
@@ -1172,7 +1177,7 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
 
 
 def test_get_applications(sample_application_name):
-    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context'])
+    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context', 'default_modes'])
     # TODO: insert application data before get
     re = requests.get(base_url + 'applications/' + sample_application_name)
     assert re.status_code == 200
@@ -1349,6 +1354,7 @@ def test_post_invalid_notification(sample_user):
     assert 'Invalid mode' in re.text
 
 
+@pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):
         with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):

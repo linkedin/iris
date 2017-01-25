@@ -1424,6 +1424,8 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
+            cursor.execute(get_default_application_modes_query, row['name'])
+            app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
             del app['id']
         payload = apps
         cursor.close()
@@ -1882,11 +1884,11 @@ class Stats(object):
 def get_api_app():
     import sys
     config = load_config_file(sys.argv[1])
-    logging.basicConfig()
     return get_api(config)
 
 
 def get_api(config):
+    logging.basicConfig()
     db.init(config)
     cache.init()
     init_plugins(config.get('plugins', {}))

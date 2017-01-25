@@ -19,7 +19,7 @@ INSERT IGNORE INTO `priority` VALUES (8,'urgent',26),(17,'high',8),(26,'medium',
 UNLOCK TABLES;
 
 LOCK TABLES `target_role` WRITE;
-INSERT IGNORE INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44,'oncall',1);
+INSERT IGNORE INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44,'oncall',2);
 UNLOCK TABLES;
 
 LOCK TABLES `target_contact` WRITE;
