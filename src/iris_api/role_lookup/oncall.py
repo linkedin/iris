@@ -10,7 +10,10 @@ logger = logging.getLogger()
 
 class oncall(object):
     def __init__(self, config):
+        headers = requests.utils.default_headers()
+        headers['User-Agent'] = 'iris-api role lookup (%s)' % headers.get('User-Agent')
         self.requests = requests.session()
+        self.requests.headers = headers
         self.requests.verify = False
         self.endpoint = config['oncall-api'] + '/api/v0'
 
