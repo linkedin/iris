@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 from time import time
 import logging
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class oncall(object):
@@ -44,10 +44,17 @@ class oncall(object):
 
     def team_manager(self, team_name):
         now = int(time())
+
         result = self.call_oncall('/events?role=manager&team=%s&start__le=%s&end__ge=%s' % (team_name, now, now))
-        if not result:
-            return None
-        return [user['user'] for user in result]
+        if result:
+            return [user['user'] for user in result]
+
+        result = self.call_oncall('/teams/%s/admins' % team_name)
+        if result:
+            return result
+
+        logger.error('Failed looking up manager events, as well as defaulting to team admins, for team %s', team_name)
+        return None
 
     def team_oncall(self, team_name, oncall_type='primary'):
         result = self.call_oncall('/teams/%s/oncall/%s' % (team_name, oncall_type))
