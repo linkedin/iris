@@ -3,6 +3,7 @@
 
 import requests
 from requests.exceptions import RequestException
+from time import time
 import logging
 
 logger = logging.getLogger()
@@ -42,10 +43,11 @@ class oncall(object):
         return result
 
     def team_manager(self, team_name):
-        result = self.call_oncall('/teams/%s/rosters/managers' % team_name)
+        now = int(time())
+        result = self.call_oncall('/events?role=manager&team=%s&start__le=%s&end__ge=%s' % (team_name, now, now))
         if not result:
             return None
-        return result['users']
+        return [user['user'] for user in result]
 
     def team_oncall(self, team_name, oncall_type='primary'):
         result = self.call_oncall('/teams/%s/oncall/%s' % (team_name, oncall_type))
