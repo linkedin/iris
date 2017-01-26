@@ -1424,7 +1424,7 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
-            cursor.execute(get_default_application_modes_query, row['name'])
+            cursor.execute(get_default_application_modes_query, app['name'])
             app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
             del app['id']
         payload = apps
