@@ -51,6 +51,7 @@ class oncall(object):
 
         result = self.call_oncall('/teams/%s/admins' % team_name)
         if result:
+            logger.warning('Failed looking up manager events, defaulting to team admins list, for team %s', team_name)
             return result
 
         logger.error('Failed looking up manager events, as well as defaulting to team admins, for team %s', team_name)
