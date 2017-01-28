@@ -1766,6 +1766,25 @@ class ResponseTwilioMessages(ResponseMixin):
             resp.body = ujson.dumps({'app_response': response})
 
 
+class ResponseSlack(ResponseMixin):
+    def on_post(self, req, resp):
+        slack_params = ujson.loads(req.context['body'])
+        try:
+            msg_id = int(slack_params['msg_id'])
+            source = slack_params['source']
+            content = slack_params['content']
+        except KeyError:
+            raise HTTPBadRequest('Post body missing required key', '')
+        try:
+            _, response = self.handle_user_response('slack', msg_id, source, content)
+        except Exception:
+            logger.exception('Failed to handle slack response: %s' % req.context['body'])
+            raise HTTPBadRequest('Bad Request', 'Failed to handle slack response')
+        else:
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({'app_response': response})
+
+
 class Reprioritization(object):
     allow_read_only = False
 
@@ -1956,6 +1975,7 @@ def get_api(config):
     app.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick())
     app.add_route('/v0/response/twilio/calls', ResponseTwilioCalls())
     app.add_route('/v0/response/twilio/messages', ResponseTwilioMessages())
+    app.add_route('/v0/response/slack', ResponseSlack())
 
     app.add_route('/v0/stats', Stats())
 
