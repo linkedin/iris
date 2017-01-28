@@ -38,12 +38,12 @@ class iris_slack(object):
         return ujson.dumps([{"fallback": message_attachments['fallback'],
                              "color": message_attachments['color'],
                              "pretext": message_attachments['pretext'],
-                             # "title": message['subject'],
-                             # "title_link": message[''],
+                             "title": message['subject'],
+                             "title_link": self.config['iris_incident_url'] + '/' + message['incident_id'],
                              "text": message['body']
                              # Used for interactive buttons
                              # "attachment_type": "default",
-                             # "callback_id": "claim_incident(incident ID)",
+                             # "callback_id": message['id'],
                              # "actions": [{"name": "claim",
                              #              "text": "Claim Incident",
                              #              "type": "button",
