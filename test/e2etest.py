@@ -1303,6 +1303,7 @@ def test_get_user(sample_user, sample_email):
     assert data['name'] == sample_user
     assert 'teams' in data
     assert 'modes' in data
+    assert 'per_app_modes' in data
 
 
 def test_healthcheck():

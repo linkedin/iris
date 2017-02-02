@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from importlib import import_module
 import yaml
 
+from collections import defaultdict
 from streql import equals
 
 from . import db
@@ -389,6 +390,16 @@ JOIN `mode` on `mode`.`id` = `target_application_mode`.`mode_id`
 JOIN `target` on `target`.`id` =  `target_application_mode`.`target_id`
 JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
 WHERE `target`.`name` = :username AND `application`.`name` = :app'''
+
+get_all_users_app_modes_query = '''SELECT
+    `application`.`name` as application,
+    `priority`.`name` as priority,
+    `mode`.`name` as mode from `priority`
+JOIN `target_application_mode` on `target_application_mode`.`priority_id` = `priority`.`id`
+JOIN `mode` on `mode`.`id` = `target_application_mode`.`mode_id`
+JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
+WHERE `target_application_mode`.`target_id` = %s
+'''
 
 get_default_application_modes_query = '''
 SELECT `priority`.`name` as priority, `mode`.`name` as mode
@@ -1496,6 +1507,12 @@ class User(object):
         user_data['modes'] = {}
         for row in cursor:
             user_data['modes'][row['priority']] = row['mode']
+
+        # Get user contact modes per app
+        user_data['per_app_modes'] = defaultdict(dict)
+        cursor.execute(get_all_users_app_modes_query, user_id)
+        for row in cursor:
+            user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
 
         # Get user teams
         teams_query = '''SELECT `target`.`name` AS `team`
