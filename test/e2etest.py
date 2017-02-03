@@ -1322,7 +1322,7 @@ def test_stats():
         assert isinstance(data[key], int)
 
 
-def test_post_invalid_notification(sample_user):
+def test_post_notification(sample_user, sample_application_name):
     re = requests.post(base_url + 'notifications', json={})
     assert re.status_code == 400
     assert 'Missing required atrributes' in re.text
@@ -1352,6 +1352,15 @@ def test_post_invalid_notification(sample_user):
     })
     assert re.status_code == 400
     assert 'Invalid mode' in re.text
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

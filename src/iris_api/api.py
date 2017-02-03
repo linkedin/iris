@@ -441,6 +441,21 @@ get_allowed_roles_query = '''SELECT `target_role`.`id`
                              JOIN `target` ON `target`.`type_id` = `target_type`.`id`
                              WHERE `target`.`name` = :target'''
 
+get_application_quota_query = '''SELECT
+                                     `application_quotas`.`hard_quota_threshold`,
+                                     `application_quotas`.`soft_quota_threshold`,
+                                     `application_quotas`.`hard_quota_duration`,
+                                     `application_quotas`.`soft_quota_duration`,
+                                     `target`.`name` as target_name,
+                                     `target_type`.`name` as target_role,
+                                     `application_quotas`.`plan_name`,
+                                     `application_quotas`.`wait_time`
+                                 FROM `application_quotas`
+                                 JOIN `application` ON `application`.`id` = `application_quotas`.`application_id`
+                                 JOIN `target` on `target`.`id` = `application_quotas`.`target_id`
+                                 JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
+                                 WHERE `application`.`name` = %s '''
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -1057,7 +1072,9 @@ class Notifications(object):
     required_attrs = frozenset(['target', 'role', 'subject'])
 
     def __init__(self, config):
-        self.sender_addr = (config['sender']['host'], config['sender']['port'])
+        master_sender = config['sender'].get('master_sender', config['sender'])
+        self.sender_addr = (master_sender['host'], master_sender['port'])
+        logging.info('Sender used for notifications: %s:%s', *self.sender_addr)
 
     def on_post(self, req, resp):
         message = ujson.loads(req.context['body'])
@@ -1406,6 +1423,22 @@ class Application(object):
         payload = app
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
+
+
+#  TODO: functionality to change quotas via API, which requires ACLs/etc
+class ApplicationQuota(object):
+    allow_read_only = True
+
+    def on_get(self, req, resp, app_name):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute(get_application_quota_query, app_name)
+        quota = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        if not quota:
+            raise HTTPNotFound()
+        resp.body = ujson.dumps(quota)
 
 
 class Applications(object):
@@ -1949,6 +1982,7 @@ def get_api(config):
 
     app.add_route('/v0/modes', Modes())
 
+    app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 

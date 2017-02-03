@@ -14,6 +14,10 @@ from .. import db
 from ..role_lookup import get_role_lookup
 from ..metrics import stats
 from . import auditlog
+from time import time
+import hmac
+import hashlib
+import base64
 
 import logging
 logger = logging.getLogger(__name__)
@@ -34,20 +38,45 @@ plan_notifications = None
 target_reprioritization = None
 target_names = None
 targets_for_role = None
+application_quotas = None
+
+
+class IrisAuth(requests.auth.AuthBase):
+    def __init__(self, app, key):
+        self.header = 'hmac %s:' % app
+        self.HMAC = hmac.new(key, '', hashlib.sha512)
+
+    def __call__(self, request):
+        HMAC = self.HMAC.copy()
+        path = request.path_url
+        method = request.method
+        body = request.body or ''
+        window = int(time()) // 5
+        HMAC.update('%s %s %s %s' % (window, method, path, body))
+        digest = base64.urlsafe_b64encode(HMAC.digest())
+        request.headers['Authorization'] = self.header + digest
+        return request
 
 
 class IrisClient(requests.Session):
-    def __init__(self, base, version=0):
+    def __init__(self, base, version=0, api_auth=None):
         super(IrisClient, self).__init__()
         self.url = base + '/v%d/' % version
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
         self.mount('http://', adapter)
         self.mount('https://', adapter)
+        if api_auth:
+            self.iris_auth = IrisAuth(api_auth['app'], api_auth['key'])
+        else:
+            logger.warning('No API keys configured for sender API auth; we likely won\'t be able to send quota notifications')
+            self.iris_auth = None
 
     def get(self, path, *args, **kwargs):
         return super(IrisClient, self).get(self.url + path, *args, **kwargs)
 
     def post(self, path, *args, **kwargs):
+        if self.iris_auth:
+            kwargs['auth'] = self.iris_auth
         return super(IrisClient, self).post(self.url + path, *args, **kwargs)
 
 
@@ -346,6 +375,166 @@ class TargetReprioritization(object):
             return
 
 
+class ApplicationQuotas(object):
+
+    def __init__(self, engine, iris_client):
+        self.engine = engine
+        self.iris_client = iris_client
+        self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
+        self.last_incidents = {}  # application: (incident_id, time())
+
+    def refresh(self):
+        while True:
+            logging.info('Refreshing app quotas')
+            new_rates = {}
+            connection = self.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute('''SELECT `application`.`name` as application,
+                                     `application_quotas`.`hard_quota_threshold`,
+                                     `application_quotas`.`soft_quota_threshold`,
+                                     `application_quotas`.`hard_quota_duration`,
+                                     `application_quotas`.`soft_quota_duration`,
+                                     `target`.`name` as target_name,
+                                     `target_type`.`name` as target_role,
+                                     `application_quotas`.`plan_name`,
+                                     `application_quotas`.`wait_time`
+                              FROM `application_quotas`
+                              JOIN `application` ON `application`.`id` = `application_quotas`.`application_id`
+                              JOIN `target` on `target`.`id` = `application_quotas`.`target_id`
+                              JOIN `target_type` on `target_type`.`id` = `target`.`type_id`''')
+
+            for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in cursor:
+                new_rates[application] = (hard_limit, soft_limit, hard_duration / 60, soft_duration / 60, wait_time, plan_name, (target_name, target_role))
+
+            cursor.close()
+            connection.close()
+
+            old_keys = self.rates.viewkeys()
+            new_keys = new_rates.viewkeys()
+
+            # Remove old application entries
+            for key in old_keys - new_keys:
+                logger.info('Pruning old application quota for %s', key)
+                try:
+                    del(self.rates[key])
+                    del(self.last_incidents[key])
+                except KeyError:
+                    pass
+
+            # Create new ones with fresh buckets
+            for key in new_keys - old_keys:
+                hard_limit, soft_limit, hard_duration, soft_duration, wait_time, plan_name, target = new_rates[key]
+                self.rates[key] = (deque([0] * hard_duration, maxlen=hard_duration),  # hard buckets
+                                   deque([0] * soft_duration, maxlen=soft_duration),  # soft buckets
+                                   hard_limit, soft_limit, wait_time, plan_name, target)
+
+            # Update existing ones + append new time interval. Keep same time bucket object if duration hasn't changed, otherwise create new
+            # one and resize accordingly
+            for key in new_keys & old_keys:
+                hard_limit, soft_limit, hard_duration, soft_duration, wait_time, plan_name, target = new_rates[key]
+                self.rates[key] = (self.rates[key][0] if len(self.rates[key][0]) == hard_duration else deque(self.rates[key][0], maxlen=hard_duration),
+                                   self.rates[key][1] if len(self.rates[key][1]) == soft_duration else deque(self.rates[key][1], maxlen=soft_duration),
+                                   hard_limit, soft_limit, wait_time, plan_name, target)
+
+                # Increase minute interval for hard + soft buckets
+                self.rates[key][0].append(0)
+                self.rates[key][1].append(0)
+
+            logging.info('Refreshed app quotas: %s', self.rates.keys())
+            sleep(60)
+
+    def __call__(self, message):
+        application = message.get('application')
+
+        if not application:
+            return True
+
+        rate = self.rates.get(application)
+
+        if not rate:
+            return True
+
+        hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, target = rate
+
+        # Increment both buckets for this minute
+        hard_buckets[-1] += 1
+        soft_buckets[-1] += 1
+
+        # If hard limit breached, disallow sending this message and create incident
+        if sum(hard_buckets) > hard_limit:
+            self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
+            return False
+
+        # If soft limit breached, just notify owner and still send
+        if sum(soft_buckets) > soft_limit:
+            self.notify_target(application, soft_limit, len(soft_buckets), *target)
+            return True
+
+        return True
+
+    def notify_incident(self, application, limit, duration, plan_name, wait_time):
+        logger.warning('Application %s breached hard quota. Will create incident using plan %s', application, plan_name)
+
+        # Avoid creating new incident if we have an incident that's either not claimed or claimed and wait_time hasn't been exceeded
+        last_incident = self.last_incidents.get(application)
+        if last_incident:
+            last_incident_id, last_incident_created = last_incident
+            try:
+                r = self.iris_client.get('incidents/%s' % last_incident_id)
+                r.raise_for_status()
+                last_incident = r.json()
+            except (requests.exceptions.RequestException, ValueError):
+                logger.exception('Failed looking up last created incident %s for application %s during hard quota breach', last_incident_id, application)
+            else:
+                try:
+                    if last_incident['active']:
+                        logger.info('Skipping creating incident for application %s as existing incident %s is not claimed', application, last_incident_id)
+                        return
+
+                    if wait_time and (time() - last_incident_created) < wait_time:
+                        logger.info('Skipping creating incident for application %s as it is not yet %s seconds since existing incident %s was claimed',
+                                    application, wait_time, last_incident_id)
+                        return
+                except KeyError:
+                    logger.exception('Failed parsing info for incident %s during application %s hard quota breach', last_incident_id, application)
+
+        # Make a new incident
+        try:
+            r = self.iris_client.post('incidents', json={
+                'plan': plan_name,
+                'context': {
+                  'feature': 'quota-breach',
+                  'details': {
+                    'application': application,
+                    'limit': limit,
+                    'duration': duration
+                  }
+                }
+            })
+            r.raise_for_status()
+            incident_id = r.json()
+            self.last_incidents[application] = incident_id, time()
+            logger.info('Created incident %s', incident_id)
+        except (requests.exceptions.RequestException, ValueError):
+            logger.exception('Failed hitting iris-api to create incident for application %s breaching hard quota', application)
+
+    def notify_target(self, application, limit, duration, target_name, target_role):
+        logger.warning('Application %s breached soft quota. Will notify %s:%s', application, target_role, target_name)
+
+        try:
+            self.iris_client.post('notifications', json={
+              'priority': 'low',
+              'target': target_name,
+              'role': target_role,
+              'subject': 'Application %s exceeding message quota' % application,
+              'body': ('Hi\n\nYour application %s is currently exceeding its soft quota of %s messages per %s minutes.\n\n'
+                       'If this continues, your messages will eventually be dropped on the floor and an Iris incident will be raised.\n\n'
+                       'Regards,\nIris') % (application, limit, duration, )
+            }).raise_for_status()
+        except requests.exceptions.RequestException:
+            logger.exception('Failed hitting iris-api to create incident for application %s breaching hard quota', application)
+
+
 class RoleTargets():
     def __init__(self, role_lookup, engine):
         self.data = {}
@@ -415,9 +604,9 @@ def purge():
 
 def init(config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
-    global roles, incidents, templates, plans, iris_client
+    global roles, incidents, templates, plans, iris_client, application_quotas
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'))
+    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0, config['sender'].get('api_auth'))
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,
@@ -433,8 +622,10 @@ def init(config):
                                 'JOIN `plan_active` ON `plan_notification`.`plan_id` = `plan_active`.`plan_id` '
                                 'AND `plan_notification`.`id` IN %s'))
     target_reprioritization = TargetReprioritization(db.engine)
+    application_quotas = ApplicationQuotas(db.engine, iris_client)
     target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
     role_lookup = get_role_lookup(config)
     targets_for_role = RoleTargets(role_lookup, db.engine)
 
     spawn(target_reprioritization.refresh)
+    spawn(application_quotas.refresh)

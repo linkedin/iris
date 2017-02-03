@@ -808,6 +808,14 @@ def distributed_send_message(message):
 
 def fetch_and_send_message():
     message = send_queue.get()
+
+    if not cache.application_quotas(message):
+        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
+        message_id = message.get('message_id')
+        if message_id:
+            spawn(auditlog.message_change, message_id, auditlog.SENT_CHANGE, '', '', 'Dropping due to hard quota violation.')
+        return
+
     has_contact = set_target_contact(message)
     if not has_contact:
         mark_message_has_no_contact(message)

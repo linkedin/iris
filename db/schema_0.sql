@@ -565,6 +565,31 @@ CREATE TABLE `user_team` (
   CONSTRAINT `user_team_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`),
   CONSTRAINT `user_team_ibfk_2` FOREIGN KEY (`team_id`) REFERENCES `team` (`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `application_quotas`
+--
+
+DROP TABLE IF EXISTS `application_quotas`;
+CREATE TABLE `application_quotas` (
+  `application_id` int(11) NOT NULL,
+  `hard_quota_threshold` smallint(5) NOT NULL,
+  `soft_quota_threshold` smallint(5) NOT NULL,
+  `hard_quota_duration` smallint(5) NOT NULL,
+  `soft_quota_duration` smallint(5) NOT NULL,
+  `plan_name` varchar(255) NOT NULL,
+  `target_id` bigint(20) NOT NULL,
+  `wait_time` smallint(5) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`application_id`),
+  KEY `application_quotas_plan_name_fk_idx` (`plan_name`),
+  KEY `application_quotas_target_id_fk_idx` (`target_id`),
+  CONSTRAINT `application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE NO ACTION ON UPDATE CASCADE,
+  CONSTRAINT `target_id_ibfk` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
