@@ -27,6 +27,7 @@ from . import db
 from . import utils
 from . import cache
 from iris_api.sender import auditlog
+from iris_api.sender.quota import get_application_quotas_query
 
 
 from .constants import (
@@ -440,21 +441,6 @@ get_allowed_roles_query = '''SELECT `target_role`.`id`
                              JOIN `target_type` ON `target_type`.`id` = `target_role`.`type_id`
                              JOIN `target` ON `target`.`type_id` = `target_type`.`id`
                              WHERE `target`.`name` = :target'''
-
-get_application_quota_query = '''SELECT
-                                     `application_quotas`.`hard_quota_threshold`,
-                                     `application_quotas`.`soft_quota_threshold`,
-                                     `application_quotas`.`hard_quota_duration`,
-                                     `application_quotas`.`soft_quota_duration`,
-                                     `target`.`name` as target_name,
-                                     `target_type`.`name` as target_role,
-                                     `application_quotas`.`plan_name`,
-                                     `application_quotas`.`wait_time`
-                                 FROM `application_quotas`
-                                 JOIN `application` ON `application`.`id` = `application_quotas`.`application_id`
-                                 JOIN `target` on `target`.`id` = `application_quotas`.`target_id`
-                                 JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
-                                 WHERE `application`.`name` = %s '''
 
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
@@ -1432,11 +1418,13 @@ class ApplicationQuota(object):
     def on_get(self, req, resp, app_name):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(get_application_quota_query, app_name)
+        quota_query = get_application_quotas_query + ' WHERE `application`.`name` = %s'
+        cursor.execute(quota_query, app_name)
         quota = cursor.fetchone()
         cursor.close()
         connection.close()
         if not quota:
+            resp.body = '{}'
             raise HTTPNotFound()
         resp.body = ujson.dumps(quota)
 

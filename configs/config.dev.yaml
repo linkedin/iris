@@ -52,11 +52,10 @@ sender:
     host: 127.0.0.1
     port: 2321
 
-  # Needed for sender utilizing API for quota notifications
   api_host: http://localhost:16649
-  api_auth:
-    app: iris
-    key: foo
+
+  # App used for sending notification messages + incidents
+  sender_app: iris
 
 #  slaves:
 #    - host: 127.0.0.1

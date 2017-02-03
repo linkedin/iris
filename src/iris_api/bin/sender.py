@@ -22,6 +22,7 @@ from iris_api.sender import rpc, cache
 from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
+from iris_api.sender.quota import ApplicationQuota
 
 # sql
 
@@ -197,6 +198,9 @@ sent = {}
 # this sets the ground work for not having to poll the DB for messages
 message_queue = queue.Queue()
 
+# Quota object used for rate limiting
+quota = None
+
 # queue for sending messages
 from iris_api.sender.shared import send_queue
 
@@ -209,7 +213,8 @@ default_sender_metrics = {
     'oncall_error': 0, 'role_target_lookup_error': 0, 'target_not_found': 0, 'message_send_cnt': 0,
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
-    'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0
+    'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
+    'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0
 }
 
 # TODO: make this configurable
@@ -809,7 +814,7 @@ def distributed_send_message(message):
 def fetch_and_send_message():
     message = send_queue.get()
 
-    if not cache.application_quotas(message):
+    if not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         message_id = message.get('message_id')
         if message_id:
@@ -903,6 +908,8 @@ def init_sender(config):
     db.init(config)
     cache.init(config)
     init_metrics(config, 'iris-sender', default_sender_metrics)
+    api_cache.cache_priorities()
+    api_cache.cache_applications()
 
     global should_mock_gwatch_renewer, send_message
     if config['sender'].get('debug'):
@@ -920,6 +927,9 @@ def init_sender(config):
           'name': 'iris dummy vendor'
         }]
 
+    global quota
+    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
+
 
 def main():
     if len(sys.argv) <= 1:
@@ -935,7 +945,6 @@ def main():
     init_sender(config)
     init_plugins(config.get('plugins', {}))
     init_vendors(config.get('vendors', []), config.get('applications', []))
-    api_cache.cache_priorities()
 
     send_task = spawn(send)
     worker_tasks = [spawn(worker) for x in xrange(100)]
