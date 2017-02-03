@@ -34,11 +34,10 @@ plan_notifications = None
 target_reprioritization = None
 target_names = None
 targets_for_role = None
-application_quotas = None
 
 
 class IrisClient(requests.Session):
-    def __init__(self, base, version=0, api_auth=None):
+    def __init__(self, base, version=0):
         super(IrisClient, self).__init__()
         self.url = base + '/v%d/' % version
         adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
@@ -416,9 +415,9 @@ def purge():
 
 def init(config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
-    global roles, incidents, templates, plans, iris_client, application_quotas
+    global roles, incidents, templates, plans, iris_client
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0, config['sender'].get('api_auth'))
+    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0)
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,
