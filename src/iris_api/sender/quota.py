@@ -39,6 +39,7 @@ class ApplicationQuota(object):
     def __init__(self, db, expand_targets, sender_app):
         self.db = db
         self.expand_targets = expand_targets
+        self.iris_application = None
         if sender_app:
             self.iris_application = applications.get(sender_app)
             if not self.iris_application:
