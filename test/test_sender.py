@@ -11,6 +11,9 @@ import msgpack
 
 def test_configure(mocker):
     mocker.patch('iris_api.sender.cache.RoleTargets.initialize_active_targets')
+    mocker.patch('iris_api.db.init')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_priorities')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_applications')
     init_sender({
         'db': {
             'conn': {
@@ -118,6 +121,7 @@ def test_fetch_and_send_message(mocker):
 
     mocker.patch('iris_api.bin.sender.db')
     mocker.patch('iris_api.bin.sender.send_message').return_value = 1
+    mocker.patch('iris_api.bin.sender.quota')
     mocker.patch('iris_api.bin.sender.update_message_mode')
     mock_mark_message_sent = mocker.patch('iris_api.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent

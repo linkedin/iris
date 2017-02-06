@@ -417,7 +417,7 @@ def init(config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
     global roles, incidents, templates, plans, iris_client
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'))
+    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0)
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,
