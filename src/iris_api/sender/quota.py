@@ -159,7 +159,7 @@ class ApplicationQuota(object):
           'created': datetime.utcnow(),
           'sender_app_id': self.iris_application['id'],
           'context': ujson.dumps({
-            'quota-breach': {
+            'quota_breach': {
               'application': application,
               'limit': limit,
               'duration': duration
