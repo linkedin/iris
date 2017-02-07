@@ -45,6 +45,7 @@ def test_configure(mocker):
         'skipgmailwatch': True,
     })
 
+
 fake_message = {
     'message_id': 1234,
     'plan_id': 19546,
@@ -247,3 +248,27 @@ def test_generate_slave_message_payload():
         'ids': [1, 2, 3, 4]
       }
     }
+
+
+def test_quotas(mocker):
+    from iris_api.sender.quota import ApplicationQuota
+    from iris_api.metrics import stats
+    from gevent import sleep
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.get_new_rules', return_value=[(u'testapp', 5, 2, 120, 120, u'testuser', u'user', u'iris-plan', 10)])
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.notify_incident')
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.notify_target')
+    stats['quota_hard_exceed_cnt'] = stats['quota_soft_exceed_cnt'] = 0
+    quotas = ApplicationQuota(None, None, None)
+    sleep(1)
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})  # Breach soft quota
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})
+    assert not quotas.allow_send({'application': 'testapp'})  # Breach hard quota
+    assert not quotas.allow_send({'application': 'testapp'})
+    assert stats['quota_soft_exceed_cnt'] == 3
+    assert stats['quota_hard_exceed_cnt'] == 2
+
+    for _ in xrange(10):
+        assert quotas.allow_send({'application': 'app_without_quota'})
