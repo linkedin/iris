@@ -986,6 +986,68 @@ def test_post_target_application_modes(sample_user, sample_application_name):
     assert re.json() == modes
 
 
+def test_post_target_multiple_application_modes(sample_user, sample_application_name, sample_application_name2):
+    # Set priorities for two apps in batch, as well as global defaults
+    modes_per_app = {
+      'per_app_modes': {
+        sample_application_name: {
+          'high': 'sms',
+          'urgent': 'call',
+          'medium': 'im',
+          'low': 'call'
+        },
+        sample_application_name2: {
+          'high': 'email',
+          'urgent': 'email',
+          'medium': 'im',
+          'low': 'call'
+        },
+      },
+      'high': 'call',
+      'urgent': 'call',
+      'medium': 'call',
+      'low': 'call'
+    }
+    re = requests.post(base_url + 'users/modes/' + sample_user, json=modes_per_app)
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    result = re.json()
+    assert modes_per_app['per_app_modes'] == result['per_app_modes']
+    assert all(result['modes'][key] == modes_per_app[key] for key in ['high', 'urgent', 'medium', 'low'])
+
+    # Now try deleting both custom apps by setting all to default
+    modes_per_app_delete = {
+      'per_app_modes': {
+        sample_application_name: {
+          'high': 'default',
+          'urgent': 'default',
+          'medium': 'default',
+          'low': 'default'
+        },
+        sample_application_name2: {
+          'high': 'default',
+          'urgent': 'default',
+          'medium': 'default',
+          'low': 'default'
+        },
+      },
+      'high': 'default',
+      'urgent': 'default',
+      'medium': 'default',
+      'low': 'default'
+    }
+
+    re = requests.post(base_url + 'users/modes/' + sample_user, json=modes_per_app_delete)
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    result = re.json()
+    assert {} == result['per_app_modes'] == result['modes']
+
+
 def test_create_template(sample_user, sample_application_name):
     post_payload = {
       'creator': sample_user,

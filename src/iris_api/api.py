@@ -1305,15 +1305,10 @@ class UserModes(object):
             modes = {name: 'default' for (name, ) in results}
 
             app = mode_params.pop('application', None)
+            multiple_apps = mode_params.pop('per_app_modes', None)
 
-            if app is None:
-                for p, m in mode_params.iteritems():
-                    if m != 'default':
-                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
-                    else:
-                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
-                result = session.execute(get_user_modes_query, {'username': username})
-            else:
+            # Configure priority -> mode for a single application
+            if app is not None:
                 for p, m in mode_params.iteritems():
                     if m != 'default':
                         session.execute(insert_target_application_modes_query,
@@ -1322,6 +1317,35 @@ class UserModes(object):
                         session.execute(delete_target_application_modes_query,
                                         {'name': username, 'priority': p, 'app': app})
                 result = session.execute(get_target_application_modes_query, {'username': username, 'app': app})
+
+            # Configure priority -> mode for multiple applications in one call (avoid MySQL deadlocks)
+            elif multiple_apps is not None:
+                for app, app_modes in multiple_apps.iteritems():
+                    for p, m in app_modes.iteritems():
+                        if m != 'default':
+                            session.execute(insert_target_application_modes_query,
+                                            {'name': username, 'priority': p, 'mode': m, 'app': app})
+                        else:
+                            session.execute(delete_target_application_modes_query,
+                                            {'name': username, 'priority': p, 'app': app})
+
+                # Also configure global defaults in the same call if they're specified
+                for p in mode_params.viewkeys() & modes.viewkeys():
+                    m = mode_params[p]
+                    if m != 'default':
+                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                    else:
+                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
+                result = session.execute(get_user_modes_query, {'username': username})
+
+            # Configure user's global priority -> mode which covers all applications that don't have defaults set
+            else:
+                for p, m in mode_params.iteritems():
+                    if m != 'default':
+                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                    else:
+                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
+                result = session.execute(get_user_modes_query, {'username': username})
 
             modes.update(list(result))
             session.commit()
