@@ -49,18 +49,19 @@ class ApplicationQuota(object):
         self.last_incidents = {}  # application: (incident_id, time())
         spawn(self.refresh)
 
+    def get_new_rules(self):
+        session = self.db.Session()
+        for row in session.execute(get_application_quotas_query):
+            yield row
+        session.close()
+
     def refresh(self):
         while True:
             logger.info('Refreshing app quotas')
             new_rates = {}
 
-            session = self.db.Session()
-            data = session.execute(get_application_quotas_query)
-
-            for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in data:
+            for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in self.get_new_rules():
                 new_rates[application] = (hard_limit, soft_limit, hard_duration / 60, soft_duration / 60, wait_time, plan_name, (target_name, target_role))
-
-            session.close()
 
             old_keys = self.rates.viewkeys()
             new_keys = new_rates.viewkeys()
