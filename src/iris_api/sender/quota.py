@@ -185,7 +185,7 @@ class ApplicationQuota(object):
             logger.warning('Application %s breached soft quota. Cannot notify owners as application is not set')
             return
 
-        if not all(target_name, target_role):
+        if not target_name or not target_role:
             logger.error('Application %s breached soft quota. Cannot notify owner as they aren\'t set (may have been deleted).')
             return
 
