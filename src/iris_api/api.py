@@ -410,6 +410,13 @@ JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
 JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
 WHERE `application`.`name` = %s'''
 
+get_supported_application_modes_query = '''
+SELECT `mode`.`name`
+FROM `mode`
+JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+WHERE `application_mode`.`application_id` = %s
+'''
+
 insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
 VALUES (
@@ -1437,6 +1444,9 @@ class Application(object):
         cursor.execute(get_default_application_modes_query, app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
 
+        cursor.execute(get_supported_application_modes_query, app['id'])
+        app['supported_modes'] = [row['name'] for row in cursor]
+
         cursor.close()
         connection.close()
 
@@ -1480,8 +1490,13 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
+
             cursor.execute(get_default_application_modes_query, app['name'])
             app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+
+            cursor.execute(get_supported_application_modes_query, app['id'])
+            app['supported_modes'] = [row['name'] for row in cursor]
+
             del app['id']
         payload = apps
         cursor.close()
@@ -1496,12 +1511,13 @@ class Modes(object):
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        mode_query = 'SELECT `id`,`name` FROM `mode`'''
+        # Deliberately omit "drop" as it's a special case only supported in very limited circumstances and shouldn't
+        # be thrown all over the UI
+        mode_query = 'SELECT `name` FROM `mode` WHERE `name` != "drop"'
         cursor.execute(mode_query)
-        results = cursor.fetchall()
+        payload = [r['name'] for r in cursor]
         cursor.close()
         connection.close()
-        payload = [r['name'] for r in results]
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
 

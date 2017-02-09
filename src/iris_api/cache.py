@@ -21,6 +21,11 @@ def cache_applications():
             'SELECT `name` FROM `template_variable` WHERE `application_id` = %s',
             app['id'])
         app['variables'] = [row['name'] for row in cursor]
+        cursor.execute('''SELECT `mode`.`name`
+                          FROM `mode`
+                          JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+                          WHERE `application_mode`.`application_id` = %s''', app['id'])
+        app['supported_modes'] = [row['name'] for row in cursor]
         applications[app['name']] = app
     connection.close()
     cursor.close()
