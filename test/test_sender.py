@@ -14,6 +14,7 @@ def test_configure(mocker):
     mocker.patch('iris_api.db.init')
     mocker.patch('iris_api.bin.sender.api_cache.cache_priorities')
     mocker.patch('iris_api.bin.sender.api_cache.cache_applications')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_modes')
     init_sender({
         'db': {
             'conn': {

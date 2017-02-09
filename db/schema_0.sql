@@ -578,15 +578,29 @@ CREATE TABLE `application_quota` (
   `soft_quota_threshold` smallint(5) NOT NULL,
   `hard_quota_duration` smallint(5) NOT NULL,
   `soft_quota_duration` smallint(5) NOT NULL,
-  `plan_name` varchar(255) NOT NULL,
-  `target_id` bigint(20) NOT NULL,
+  `plan_name` varchar(255),
+  `target_id` bigint(20),
   `wait_time` smallint(5) NOT NULL DEFAULT 0,
   PRIMARY KEY (`application_id`),
   KEY `application_quota_plan_name_fk_idx` (`plan_name`),
   KEY `application_quota_target_id_fk_idx` (`target_id`),
   CONSTRAINT `application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE NO ACTION ON UPDATE CASCADE,
-  CONSTRAINT `target_id_ibfk` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION
+  CONSTRAINT `plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `target_id_ibfk` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE SET NULL ON UPDATE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `application_mode`
+--
+
+DROP TABLE IF EXISTS `application_mode`;
+CREATE TABLE `application_mode` (
+  `application_id` int(11) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  PRIMARY KEY (`application_id`, `mode_id`),
+  CONSTRAINT `application_mode_application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_mode_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 

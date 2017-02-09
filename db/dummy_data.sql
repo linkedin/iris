@@ -1,5 +1,5 @@
 LOCK TABLES `mode` WRITE;
-INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'im'),(8,'sms');
+INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'im'),(8,'sms'),(36,'drop');
 UNLOCK TABLES;
 
 LOCK TABLES `priority` WRITE;
@@ -92,3 +92,5 @@ UNLOCK TABLES;
 
 LOCK TABLES `user_team` WRITE;
 UNLOCK TABLES;
+
+INSERT IGNORE INTO `application_mode` (`application_id`, `mode_id`) SELECT `application`.`id`, `mode`.`id` FROM `application`, `mode` WHERE `mode`.`name` != 'drop';

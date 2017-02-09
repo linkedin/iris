@@ -24,8 +24,8 @@ get_application_quotas_query = '''SELECT `application`.`name` as application,
                                          `application_quota`.`wait_time`
                                  FROM `application_quota`
                                  JOIN `application` ON `application`.`id` = `application_quota`.`application_id`
-                                 JOIN `target` on `target`.`id` = `application_quota`.`target_id`
-                                 JOIN `target_type` on `target_type`.`id` = `target`.`type_id` '''
+                                 LEFT JOIN `target` on `target`.`id` = `application_quota`.`target_id`
+                                 LEFT JOIN `target_type` on `target_type`.`id` = `target`.`type_id` '''
 
 create_incident_query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
                            VALUES ((SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name),
@@ -133,6 +133,10 @@ class ApplicationQuota(object):
             logger.warning('Application %s breached hard quota. Cannot notify owners as application is not set')
             return
 
+        if not plan_name:
+            logger.error('Application %s breached hard quota. Cannot create iris incident as plan is not set (may have been deleted).')
+            return
+
         logger.warning('Application %s breached hard quota. Will create incident using plan %s', application, plan_name)
 
         session = self.db.Session()
@@ -179,6 +183,10 @@ class ApplicationQuota(object):
     def notify_target(self, application, limit, duration, target_name, target_role):
         if not self.iris_application:
             logger.warning('Application %s breached soft quota. Cannot notify owners as application is not set')
+            return
+
+        if not all(target_name, target_role):
+            logger.error('Application %s breached soft quota. Cannot notify owner as they aren\'t set (may have been deleted).')
             return
 
         logger.warning('Application %s breached soft quota. Will notify %s:%s', application, target_role, target_name)

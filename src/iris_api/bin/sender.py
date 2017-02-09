@@ -23,6 +23,7 @@ from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
+from iris_api.constants import MODE_DROP
 
 # sql
 
@@ -597,7 +598,7 @@ def set_target_fallback_mode(message):
         return True
     # target doesn't have email either - bail
     except ValueError:
-        logger.error('target does not have mode(%s) %r', target_fallback_mode, message)
+        logger.exception('target does not have mode(%s) %r', target_fallback_mode, message)
         message['destination'] = message['mode'] = message['mode_id'] = None
         return False
 
@@ -605,48 +606,65 @@ def set_target_fallback_mode(message):
 def set_target_contact_by_priority(message):
     session = db.Session()
     result = session.execute('''
-        SELECT `destination`, `mode`.`name`, `mode`.`id`
-        FROM `target` JOIN `target_contact` ON `target_contact`.`target_id` = `target`.`id`
-        JOIN `mode` ON `mode`.`id` = `target_contact`.`mode_id`
-        WHERE `target`.`name` = :target AND `target_contact`.`mode_id` = IFNULL(
-            -- 1. lookup per application user setting
-            (
-                SELECT `target_application_mode`.`mode_id`
-                FROM `target_application_mode`
-                JOIN `application` ON `target_application_mode`.`application_id` = `application`.`id`
-                WHERE `target_application_mode`.`target_id` = `target`.`id` AND
-                        `application`.`name` = :application AND
-                        `target_application_mode`.`priority_id` = :priority_id
-            ), IFNULL(
-              -- 2. Lookup default setting for this app
-              (
-                  SELECT `default_application_mode`.`mode_id`
-                  FROM `default_application_mode`
-                  JOIN `application` ON `default_application_mode`.`application_id` = `application`.`id`
-                  WHERE `default_application_mode`.`priority_id` = :priority_id AND
-                        `application`.`name` = :application
-              ), IFNULL(
-                -- 3. lookup default user setting
-                    (
-                        SELECT `target_mode`.`mode_id`
-                        FROM `target_mode`
-                        WHERE `target_mode`.`target_id` = `target`.`id` AND
-                                `target_mode`.`priority_id` = :priority_id
-                    ), (
-                -- 4. lookup default iris setting
-                        SELECT `mode_id`
-                        FROM `priority`
-                        WHERE `id` = :priority_id
-                    )
+              SELECT `target_contact`.`destination` AS dest, `mode`.`name` AS mode_name, `mode`.`id` AS mode_id
+              FROM `mode`
+              JOIN `target` ON `target`.`name` = :target
+              JOIN `application` ON `application`.`name` = :application
+
+              -- left join because the "drop" mode isn't going to have a target_contact entry
+              LEFT JOIN `target_contact` ON `target_contact`.`mode_id` = `mode`.`id` AND `target_contact`.`target_id` = `target`.`id`
+
+              WHERE mode.id = IFNULL((
+                        SELECT `target_application_mode`.`mode_id`
+                        FROM `target_application_mode`
+                        WHERE `target_application_mode`.`target_id` = target.id AND
+                                `target_application_mode`.`application_id` = `application`.`id` AND
+                                `target_application_mode`.`priority_id` = :priority_id
+                    ), IFNULL(
+                      -- 2. Lookup default setting for this app
+                      (
+                          SELECT `default_application_mode`.`mode_id`
+                          FROM `default_application_mode`
+                          WHERE    `default_application_mode`.`priority_id` = :priority_id AND
+                                `default_application_mode`.`application_id` = `application`.`id`
+                      ), IFNULL(
+                        -- 3. lookup default user setting
+                            (
+                                SELECT `target_mode`.`mode_id`
+                                FROM `target_mode`
+                                WHERE `target_mode`.`target_id` = target.id AND
+                                        `target_mode`.`priority_id` = :priority_id
+                            ), (
+                        -- 4. lookup default iris setting
+                                SELECT `mode_id`
+                                FROM `priority`
+                                WHERE `id` = :priority_id
+                            )
+                        )
+                   )
                 )
-           )
-        )''', message)
-    [(destination, mode, mode_id)] = result
-    session.close()
+                -- Make sure this mode is allowed for this application. Eg important apps can't drop.
+                AND EXISTS (SELECT 1 FROM `application_mode`
+                            WHERE `application_mode`.`mode_id` = `mode`.`id`
+                            AND   `application_mode`.`application_id` = `application`.`id`)
+        ''', message)
+
+    try:
+        [(destination, mode, mode_id)] = result
+    except ValueError:
+        raise
+    finally:
+        session.close()
+
+    if not destination and mode != MODE_DROP:
+        logger.error('Did not find destination for message %s and mode is not drop', message)
+        return False
 
     message['destination'] = destination
     message['mode'] = mode
     message['mode_id'] = mode_id
+
+    return True
 
 
 def set_target_contact(message):
@@ -664,13 +682,14 @@ def set_target_contact(message):
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
+            result = True
         else:
             # message triggered by incident will only have priority
-            set_target_contact_by_priority(message)
+            result = set_target_contact_by_priority(message)
         cache.target_reprioritization(message)
-        return True
+        return result
     except ValueError:
-        logger.error('target does not have mode %r', message)
+        logger.exception('target does not have mode %r', message)
         return set_target_fallback_mode(message)
 
 
@@ -704,7 +723,8 @@ def render(message):
             try:
                 application_template = template[message['application']]
                 try:
-                    mode_template = application_template[message['mode']]
+                    # When we want to "render" a dropped message, treat it as if it's an email
+                    mode_template = application_template['email' if message['mode'] == MODE_DROP else message['mode']]
                     try:
                         message['subject'] = mode_template['subject'].render(**message['context'])
                     except Exception as e:
@@ -814,13 +834,6 @@ def distributed_send_message(message):
 def fetch_and_send_message():
     message = send_queue.get()
 
-    if not quota.allow_send(message):
-        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
-        message_id = message.get('message_id')
-        if message_id:
-            spawn(auditlog.message_change, message_id, auditlog.SENT_CHANGE, '', '', 'Dropping due to hard quota violation.')
-        return
-
     has_contact = set_target_contact(message)
     if not has_contact:
         mark_message_has_no_contact(message)
@@ -828,6 +841,34 @@ def fetch_and_send_message():
 
     if 'message_id' not in message:
         message['message_id'] = None
+
+    # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
+    if not quota.allow_send(message):
+        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
+        if message['message_id']:
+            drop_mode_id = api_cache.modes.get(MODE_DROP)
+            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), MODE_DROP, 'Dropping due to hard quota violation.')
+
+            # If we know the ID for the mode drop, reflect that for the message
+            if drop_mode_id:
+                message['mode'] = MODE_DROP
+                message['mode_id'] = drop_mode_id
+            else:
+                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s', message, MODE_DROP)
+
+            # Render, so we're able to populate the message table with the proper subject/etc as well as
+            # information that it was dropped.
+            render(message)
+            mark_message_as_sent(message)
+        return
+
+    # If we're set to drop this message, no-op this before message gets sent to a vendor
+    if message.get('mode') == MODE_DROP:
+        logging.info('Deliberately dropping message %s', message)
+        if message['message_id']:
+            render(message)
+            mark_message_as_sent(message)
+        return
 
     render(message)
     success = None
@@ -910,6 +951,7 @@ def init_sender(config):
     init_metrics(config, 'iris-sender', default_sender_metrics)
     api_cache.cache_priorities()
     api_cache.cache_applications()
+    api_cache.cache_modes()
 
     global should_mock_gwatch_renewer, send_message
     if config['sender'].get('debug'):
