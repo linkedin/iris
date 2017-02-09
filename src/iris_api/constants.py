@@ -12,6 +12,3 @@ CALL_SUPPORT = 'call'
 EMAIL_SUPPORT = 'email'
 IM_SUPPORT = 'im'
 SLACK_SUPPORT = 'slack'
-
-# Avoid using magic strings for the special-case "drop" mode
-MODE_DROP = 'drop'

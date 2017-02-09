@@ -23,7 +23,6 @@ from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
-from iris_api.constants import MODE_DROP
 
 # sql
 
@@ -656,7 +655,7 @@ def set_target_contact_by_priority(message):
     finally:
         session.close()
 
-    if not destination and mode != MODE_DROP:
+    if not destination and mode != 'drop':
         logger.error('Did not find destination for message %s and mode is not drop', message)
         return False
 
@@ -724,7 +723,7 @@ def render(message):
                 application_template = template[message['application']]
                 try:
                     # When we want to "render" a dropped message, treat it as if it's an email
-                    mode_template = application_template['email' if message['mode'] == MODE_DROP else message['mode']]
+                    mode_template = application_template['email' if message['mode'] == 'drop' else message['mode']]
                     try:
                         message['subject'] = mode_template['subject'].render(**message['context'])
                     except Exception as e:
@@ -846,15 +845,15 @@ def fetch_and_send_message():
     if not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
-            drop_mode_id = api_cache.modes.get(MODE_DROP)
-            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), MODE_DROP, 'Dropping due to hard quota violation.')
+            drop_mode_id = api_cache.modes.get('drop')
+            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop', 'Dropping due to hard quota violation.')
 
             # If we know the ID for the mode drop, reflect that for the message
             if drop_mode_id:
-                message['mode'] = MODE_DROP
+                message['mode'] = 'drop'
                 message['mode_id'] = drop_mode_id
             else:
-                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s', message, MODE_DROP)
+                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s', message, 'drop')
 
             # Render, so we're able to populate the message table with the proper subject/etc as well as
             # information that it was dropped.
@@ -863,7 +862,7 @@ def fetch_and_send_message():
         return
 
     # If we're set to drop this message, no-op this before message gets sent to a vendor
-    if message.get('mode') == MODE_DROP:
+    if message.get('mode') == 'drop':
         logging.info('Deliberately dropping message %s', message)
         if message['message_id']:
             render(message)

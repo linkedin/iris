@@ -32,7 +32,7 @@ from iris_api.sender.quota import get_application_quotas_query
 
 
 from .constants import (
-    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION, MODE_DROP
+    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
 )
 
 from .plugins import init_plugins, find_plugin
@@ -1513,8 +1513,8 @@ class Modes(object):
         cursor = connection.cursor(db.dict_cursor)
         # Deliberately omit "drop" as it's a special case only supported in very limited circumstances and shouldn't
         # be thrown all over the UI
-        mode_query = 'SELECT `name` FROM `mode` WHERE `name` != %s'
-        cursor.execute(mode_query, MODE_DROP)
+        mode_query = 'SELECT `name` FROM `mode` WHERE `name` != "drop"'
+        cursor.execute(mode_query)
         payload = [r['name'] for r in cursor]
         cursor.close()
         connection.close()
