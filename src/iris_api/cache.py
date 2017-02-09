@@ -4,11 +4,11 @@
 from __future__ import absolute_import
 from . import db
 
-applications = {}
-priorities = {}
-target_types = {}
-target_roles = {}
-modes = {}
+applications = {}  # name -> dict of info
+priorities = {}    # name -> dict of info
+target_types = {}  # name -> id
+target_roles = {}  # name -> id
+modes = {}         # name -> id
 
 
 def cache_applications():
@@ -44,30 +44,30 @@ def cache_priorities():
 
 def cache_target_types():
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_type''')
     for row in cursor:
-        target_types[row['name']] = row['id']
+        target_types[row[0]] = row[1]
     cursor.close()
     connection.close()
 
 
 def cache_target_roles():
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_role''')
     for row in cursor:
-        target_roles[row['name']] = row['id']
+        target_roles[row[0]] = row[1]
     cursor.close()
     connection.close()
 
 
 def cache_modes():
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM mode''')
     for row in cursor:
-        modes[row['name']] = row['id']
+        modes[row[0]] = row[1]
     cursor.close()
     connection.close()
 
