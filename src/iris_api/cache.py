@@ -46,8 +46,7 @@ def cache_target_types():
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_type''')
-    for row in cursor:
-        target_types[row[0]] = row[1]
+    target_types.update(cursor)
     cursor.close()
     connection.close()
 
@@ -56,8 +55,7 @@ def cache_target_roles():
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_role''')
-    for row in cursor:
-        target_roles[row[0]] = row[1]
+    target_roles.update(cursor)
     cursor.close()
     connection.close()
 
@@ -66,8 +64,7 @@ def cache_modes():
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM mode''')
-    for row in cursor:
-        modes[row[0]] = row[1]
+    modes.update(cursor)
     cursor.close()
     connection.close()
 
