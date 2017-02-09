@@ -1510,12 +1510,12 @@ class Modes(object):
 
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor()
         # Deliberately omit "drop" as it's a special case only supported in very limited circumstances and shouldn't
         # be thrown all over the UI
         mode_query = 'SELECT `name` FROM `mode` WHERE `name` != "drop"'
         cursor.execute(mode_query)
-        payload = [r['name'] for r in cursor]
+        payload = [r[0] for r in cursor]
         cursor.close()
         connection.close()
         resp.status = HTTP_200

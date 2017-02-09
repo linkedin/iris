@@ -698,11 +698,10 @@ def render(message):
             # email response from iris does not use template this means the
             # message content is already in DB
             connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
-            cursor.execute('SELECT `subject`, `body` FROM `message` WHERE `id` = %s',
+            cursor = connection.cursor()
+            cursor.execute('SELECT `body`, `subject` FROM `message` WHERE `id` = %s',
                            message['message_id'])
-            msg_content = cursor.fetchone()
-            message['body'], message['subject'] = msg_content['body'], msg_content['subject']
+            message['body'], message['subject'] = cursor.fetchone()
             cursor.close()
             connection.close()
         else:
