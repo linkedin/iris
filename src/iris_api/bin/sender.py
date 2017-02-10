@@ -701,7 +701,8 @@ def render(message):
             cursor = connection.cursor()
             cursor.execute('SELECT `body`, `subject` FROM `message` WHERE `id` = %s',
                            message['message_id'])
-            message['body'], message['subject'] = cursor.fetchone()
+            msg_content = cursor.fetchone()
+            message['body'], message['subject'] = msg_content[0], msg_content[1]
             cursor.close()
             connection.close()
         else:
@@ -845,7 +846,8 @@ def fetch_and_send_message():
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             drop_mode_id = api_cache.modes.get('drop')
-            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop', 'Dropping due to hard quota violation.')
+            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+                  'Dropping due to hard quota violation.')
 
             # If we know the ID for the mode drop, reflect that for the message
             if drop_mode_id:
