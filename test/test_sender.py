@@ -222,14 +222,14 @@ def test_render_email_response_message(mocker):
     mock_cursor = mocker.MagicMock()
     mock_db = mocker.patch('iris_api.bin.sender.db')
     mock_db.engine.raw_connection().cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = {'subject': 'foo', 'body': 'bar'}
+    mock_cursor.fetchone.return_value = ['bar', 'foo']
 
     mock_message = {'message_id': 1}
     render(mock_message)
 
-    mock_cursor.execute.assert_called_once_with('SELECT `subject`, `body` FROM `message` WHERE `id` = %s', 1)
-    assert mock_message['subject'] == 'foo'
+    mock_cursor.execute.assert_called_once_with('SELECT `body`, `subject` FROM `message` WHERE `id` = %s', 1)
     assert mock_message['body'] == 'bar'
+    assert mock_message['subject'] == 'foo'
 
 
 def test_msgpack_handle_sets():
