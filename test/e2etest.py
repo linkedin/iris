@@ -121,6 +121,16 @@ def sample_user2(sample_user, iris_users):
 
 
 @pytest.fixture(scope='module')
+def sample_admin_user():
+    '''List of iris messages'''
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `name` FROM `target` JOIN `user` on `target`.`id` = `user`.`target_id` WHERE `user`.`admin` = TRUE LIMIT 1')
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+
+
+@pytest.fixture(scope='module')
 def sample_team(iris_teams):
     '''First team in our list of iris teams whose length is long enough for filtering'''
     for team in iris_teams:
@@ -189,6 +199,16 @@ def sample_template_name(sample_application_name, sample_application_name2):
         template_data = re.json()
         if sample_application_name in template_data['content'] and sample_application_name2 not in template_data['content']:
             return template['name']
+
+
+@pytest.fixture(scope='module')
+def sample_plan_name():
+    '''List of iris messages'''
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `name` FROM `plan_active` LIMIT 1')
+        result = cursor.fetchone()
+        if result:
+            return result[0]
 
 
 def test_api_acls(sample_user, sample_user2):
@@ -1463,6 +1483,42 @@ def test_post_notification(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
+
+
+def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):
+    if not all([sample_application_name, sample_admin_user, sample_plan_name]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    body = {
+        'hard_quota_threshold': 5,
+        'soft_quota_threshold': 3,
+        'hard_quota_duration': 60,
+        'soft_quota_duration': 60,
+        'plan_name': sample_plan_name,
+        'target_name': sample_admin_user,
+        'wait_time': 10
+    }
+
+    re = requests.post(base_url + 'applications/%s/quota' % sample_application_name, json=body, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 200
+
+    data = re.json()
+    assert all(data[key] == body[key] for key in body)
+
+    body['hard_quota_duration'] = 66
+    body['soft_quota_duration'] = 65
+
+    re = requests.post(base_url + 'applications/%s/quota' % sample_application_name, json=body, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 200
+
+    data = re.json()
+    assert all(data[key] == body[key] for key in body)
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

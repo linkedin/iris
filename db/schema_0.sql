@@ -605,6 +605,18 @@ CREATE TABLE `application_mode` (
   CONSTRAINT `application_mode_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `application_owner`
+--
+
+DROP TABLE IF EXISTS `application_owner`;
+CREATE TABLE `application_owner` (
+  `application_id` int(11) NOT NULL,
+  `user_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`application_id`, `user_id`),
+  CONSTRAINT `application_owner_application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_owner_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
