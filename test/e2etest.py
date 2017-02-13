@@ -35,6 +35,10 @@ sample_db_config = {
         }}}
 
 
+def username_header(username):
+    return {'X-IRIS-USERNAME': username}
+
+
 @pytest.fixture(scope='module')
 def iris_messages():
     '''List of iris messages'''
@@ -135,7 +139,7 @@ def sample_team2(sample_team, iris_teams):
 @pytest.fixture(scope='module')
 def sample_email(sample_user):
     '''Email address of sample_user'''
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
     return data['contacts']['email']
@@ -144,7 +148,7 @@ def sample_email(sample_user):
 @pytest.fixture(scope='module')
 def sample_phone(sample_user):
     '''Email address of sample_user'''
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
     return data['contacts']['call']
@@ -185,6 +189,22 @@ def sample_template_name(sample_application_name, sample_application_name2):
         template_data = re.json()
         if sample_application_name in template_data['content'] and sample_application_name2 not in template_data['content']:
             return template['name']
+
+
+def test_api_acls(sample_user, sample_user2):
+    re = requests.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 401
+    assert re.json()['title'] == 'Username must be specified for this action'
+
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user2))
+    assert re.status_code == 401
+    assert re.json()['title'] == 'This user is not allowed to access this resource'
+
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'users/' + sample_user2, headers=username_header(sample_user2))
+    assert re.status_code == 200
 
 
 def test_api_bad_application():
@@ -873,11 +893,14 @@ def test_large_incident_context(sample_user, sample_application_name):
 
 
 def test_get_user_modes(sample_user, sample_application_name):
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert sorted(re.json()) == sorted(['high', 'urgent', 'medium', 'low'])
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert sorted(re.json()) == sorted(['high', 'urgent', 'medium', 'low'])
 
@@ -930,31 +953,37 @@ def test_get_incident(iris_incidents):
 
 
 def test_post_user_modes(sample_user):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
     change_to = {
       'high': 'default',
       'urgent': 'default',
       'medium': 'im',
       'low': 'call'
     }
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=change_to)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert re.json() == change_to
 
     # Now test update/delete functionality
     change_to['medium'] = 'call'
     change_to['low'] = 'default'
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=change_to)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert re.json() == change_to
 
 
 def test_post_target_application_modes(sample_user, sample_application_name):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
     mode_data = {
         'application': sample_application_name,
         'high': 'default',
@@ -964,11 +993,11 @@ def test_post_target_application_modes(sample_user, sample_application_name):
     }
     modes = mode_data.copy()
     del modes['application']
-    re = requests.post(base_url + 'users/modes/' + sample_user,
-                       json=mode_data)
+    re = session.post(base_url + 'users/modes/' + sample_user,
+                      json=mode_data)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert re.json() == modes
 
@@ -978,15 +1007,18 @@ def test_post_target_application_modes(sample_user, sample_application_name):
     modes = mode_data.copy()
     del modes['application']
 
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=mode_data)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=mode_data)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert re.json() == modes
 
 
 def test_post_target_multiple_application_modes(sample_user, sample_application_name, sample_application_name2):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
     # Set priorities for two apps in batch, as well as global defaults
     modes_per_app = {
       'per_app_modes': {
@@ -1008,10 +1040,10 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
       'medium': 'call',
       'low': 'call'
     }
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=modes_per_app)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = session.get(base_url + 'users/' + sample_user)
     assert re.status_code == 200
     result = re.json()
     assert modes_per_app['per_app_modes'] == result['per_app_modes']
@@ -1039,10 +1071,10 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
       'low': 'default'
     }
 
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=modes_per_app_delete)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app_delete)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = session.get(base_url + 'users/' + sample_user)
     assert re.status_code == 200
     result = re.json()
     assert {} == result['per_app_modes'] == result['modes']
@@ -1257,10 +1289,13 @@ def test_get_applications(sample_application_name):
 
 
 def test_update_reprioritization_settings(sample_user):
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.status_code == 200
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     rules = re.json()
     assert len(rules) == 1
@@ -1270,69 +1305,72 @@ def test_update_reprioritization_settings(sample_user):
     assert rule['count'] == 1
     assert rule['duration'] == 120
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'fakesrc', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'fakesrc', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.json()['title'] == 'Invalid source mode.'
     assert re.status_code == 400
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'fakedst', 'count': '1', 'duration': '120'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'fakedst', 'count': '1', 'duration': '120'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid destination mode.'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'missingargs': 'foo'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'missingargs': 'foo'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Missing argument'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '1'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '1'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '3601'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '3601'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': 'fakeint'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': 'fakeint'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': 'fakeint', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': 'fakeint', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '-10', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '-10', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '300', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '300', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
 
 def test_delete_reprioritization_settings(sample_user):
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     assert 'call' in set(rule['src_mode'] for rule in re.json())
 
-    re = requests.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
+    re = session.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     assert 'call' not in set(rule['src_mode'] for rule in re.json())
 
-    re = requests.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
+    re = session.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
     assert re.status_code == 404
 
 
@@ -1359,7 +1397,7 @@ def test_get_priorities():
 
 
 def test_get_user(sample_user, sample_email):
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
     assert data['contacts']['email'] == sample_email

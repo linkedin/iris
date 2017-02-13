@@ -460,6 +460,12 @@ get_allowed_roles_query = '''SELECT `target_role`.`id`
                              JOIN `target` ON `target`.`type_id` = `target_type`.`id`
                              WHERE `target`.`name` = :target'''
 
+check_username_admin_query = '''SELECT `user`.`admin`
+                                FROM `user`
+                                JOIN `target` ON `target`.`id` = `user`.`target_id`
+                                JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                WHERE `target`.`name` = %s
+                                AND `target_type`.`name` = "user"'''
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -571,6 +577,7 @@ class AuthMiddleware(object):
             self.process_resource = self.debug_auth
 
     def debug_auth(self, req, resp, resource, params):
+        req.context['username'] = req.get_header('X-IRIS-USERNAME')
         try:
             app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
             if app not in cache.applications:
@@ -580,6 +587,7 @@ class AuthMiddleware(object):
             return
 
     def process_resource(self, req, resp, resource, params):  # pragma: no cover
+        req.context['username'] = None
         method = req.method
         if resource.allow_read_only and method == 'GET':
             return
@@ -590,23 +598,38 @@ class AuthMiddleware(object):
         body = req.context['body']
         auth = req.get_header('AUTHORIZATION')
         if auth and auth.startswith('hmac '):
+            username_header = req.get_header('X-IRIS-USERNAME')
             try:
                 app, client_digest = auth[5:].split(':', 1)
                 app = cache.applications[app]
+                if username_header and not app['allow_authenticating_users']:
+                    logger.error('Unprivileged application %s tried authenticating %s', app['name'], username_header)
+                    raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 api_key = str(app['key'])
                 window = int(time.time()) // 5
-                text = '%s %s %s %s' % (window, method, path, body)
+                # If username header is present, throw that into the hmac validation as well
+                if username_header:
+                    text = '%s %s %s %s %s' % (window, method, path, body, username_header)
+                else:
+                    text = '%s %s %s %s' % (window, method, path, body)
                 HMAC = hmac.new(api_key, text, hashlib.sha512)
                 digest = base64.urlsafe_b64encode(HMAC.digest())
                 if equals(client_digest, digest):
                     req.context['app'] = app
+                    if username_header:
+                        req.context['username'] = username_header
                     return
                 else:
-                    text = '%s %s %s %s' % (window - 1, method, path, body)
+                    if username_header:
+                        text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
+                    else:
+                        text = '%s %s %s %s' % (window - 1, method, path, body)
                     HMAC = hmac.new(api_key, text, hashlib.sha512)
                     digest = base64.urlsafe_b64encode(HMAC.digest())
                     if equals(client_digest, digest):
                         req.context['app'] = app
+                        if username_header:
+                            req.context['username'] = username_header
                     else:
                         raise HTTPUnauthorized('Authentication failure', '', [])
 
@@ -615,6 +638,38 @@ class AuthMiddleware(object):
 
         else:
             raise HTTPUnauthorized('Authentication failure', '', [])
+
+
+class ACLMiddleware(object):
+    def __init__(self, debug):
+        pass
+
+    def process_resource(self, req, resp, resource, params):
+        req.context['is_admin'] = False
+
+        # Quickly check the username in the path matches who's logged in
+        enforce_user = getattr(resource, 'enforce_user', False)
+
+        if not req.context['username']:
+            if enforce_user:
+                raise HTTPUnauthorized('Username must be specified for this action', '', [])
+            return
+
+        # Check if user is an admin
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(check_username_admin_query, req.context['username'])
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+
+        if result:
+            req.context['is_admin'] = bool(result[0])
+
+        if enforce_user and not req.context['is_admin']:
+            path_username = params.get('username')
+            if not equals(path_username, req.context['username']):
+                raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
 
 
 class Plan(object):
@@ -989,10 +1044,15 @@ class Incident(object):
         resp.body = payload
 
     def on_post(self, req, resp, incident_id):
-        session = db.Session()
         incident_params = ujson.loads(req.context['body'])
+
         try:
             owner = incident_params['owner']
+        except KeyError:
+            raise HTTPBadRequest('"owner" field required', '')
+
+        session = db.Session()
+        try:
             is_active = utils.claim_incident(incident_id, owner, session)
             resp.status = HTTP_200
             resp.body = ujson.dumps({'incident_id': int(incident_id),
@@ -1281,6 +1341,7 @@ class Templates(object):
 
 class UserModes(object):
     allow_read_only = False
+    enforce_user = True
 
     def on_get(self, req, resp, username):
         session = db.Session()
@@ -1542,17 +1603,18 @@ class Priorities(object):
 
 class User(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_get(self, req, resp, user_id):
+    def on_get(self, req, resp, username):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         # Get user id/name
         user_query = ''' SELECT `id`, `name` FROM `target`'''
-        if user_id.isdigit():
+        if username.isdigit():
             user_query += ' WHERE `id` = %s'
         else:
             user_query += ' WHERE `name` = %s'
-        cursor.execute(user_query, user_id)
+        cursor.execute(user_query, username)
         if cursor.rowcount != 1:
             raise HTTPNotFound()
         user_data = cursor.fetchone()
@@ -1848,18 +1910,19 @@ class ResponseSlack(ResponseMixin):
 
 class Reprioritization(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_get(self, req, resp, target_name):
+    def on_get(self, req, resp, username):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(reprioritization_setting_query, target_name)
+        cursor.execute(reprioritization_setting_query, username)
         settings = cursor.fetchall()
         cursor.close()
         connection.close()
         resp.status = HTTP_200
         resp.body = ujson.dumps(settings)
 
-    def on_post(self, req, resp, target_name):
+    def on_post(self, req, resp, username):
         params = ujson.loads(req.context['body'])
         required_args = ['duration', 'count', 'src_mode', 'dst_mode']
         # Check for required arguments
@@ -1905,7 +1968,7 @@ class Reprioritization(object):
 
         session = db.Session()
         session.execute(update_reprioritization_settings_query, {
-            'target': target_name,
+            'target': username,
             'src_mode_id': src_mode_id,
             'dst_mode_id': dst_mode_id,
             'count': count,
@@ -1919,11 +1982,12 @@ class Reprioritization(object):
 
 class ReprioritizationMode(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_delete(self, req, resp, target_name, src_mode_name):
+    def on_delete(self, req, resp, username, src_mode_name):
         session = db.Session()
         affected_rows = session.execute(delete_reprioritization_settings_query, {
-          'target_name': target_name,
+          'target_name': username,
           'mode_name': src_mode_name,
         }).rowcount
         session.commit()
@@ -1998,7 +2062,8 @@ def get_api(config):
     req = ReqBodyMiddleware()
     header = HeaderMiddleware()
     auth = AuthMiddleware(debug=debug)
-    middleware = [req, auth, header]
+    acl = ACLMiddleware(debug=debug)
+    middleware = [req, auth, acl, header]
 
     app = API(middleware=middleware)
 
@@ -2020,10 +2085,10 @@ def get_api(config):
     app.add_route('/v0/templates/{template_id}', Template())
     app.add_route('/v0/templates', Templates())
 
-    app.add_route('/v0/users/{user_id}', User())
+    app.add_route('/v0/users/{username}', User())
     app.add_route('/v0/users/modes/{username}', UserModes())
-    app.add_route('/v0/users/reprioritization/{target_name}', Reprioritization())
-    app.add_route('/v0/users/reprioritization/{target_name}/{src_mode_name}', ReprioritizationMode())
+    app.add_route('/v0/users/reprioritization/{username}', Reprioritization())
+    app.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
 
     app.add_route('/v0/modes', Modes())
 
