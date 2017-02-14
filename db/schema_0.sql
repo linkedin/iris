@@ -33,7 +33,8 @@ CREATE TABLE `application` (
   `summary_template` text,
   `sample_context` text,
   `auth_only` tinyint(1) DEFAULT '0',
-  `allow_other_app_incidents` tinyint(1) DEFAULT 0,
+  `allow_other_app_incidents` tinyint(1) unsigned NOT NULL DEFAULT '0',
+  `allow_authenticating_users` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -529,6 +530,7 @@ DROP TABLE IF EXISTS `user`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `user` (
   `target_id` bigint(20) NOT NULL,
+  `admin` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`target_id`),
   CONSTRAINT `user_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

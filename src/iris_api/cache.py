@@ -14,7 +14,7 @@ modes = {}         # name -> id
 def cache_applications():
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
-    cursor.execute('''SELECT `name`, `id`, `key`, `allow_other_app_incidents` FROM `application`''')
+    cursor.execute('''SELECT `name`, `id`, `key`, `allow_other_app_incidents`, `allow_authenticating_users` FROM `application`''')
     apps = cursor.fetchall()
     for app in apps:
         cursor.execute(
