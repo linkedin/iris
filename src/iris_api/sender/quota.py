@@ -27,11 +27,32 @@ get_application_quotas_query = '''SELECT `application`.`name` as application,
                                  LEFT JOIN `target` on `target`.`id` = `application_quota`.`target_id`
                                  LEFT JOIN `target_type` on `target_type`.`id` = `target`.`type_id` '''
 
+insert_application_quota_query = '''INSERT INTO `application_quota` (`application_id`, `hard_quota_threshold`,
+                                                                     `soft_quota_threshold`, `hard_quota_duration`,
+                                                                     `soft_quota_duration`, `plan_name`,
+                                                                     `target_id`, `wait_time`)
+                                    VALUES (:application_id, :hard_quota_threshold, :soft_quota_threshold,
+                                            :hard_quota_duration, :soft_quota_duration, :plan_name, :target_id, :wait_time)
+                                    ON DUPLICATE KEY UPDATE `hard_quota_threshold` = :hard_quota_threshold,
+                                                            `soft_quota_threshold` = :soft_quota_threshold,
+                                                            `hard_quota_duration` = :hard_quota_duration,
+                                                            `soft_quota_duration` = :soft_quota_duration,
+                                                            `plan_name` = :plan_name,
+                                                            `target_id` = :target_id,
+                                                            `wait_time` = :wait_time'''
+
 create_incident_query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
                            VALUES ((SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name),
                                    :created, :context, 0, TRUE, :sender_app_id)'''
 
 check_incident_claimed_query = '''SELECT `active` FROM `incident` WHERE `id` = :id'''
+
+required_quota_keys = frozenset(['hard_quota_threshold', 'soft_quota_threshold',
+                                 'hard_quota_duration', 'soft_quota_duration',
+                                 'plan_name', 'wait_time', 'target_name'])
+
+quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
+                  'hard_quota_duration', 'soft_quota_duration', 'wait_time')
 
 
 class ApplicationQuota(object):

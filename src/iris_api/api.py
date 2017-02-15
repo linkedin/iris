@@ -28,7 +28,8 @@ from . import db
 from . import utils
 from . import cache
 from iris_api.sender import auditlog
-from iris_api.sender.quota import get_application_quotas_query
+from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
+                                   required_quota_keys, quota_int_keys)
 
 
 from .constants import (
@@ -466,6 +467,13 @@ check_username_admin_query = '''SELECT `user`.`admin`
                                 JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
                                 WHERE `target`.`name` = %s
                                 AND `target_type`.`name` = "user"'''
+
+check_application_ownership_query = '''SELECT 1
+                                       FROM `application_owner`
+                                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                       WHERE `target`.`name` = :username
+                                       AND `application_owner`.`application_id` = :application_id'''
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -1517,7 +1525,6 @@ class Application(object):
         resp.body = ujson.dumps(payload)
 
 
-#  TODO: functionality to change quotas via API, which requires ACLs/etc
 class ApplicationQuota(object):
     allow_read_only = True
 
@@ -1533,6 +1540,59 @@ class ApplicationQuota(object):
             resp.body = '{}'
             raise HTTPNotFound()
         resp.body = ujson.dumps(quota)
+
+    def on_post(self, req, resp, app_name):
+
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        if data.viewkeys() != required_quota_keys:
+            raise HTTPBadRequest('Missing required keys in post body', '')
+
+        try:
+            for key in quota_int_keys:
+                if int(data[key]) < 1:
+                    raise HTTPBadRequest('All int keys must be over 0', '')
+        except ValueError:
+            raise HTTPBadRequest('Some int keys are not integers', '')
+
+        if data['hard_quota_threshold'] <= data['soft_quota_threshold']:
+            raise HTTPBadRequest('Hard threshold must be bigger than soft threshold', '')
+
+        session = db.Session()
+
+        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+
+        if not application_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that application', '')
+
+        # Only admins and application owners can change quota settings
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        if not session.execute('SELECT 1 FROM `plan_active` WHERE `name` = :plan_name', data).scalar():
+            session.close()
+            raise HTTPBadRequest('No active ID found for that plan', '')
+
+        target_id = session.execute('SELECT `id` FROM `target` WHERE `name` = :target_name', data).scalar()
+
+        if not target_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that target', '')
+
+        data['application_id'] = application_id
+        data['target_id'] = target_id
+
+        session.execute(insert_application_quota_query, data)
+        session.commit()
+        session.close()
+
+        resp.status = HTTP_201
 
 
 class Applications(object):
