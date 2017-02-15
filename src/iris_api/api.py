@@ -28,7 +28,8 @@ from . import db
 from . import utils
 from . import cache
 from iris_api.sender import auditlog
-from iris_api.sender.quota import get_application_quotas_query, insert_application_quota_query, required_quota_keys
+from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
+                                   required_quota_keys, quota_int_keys)
 
 
 from .constants import (
@@ -1550,11 +1551,8 @@ class ApplicationQuota(object):
         if data.viewkeys() != required_quota_keys:
             raise HTTPBadRequest('Missing required keys in post body', '')
 
-        int_keys = set(['hard_quota_threshold', 'soft_quota_threshold',
-                        'hard_quota_duration', 'soft_quota_duration', 'wait_time'])
-
         try:
-            for key in int_keys:
+            for key in quota_int_keys:
                 if int(data[key]) < 1:
                     raise HTTPBadRequest('All int keys must be over 0', '')
         except ValueError:
