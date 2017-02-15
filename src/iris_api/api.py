@@ -28,7 +28,7 @@ from . import db
 from . import utils
 from . import cache
 from iris_api.sender import auditlog
-from iris_api.sender.quota import get_application_quotas_query
+from iris_api.sender.quota import get_application_quotas_query, insert_application_quota_query, required_quota_keys
 
 
 from .constants import (
@@ -466,20 +466,6 @@ check_username_admin_query = '''SELECT `user`.`admin`
                                 JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
                                 WHERE `target`.`name` = %s
                                 AND `target_type`.`name` = "user"'''
-
-insert_application_quota_query = '''INSERT INTO `application_quota` (`application_id`, `hard_quota_threshold`,
-                                                                     `soft_quota_threshold`, `hard_quota_duration`,
-                                                                     `soft_quota_duration`, `plan_name`,
-                                                                     `target_id`, `wait_time`)
-                                    VALUES (:application_id, :hard_quota_threshold, :soft_quota_threshold,
-                                            :hard_quota_duration, :soft_quota_duration, :plan_name, :target_id, :wait_time)
-                                    ON DUPLICATE KEY UPDATE `hard_quota_threshold` = :hard_quota_threshold,
-                                                            `soft_quota_threshold` = :soft_quota_threshold,
-                                                            `hard_quota_duration` = :hard_quota_duration,
-                                                            `soft_quota_duration` = :soft_quota_duration,
-                                                            `plan_name` = :plan_name,
-                                                            `target_id` = :target_id,
-                                                            `wait_time` = :wait_time'''
 
 check_application_ownership_query = '''SELECT 1
                                        FROM `application_owner`
@@ -1561,15 +1547,11 @@ class ApplicationQuota(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body', '')
 
-        required_keys = set(['hard_quota_threshold', 'soft_quota_threshold',
-                             'hard_quota_duration', 'soft_quota_duration',
-                             'plan_name', 'wait_time', 'target_name'])
+        if data.viewkeys() != required_quota_keys:
+            raise HTTPBadRequest('Missing required keys in post body', '')
 
         int_keys = set(['hard_quota_threshold', 'soft_quota_threshold',
                         'hard_quota_duration', 'soft_quota_duration', 'wait_time'])
-
-        if data.viewkeys() != required_keys:
-            raise HTTPBadRequest('Missing required keys in post body', '')
 
         try:
             for key in int_keys:
