@@ -312,32 +312,36 @@ class TargetReprioritization(object):
             sleep(60)
 
     def __call__(self, message, seen=None):
+        original_mode = message.get('mode')
+
+        if not original_mode:
+            return
+
         if seen is None:
-            seen = set([message['mode']])
+            seen = set([original_mode])
         else:
-            if message['mode'] in seen:
+            if original_mode in seen:
                 logger.info('target reprioritization loop detected for %s, %s: %r',
-                            message['target'], message['mode'], seen)
+                            message['target'], original_mode, seen)
                 return
             else:
-                seen.add(message['mode'])
+                seen.add(original_mode)
         try:
-            dst_mode, destination, count, buckets = self.rates[(message['target'], message['mode'])]
+            dst_mode, destination, count, buckets = self.rates[(message['target'], original_mode)]
             logger.debug('reprioritization (%s, %s): (%s, %s, %d, %r)',
-                         message['target'], message['mode'], dst_mode, destination, count, buckets)
+                         message['target'], original_mode, dst_mode, destination, count, buckets)
             # increment the bucket for this minute
             buckets[-1] += 1
             if sum(buckets) > count:
                 logger.debug('target reprioritization rule triggered (%s, %s): (%s, %s, %d, %r)',
-                             message['target'], message['mode'], dst_mode, destination, count, buckets)
+                             message['target'], original_mode, dst_mode, destination, count, buckets)
                 # sum of all counts for duration exceeds count
                 # reprioritize to destination mode
-                old_mode = message['mode']
                 message['mode'] = dst_mode
                 message['destination'] = destination
                 update_message_mode(message)
                 self.__call__(message, seen)
-                auditlog.message_change(message['message_id'], auditlog.MODE_CHANGE, old_mode, dst_mode, 'Changing mode due to reprioritization')
+                auditlog.message_change(message['message_id'], auditlog.MODE_CHANGE, original_mode, dst_mode, 'Changing mode due to reprioritization')
             else:
                 return
         except KeyError:
