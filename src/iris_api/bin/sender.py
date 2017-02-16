@@ -686,7 +686,8 @@ def set_target_contact(message):
         else:
             # message triggered by incident will only have priority
             result = set_target_contact_by_priority(message)
-        cache.target_reprioritization(message)
+        if result:
+            cache.target_reprioritization(message)
         return result
     except ValueError:
         logger.exception('target does not have mode %r', message)
