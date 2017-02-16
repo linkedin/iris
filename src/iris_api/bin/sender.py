@@ -23,6 +23,7 @@ from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
+from pymysql import DataError
 
 # sql
 
@@ -787,10 +788,16 @@ def mark_message_as_sent(message):
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
     if len(message['subject']) > 255:
         message['subject'] = message['subject'][:255]
-    cursor.execute(sql, params)
-    connection.commit()
-    cursor.close()
-    connection.close()
+    if len(message['body']) > 1048576:
+        message['body'] = message['body'][:1048576]
+    try:
+        cursor.execute(sql, params)
+        connection.commit()
+    except DataError:
+        logger.exception('Failed updating message status (message ID %s)', message.get('message_id', '?'))
+    finally:
+        cursor.close()
+        connection.close()
 
 
 def mark_message_has_no_contact(message):
