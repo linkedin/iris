@@ -474,6 +474,11 @@ check_application_ownership_query = '''SELECT 1
                                        WHERE `target`.`name` = :username
                                        AND `application_owner`.`application_id` = :application_id'''
 
+get_application_owners_query = '''SELECT `target`.`name`
+                                  FROM `application_owner`
+                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                  WHERE `application_owner`.`application_id` = %s'''
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -1516,6 +1521,9 @@ class Application(object):
         cursor.execute(get_supported_application_modes_query, app['id'])
         app['supported_modes'] = [row['name'] for row in cursor]
 
+        cursor.execute(get_application_owners_query, app['id'])
+        app['owners'] = [row['name'] for row in cursor]
+
         cursor.close()
         connection.close()
 
@@ -1617,6 +1625,9 @@ class Applications(object):
 
             cursor.execute(get_supported_application_modes_query, app['id'])
             app['supported_modes'] = [row['name'] for row in cursor]
+
+            cursor.execute(get_application_owners_query, app['id'])
+            app['owners'] = [row['name'] for row in cursor]
 
             del app['id']
         payload = apps
