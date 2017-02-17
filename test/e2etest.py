@@ -481,7 +481,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "template": sample_template_name
                 },
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "high",
                     "wait": 300,
@@ -491,7 +491,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
             ],
             [
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "urgent",
                     "wait": 300,
@@ -606,7 +606,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         'steps': [
             [
                 {
-                    'role': 'oncall',
+                    'role': 'oncall-primary',
                     'target': sample_user,
                     'priority': 'low',
                     'wait': 600,
@@ -619,7 +619,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
     }
     re = requests.post(base_url + 'plans', json=data)
     assert re.status_code == 400
-    assert re.json() == {'description': 'Role oncall is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
+    assert re.json() == {'description': 'Role oncall-primary is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
 
     data = {
         'creator': sample_user,
@@ -668,7 +668,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "template": sample_template_name
                 },
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "high",
                     "wait": 300,
@@ -1206,7 +1206,7 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
         ],
         [
           {
-            'role': 'oncall',
+            'role': 'oncall-primary',
             'target': sample_team,
             'priority': 'high',
             'wait': 300,
