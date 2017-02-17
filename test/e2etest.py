@@ -1178,6 +1178,15 @@ def test_get_targets(sample_user, sample_user2, sample_team, sample_team2):
     assert sample_user2 not in data
 
 
+def test_get_target_roles():
+    re = requests.get(base_url + 'target_roles')
+    assert re.status_code == 200
+    expected_roles = set([
+        'user', 'manager', 'oncall-primary', 'team', 'oncall-secondary'
+    ])
+    assert expected_roles <= set(re.json())
+
+
 @pytest.mark.skip(reason="reanble this test when we can programatically create noc user in the test")
 def test_post_plan_noc(sample_user, sample_team, sample_application_name):
     data = {
