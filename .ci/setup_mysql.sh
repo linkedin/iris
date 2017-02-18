@@ -9,6 +9,8 @@ done
 echo "[*] Setting MySQL sql_mode..."
 mysql -h 127.0.0.1 -u root \
 	-e "SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));"
+echo "[*] Droping previous Iris database..."
+mysql -h 127.0.0.1 -u root -e "drop database iris;"
 echo "[*] Loading MySQL schema..."
 mysql -h 127.0.0.1 -u root < ./db/schema_0.sql
 echo "[*] Loading MySQL dummy data..."
