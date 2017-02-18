@@ -11,7 +11,7 @@ INSERT INTO `target_type` VALUES (2,'team'),(1,'user');
 UNLOCK TABLES;
 
 LOCK TABLES `target_role` WRITE;
-INSERT INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44,'oncall',2);
+INSERT INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44,'oncall-primary',2),(45,'oncall-secondary',2);
 UNLOCK TABLES;
 
 LOCK TABLES `target` WRITE;
@@ -47,7 +47,39 @@ INSERT INTO `plan_active` VALUES ('demo-test-foo',31),('demo-test-incident-post'
 UNLOCK TABLES;
 
 LOCK TABLES `plan_notification` WRITE;
-INSERT INTO `plan_notification` VALUES (1,1,1,NULL,NULL,4,44,17,1,300),(2,1,1,NULL,NULL,4,35,35,0,600),(3,1,2,NULL,NULL,4,35,26,0,600),(4,1,2,NULL,NULL,4,44,8,1,300),(5,7,1,NULL,NULL,4,35,35,0,600),(6,7,1,NULL,NULL,4,44,17,1,300),(7,8,1,NULL,NULL,4,35,35,0,600),(8,9,1,NULL,NULL,4,35,35,0,600),(9,11,1,NULL,NULL,4,44,17,1,300),(10,11,1,NULL,NULL,4,35,35,0,600),(11,11,2,NULL,NULL,4,35,26,0,600),(12,11,2,NULL,NULL,4,44,8,1,300),(13,17,1,NULL,NULL,4,35,35,0,600),(14,17,1,NULL,NULL,4,44,17,1,300),(15,18,1,NULL,NULL,4,35,35,0,600),(16,19,1,NULL,NULL,4,35,35,0,600),(17,21,1,NULL,'test_template',4,44,17,1,300),(18,21,1,NULL,'test_template',4,35,35,0,600),(19,21,2,NULL,'test_template',4,35,26,0,600),(20,21,2,NULL,'test_template',4,44,8,1,300),(21,27,1,NULL,'test_template',4,35,35,0,600),(22,27,1,NULL,'test_template',4,44,17,1,300),(23,28,1,NULL,'test_template',4,35,35,0,600),(24,29,1,NULL,'test_template',4,35,35,0,600),(25,31,1,NULL,NULL,4,44,17,1,300),(26,31,1,NULL,NULL,4,35,35,0,600),(27,31,2,NULL,NULL,4,35,26,0,600),(28,31,2,NULL,NULL,4,44,8,1,300),(29,37,1,NULL,NULL,4,35,35,0,600),(30,37,1,NULL,NULL,4,44,17,1,300),(31,38,1,NULL,NULL,4,35,35,0,600),(32,39,1,NULL,NULL,4,35,35,0,600);
+INSERT INTO `plan_notification` VALUES
+    (1,1,1,NULL,NULL,4,44,17,1,300),
+    (2,1,1,NULL,NULL,4,35,35,0,600),
+    (3,1,2,NULL,NULL,4,35,26,0,600),
+    (4,1,2,NULL,NULL,4,44,8,1,300),
+    (5,7,1,NULL,NULL,4,35,35,0,600),
+    (6,7,1,NULL,NULL,4,44,17,1,300),
+    (7,8,1,NULL,NULL,4,35,35,0,600),
+    (8,9,1,NULL,NULL,4,35,35,0,600),
+    (9,11,1,NULL,NULL,4,44,17,1,300),
+    (10,11,1,NULL,NULL,4,35,35,0,600),
+    (11,11,2,NULL,NULL,4,35,26,0,600),
+    (12,11,2,NULL,NULL,4,44,8,1,300),
+    (13,17,1,NULL,NULL,4,35,35,0,600),
+    (14,17,1,NULL,NULL,4,44,17,1,300),
+    (15,18,1,NULL,NULL,4,35,35,0,600),
+    (16,19,1,NULL,NULL,4,35,35,0,600),
+    (17,21,1,NULL,'test_template',4,44,17,1,300),
+    (18,21,1,NULL,'test_template',4,35,35,0,600),
+    (19,21,2,NULL,'test_template',4,35,26,0,600),
+    (20,21,2,NULL,'test_template',4,44,8,1,300),
+    (21,27,1,NULL,'test_template',4,35,35,0,600),
+    (22,27,1,NULL,'test_template',4,44,17,1,300),
+    (23,28,1,NULL,'test_template',4,35,35,0,600),
+    (24,29,1,NULL,'test_template',4,35,35,0,600),
+    (25,31,1,NULL,NULL,4,44,17,1,300),
+    (26,31,1,NULL,NULL,4,35,35,0,600),
+    (27,31,2,NULL,NULL,4,35,26,0,600),
+    (28,31,2,NULL,NULL,4,44,8,1,300),
+    (29,37,1,NULL,NULL,4,35,35,0,600),
+    (30,37,1,NULL,NULL,4,44,17,1,300),
+    (31,38,1,NULL,NULL,4,35,35,0,600),
+    (32,39,1,NULL,NULL,4,35,35,0,600);
 UNLOCK TABLES;
 
 LOCK TABLES `response` WRITE;

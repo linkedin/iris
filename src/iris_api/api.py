@@ -1439,6 +1439,24 @@ class UserModes(object):
             raise
 
 
+class TargetRoles(object):
+    allow_read_only = False
+
+    def on_get(self, req, resp):
+        session = db.Session()
+        try:
+            sql = '''SELECT `name` FROM `target_role`'''
+            results = session.execute(sql)
+            payload = ujson.dumps([row for (row,) in results])
+            session.close()
+            resp.status = HTTP_200
+            resp.body = payload
+        except Exception:
+            session.close()
+            logger.exception('ERROR')
+            raise
+
+
 class Targets(object):
     allow_read_only = False
 
@@ -2152,6 +2170,8 @@ def get_api(config):
 
     app.add_route('/v0/targets/{target_type}', Target())
     app.add_route('/v0/targets', Targets())
+
+    app.add_route('/v0/target_roles', TargetRoles())
 
     app.add_route('/v0/templates/{template_id}', Template())
     app.add_route('/v0/templates', Templates())
