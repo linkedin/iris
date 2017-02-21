@@ -1529,6 +1529,12 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     data = re.json()
     assert all(data[key] == body[key] for key in body)
 
+    re = requests.delete(base_url + 'applications/%s/quota' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 404
+
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
