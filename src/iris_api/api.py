@@ -1620,6 +1620,26 @@ class ApplicationQuota(object):
 
         resp.status = HTTP_201
 
+    def on_delete(self, req, resp, app_name):
+        session = db.Session()
+
+        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+
+        if not application_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that application', '')
+
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        session.execute('DELETE FROM `application_quota` WHERE `application_id` = :application_id', {'application_id': application_id})
+        session.commit()
+        session.close()
+
+        resp.status = HTTP_204
+
 
 class Applications(object):
     allow_read_only = True
