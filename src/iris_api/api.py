@@ -31,6 +31,8 @@ from iris_api.sender import auditlog
 from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                    required_quota_keys, quota_int_keys)
 
+from gevent import spawn, sleep
+
 
 from .constants import (
     XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
@@ -2157,10 +2159,17 @@ def get_api_app():
     return get_api(config)
 
 
+def update_cache_worker():
+    while True:
+        logger.debug('Reinitializing cache')
+        cache.init()
+        sleep(60)
+
+
 def get_api(config):
     logging.basicConfig()
     db.init(config)
-    cache.init()
+    spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
     healthcheck_path = config['healthcheck_path']
