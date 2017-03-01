@@ -6,6 +6,7 @@
 # -*- coding:utf-8 -*-
 
 import pytest
+import json
 import requests
 import copy
 import iris_api.bin.iris_ctl as iris_ctl
@@ -1731,6 +1732,46 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
 
     re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
     assert re.status_code == 404
+
+
+def test_modify_application(sample_application_name, sample_admin_user):
+    if not all([sample_application_name, sample_admin_user]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    current_settings = re.json()
+
+    temp_test_variable = 'testvar2'
+
+    if temp_test_variable not in current_settings['variables']:
+        current_settings['variables'].append(temp_test_variable)
+
+    try:
+        json.loads(current_settings['sample_context'])
+    except ValueError:
+        current_settings['sample_context'] = '{}'
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert set(re.json()['variables']) == set(current_settings['variables'])
+
+    current_settings['variables'] = list(set(current_settings['variables']) - set([temp_test_variable]))
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert set(re.json()['variables']) == set(current_settings['variables'])
+
+    current_settings['sample_context'] = 'sdfdsf234234'
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'sample_context must be valid json'
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

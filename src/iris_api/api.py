@@ -1552,6 +1552,66 @@ class Application(object):
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
 
+    def on_put(self, req, resp, app_name):
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        session = db.Session()
+
+        app = session.execute(get_applications_query + ' AND `application`.`name` = :app_name', {'app_name': app_name}).fetchone()
+        if not app:
+            session.close()
+            raise HTTPBadRequest('Application %s not found' % app_name, '')
+
+        # Only admins and application owners can change app settings
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': app['id'], 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        try:
+            ujson.loads(data['sample_context'])
+        except (KeyError, ValueError):
+            raise HTTPBadRequest('sample_context must be valid json', '')
+
+        if 'context_template' not in data:
+            raise HTTPBadRequest('context_template must be specified', '')
+
+        if 'summary_template' not in data:
+            raise HTTPBadRequest('summary_template must be specified', '')
+
+        new_variables = data.get('variables')
+        if not isinstance(new_variables, list):
+            raise HTTPBadRequest('variables must be specified and be a list', '')
+        new_variables = set(new_variables)
+
+        existing_variables = {row[0] for row in session.execute('SELECT `name` FROM `template_variable` WHERE `application_id` = :application_id',
+                                                                {'application_id': app['id']})}
+
+        kill_variables = existing_variables - new_variables
+
+        for variable in new_variables - existing_variables:
+            session.execute('INSERT INTO `template_variable` (`application_id`, `name`) VALUES (:application_id, :variable)',
+                            {'application_id': app['id'], 'variable': variable})
+
+        if kill_variables:
+            session.execute('DELETE FROM `template_variable` WHERE `application_id` = :application_id AND `name` IN :variables',
+                            {'application_id': app['id'], 'variables': tuple(kill_variables)})
+
+        data['application_id'] = app['id']
+
+        session.execute('''UPDATE `application`
+                          SET `context_template` = :context_template, `summary_template` = :summary_template,
+                              `sample_context` = :sample_context
+                          WHERE `id` = :application_id LIMIT 1''', data)
+
+        session.commit()
+        session.close()
+
+        resp.body = '{}'
+
 
 class ApplicationQuota(object):
     allow_read_only = True
@@ -1621,6 +1681,7 @@ class ApplicationQuota(object):
         session.close()
 
         resp.status = HTTP_201
+        resp.body = '{}'
 
     def on_delete(self, req, resp, app_name):
         session = db.Session()
