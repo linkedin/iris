@@ -38,11 +38,15 @@ class oncall(object):
 
     def get(self, role, target):
         if role == 'team':
-            result = self.call_oncall('/teams/%s/users' % target)
-            if not isinstance(result, list):
+            result = self.call_oncall('/teams/%s/rosters' % target)
+            if not isinstance(result, dict):
                 stats['oncall_error'] += 1
                 return None
-            return result
+            user_list = []
+            for roster in result:
+                for user in result[roster]['users']:
+                    user_list.append(user['name'])
+            return user_list
         elif role == 'manager':
             result = self.call_oncall('/teams/%s/oncall/manager' % target)
             if not isinstance(result, list):
