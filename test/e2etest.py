@@ -234,6 +234,7 @@ def create_incident_with_message(application, plan, target, mode):
                                   TRUE,
                                   %(incident_id)s
                           )''', {'application': application, 'target': target, 'mode': mode, 'incident_id': incident_id})
+        assert cursor.lastrowid
         conn.commit()
         return incident_id
 

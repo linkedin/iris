@@ -11,6 +11,9 @@ import ujson
 from . import db
 import re
 import msgpack
+import logging
+
+logger = logging.getLogger(__name__)
 
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 allowed_text_response_actions = frozenset(['suppress', 'claim'])
@@ -48,6 +51,9 @@ def parse_response(response, mode, source):
     if re.match('claim\s+last', response, re.IGNORECASE):
         session = db.Session()
         target_name = lookup_username_from_contact(mode, source, session=session)
+        if not target_name:
+            logger.error('Failed resolving %s:%s to target name', mode, source)
+            return None, 'claim'
         msg_id = session.execute('''SELECT `message`.`id` from `message`
                                     JOIN `target` on `target`.`id` = `message`.`target_id`
                                     WHERE `target`.`name` = :target_name
@@ -58,6 +64,9 @@ def parse_response(response, mode, source):
     elif re.match('claim\s+all', response, re.IGNORECASE):
         session = db.Session()
         target_name = lookup_username_from_contact(mode, source, session=session)
+        if not target_name:
+            logger.error('Failed resolving %s:%s to target name', mode, source)
+            return None, 'claim_all'
         msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
                                                         JOIN `target` on `target`.`id` = `message`.`target_id`
                                                         JOIN `incident` on `incident`.`id` = `message`.`incident_id`
