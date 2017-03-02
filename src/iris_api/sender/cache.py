@@ -12,7 +12,6 @@ from gevent.pool import Pool
 from .message import update_message_mode
 from .. import db
 from ..role_lookup import get_role_lookup
-from ..metrics import stats
 from . import auditlog
 
 import logging
@@ -358,29 +357,14 @@ class RoleTargets():
         try:
             return self.data[(role, target)]
         except KeyError:
-            names = []
             if role == 'user':
                 names = [target]
-            elif role == 'team':
-                names = self.role_lookup.team_members(target)
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
-            elif role == 'manager':
-                names = self.role_lookup.team_manager(target)
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
-            elif role.startswith('oncall'):
-                names = self.role_lookup.team_oncall(target, 'primary' if role == 'oncall' else role[7:])
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
             else:
-                names = []
+                names = self.role_lookup.get(role, target)
+                if names is None:
+                    return None
 
             names = self.prune_inactive_targets(names)
-
             self.data[(role, target)] = names
             return names
 
