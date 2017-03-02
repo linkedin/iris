@@ -90,7 +90,9 @@ INSERT INTO `target_application_mode` VALUES (1,8,26,26);
 UNLOCK TABLES;
 
 LOCK TABLES `target_contact` WRITE;
-INSERT INTO `target_contact` VALUES (1,8,'+1 123-456-7890'),(1,17,'demo'),(1,26,'+1 123-456-7890'),(1,35,'demo@foo.bar');
+INSERT INTO `target_contact` VALUES (1,8,'+1 123-456-7891'),(1,17,'demo1'),(1,26,'+1 123-456-7891'),(1,35,'demo1@foo.bar'),
+                                    (2,8,'+1 123-456-7892'),(2,17,'demo2'),(2,26,'+1 123-456-7892'),(2,35,'demo2@foo.bar'),
+                                    (3,8,'+1 123-456-7893'),(3,17,'demo3'),(3,26,'+1 123-456-7893'),(3,35,'demo3@foo.bar');
 UNLOCK TABLES;
 
 LOCK TABLES `target_mode` WRITE;
