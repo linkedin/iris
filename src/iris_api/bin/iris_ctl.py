@@ -23,6 +23,8 @@ def iris_ctl(ctx):
 @click.pass_context
 def app(ctx):
     pass
+
+
 iris_ctl.add_command(app)
 
 
@@ -30,6 +32,8 @@ iris_ctl.add_command(app)
 @click.pass_context
 def app_import(ctx):
     pass
+
+
 app.add_command(app_import)
 
 
@@ -73,6 +77,8 @@ def sample_context(ctx, app, sample_context, config):
                        (sample_ctx, app))
         conn.commit()
     click.echo(click.style('All done!', fg='green'))
+
+
 app_import.add_command(sample_context)
 
 
@@ -95,6 +101,8 @@ def context_template(ctx, app, context_template, config):
                        (tpl_content, app))
         conn.commit()
     click.echo(click.style('All done!', fg='green'))
+
+
 app_import.add_command(context_template)
 
 
@@ -118,6 +126,8 @@ def summary_template(ctx, app, summary_template, config):
                        (tpl_content, app))
         conn.commit()
     click.echo(click.style('All done!', fg='green'))
+
+
 app_import.add_command(summary_template)
 
 
@@ -125,6 +135,8 @@ app_import.add_command(summary_template)
 @click.pass_context
 def template(ctx):
     pass
+
+
 iris_ctl.add_command(template)
 
 
@@ -168,6 +180,8 @@ def delete_template(ctx, template, config):
         else:
             conn.commit()
             click.echo(click.style('All done!', fg='green'))
+
+
 template.add_command(delete_template)
 
 
@@ -175,6 +189,8 @@ template.add_command(delete_template)
 @click.pass_context
 def plan(ctx):
     pass
+
+
 iris_ctl.add_command(plan)
 
 
@@ -223,6 +239,8 @@ def delete_plan(ctx, plan, config):
         else:
             conn.commit()
             click.echo(click.style('All done!', fg='green'))
+
+
 plan.add_command(delete_plan)
 
 

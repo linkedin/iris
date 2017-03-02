@@ -266,17 +266,17 @@ def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone
         pytest.skip('We do not have enough data in DB to do this test')
 
     data = {
-      'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
-      'To': sample_phone,
-      'ToZip': 15108,
-      'FromState': 'CA',
-      'Digits': 2,
-      'From': '+16504222677'
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'To': sample_phone,
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'Digits': 2,
+        'From': '+16504222677'
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
         'message_id': fake_message_id,
-        }, data=data)
+    }, data=data)
     assert re.status_code == 200
     assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
 
@@ -286,17 +286,17 @@ def test_api_response_batch_phone_call(fake_batch_id, sample_phone):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     data = {
-      'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
-      'To': sample_phone,
-      'ToZip': 15108,
-      'FromState': 'CA',
-      'Digits': '2',
-      'From': '+16504222677',
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'To': sample_phone,
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'Digits': '2',
+        'From': '+16504222677',
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
         'message_id': fake_batch_id,
-        }, data=data)
+    }, data=data)
     assert re.status_code == 200
     assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
@@ -601,16 +601,16 @@ def test_api_response_gmail_one_click(fake_message_id, sample_email):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     re = requests.post(base_url + 'response/gmail-oneclick', json={
-      'msg_id': fake_message_id,
-      'email_address': sample_email,
-      'cmd': 'claim'
+        'msg_id': fake_message_id,
+        'email_address': sample_email,
+        'cmd': 'claim'
     })
     assert re.status_code == 204
 
     re = requests.post(base_url + 'response/gmail-oneclick', json={
-      'msg_id': 'fakemessageid',
-      'email_address': sample_email,
-      'cmd': 'claim'
+        'msg_id': 'fakemessageid',
+        'email_address': sample_email,
+        'cmd': 'claim'
     })
     assert re.status_code == 400
 
@@ -717,7 +717,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     re = requests.post(base_url + 'plans', json=data)
     assert re.status_code == 201
     plan_id = re.content.strip()
-    new_data = requests.get(base_url+'plans/'+str(plan_id)).json()
+    new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
     assert new_data['description'] == data['description']
@@ -1094,7 +1094,7 @@ def test_large_incident_context(sample_user, sample_application_name):
     ctx = {
         "nodes": [
             {
-                "device": "abc2-efg01.nw.example.com"*10000,
+                "device": "abc2-efg01.nw.example.com" * 10000,
                 "type": "BFD",
                 "message": "bar",
                 "component": "NA"
@@ -1175,10 +1175,10 @@ def test_post_user_modes(sample_user):
     session.headers = username_header(sample_user)
 
     change_to = {
-      'high': 'default',
-      'urgent': 'default',
-      'medium': 'im',
-      'low': 'call'
+        'high': 'default',
+        'urgent': 'default',
+        'medium': 'im',
+        'low': 'call'
     }
     re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
     assert re.status_code == 200
@@ -1239,24 +1239,24 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
 
     # Set priorities for two apps in batch, as well as global defaults
     modes_per_app = {
-      'per_app_modes': {
-        sample_application_name: {
-          'high': 'sms',
-          'urgent': 'call',
-          'medium': 'im',
-          'low': 'call'
+        'per_app_modes': {
+            sample_application_name: {
+                'high': 'sms',
+                'urgent': 'call',
+                'medium': 'im',
+                'low': 'call'
+            },
+            sample_application_name2: {
+                'high': 'email',
+                'urgent': 'email',
+                'medium': 'im',
+                'low': 'call'
+            },
         },
-        sample_application_name2: {
-          'high': 'email',
-          'urgent': 'email',
-          'medium': 'im',
-          'low': 'call'
-        },
-      },
-      'high': 'call',
-      'urgent': 'call',
-      'medium': 'call',
-      'low': 'call'
+        'high': 'call',
+        'urgent': 'call',
+        'medium': 'call',
+        'low': 'call'
     }
     re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app)
     assert re.status_code == 200
@@ -1269,24 +1269,24 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
 
     # Now try deleting both custom apps by setting all to default
     modes_per_app_delete = {
-      'per_app_modes': {
-        sample_application_name: {
-          'high': 'default',
-          'urgent': 'default',
-          'medium': 'default',
-          'low': 'default'
+        'per_app_modes': {
+            sample_application_name: {
+                'high': 'default',
+                'urgent': 'default',
+                'medium': 'default',
+                'low': 'default'
+            },
+            sample_application_name2: {
+                'high': 'default',
+                'urgent': 'default',
+                'medium': 'default',
+                'low': 'default'
+            },
         },
-        sample_application_name2: {
-          'high': 'default',
-          'urgent': 'default',
-          'medium': 'default',
-          'low': 'default'
-        },
-      },
-      'high': 'default',
-      'urgent': 'default',
-      'medium': 'default',
-      'low': 'default'
+        'high': 'default',
+        'urgent': 'default',
+        'medium': 'default',
+        'low': 'default'
     }
 
     re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app_delete)
@@ -1300,16 +1300,16 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
 
 def test_create_template(sample_user, sample_application_name):
     post_payload = {
-      'creator': sample_user,
-      'name': 'test_template',
-      'content': {
-        sample_application_name: {
-            'sms': {'subject': '', 'body': 'test_sms'},
-            'im': {'subject': '', 'body': 'test_im'},
-            'call': {'subject': '', 'body': 'test_call'},
-            'email': {'subject': 'email_subject', 'body': 'email_body'}
-          }
-      },
+        'creator': sample_user,
+        'name': 'test_template',
+        'content': {
+            sample_application_name: {
+                'sms': {'subject': '', 'body': 'test_sms'},
+                'im': {'subject': '', 'body': 'test_im'},
+                'call': {'subject': '', 'body': 'test_call'},
+                'email': {'subject': 'email_subject', 'body': 'email_body'}
+            }
+        },
     }
 
     re = requests.post(base_url + 'templates/', json=post_payload)
@@ -1400,88 +1400,88 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
     }
 
     invalid_steps = [
-      [
         [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'oncall-primary',
+                    'target': sample_team,
+                    'priority': 'high',
+                    'wait': 300,
+                    'repeat': 1,
+                    'template': sample_application_name
+                },
+            ]
         ],
         [
-          {
-            'role': 'oncall-primary',
-            'target': sample_team,
-            'priority': 'high',
-            'wait': 300,
-            'repeat': 1,
-            'template': sample_application_name
-          },
-        ]
-      ],
-      [
-        [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          },
-        ]
-      ],
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                },
+            ]
+        ],
     ]
 
     valid_steps = [
-      [
         [
-          {
-            'role': 'user',
-            'target': sample_user,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': sample_user,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
         ],
-      ],
 
-      [
         [
-          {
-            'role': 'user',
-            'target': sample_user,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': sample_user,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'manager',
+                    'target': sample_team,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
         ],
-        [
-          {
-            'role': 'manager',
-            'target': sample_team,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
-        ],
-        [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
-        ],
-      ],
     ]
 
     for steps in invalid_steps:

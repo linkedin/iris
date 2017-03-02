@@ -240,14 +240,14 @@ def test_msgpack_handle_sets():
 def test_generate_slave_message_payload():
     from iris_api.sender.rpc import generate_msgpack_message_payload
     data = {
-      'ids': set([1, 2, 3, 4])
+        'ids': set([1, 2, 3, 4])
     }
     result = generate_msgpack_message_payload(data)
     assert msgpack.unpackb(result) == {
-      'endpoint': 'v0/slave_send',
-      'data': {
-        'ids': [1, 2, 3, 4]
-      }
+        'endpoint': 'v0/slave_send',
+        'data': {
+            'ids': [1, 2, 3, 4]
+        }
     }
 
 
