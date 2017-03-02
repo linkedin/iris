@@ -53,7 +53,7 @@ class IrisPlugin(object):
                         self.name, mode, msg_id, content)
             cmd, args = parse_response(content)
         if batch:
-            cmd = 'batch_'+cmd
+            cmd = 'batch_' + cmd
         return self.process_command(msg_id, source, mode, cmd, args)
 
     def process_iris_claim(self, msg_id, source, mode, cmd, args=None):

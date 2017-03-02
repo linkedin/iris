@@ -17,10 +17,6 @@ from . import auditlog
 
 import logging
 logger = logging.getLogger(__name__)
-
-# FIXME: remove this when we move to py27
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 logging.getLogger('requests').setLevel(logging.WARNING)
 
 

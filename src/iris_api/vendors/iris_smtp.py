@@ -20,8 +20,8 @@ class iris_smtp(object):
     def __init__(self, config):
         self.config = config
         self.modes = {
-          EMAIL_SUPPORT: self.send_email,
-          IM_SUPPORT: self.send_email,
+            EMAIL_SUPPORT: self.send_email,
+            IM_SUPPORT: self.send_email,
         }
         self.mx_sorted = []
 

@@ -491,10 +491,10 @@ def load_config_file(config_path):
     if 'init_config_hook' in config:
         try:
             module = config['init_config_hook']
-            logging.info('Bootstrapping config using %s' % module)
+            logger.info('Bootstrapping config using %s', module)
             getattr(import_module(module), module.split('.')[-1])(config)
         except ImportError:
-            logger.exception('Failed loading config hook %s' % module)
+            logger.exception('Failed loading config hook %s', module)
 
     return config
 
@@ -1126,8 +1126,8 @@ class Messages(object):
 
         connection = db.engine.raw_connection()
         escaped_params = {
-          'mode_change': connection.escape(auditlog.MODE_CHANGE),
-          'target_change': connection.escape(auditlog.TARGET_CHANGE)
+            'mode_change': connection.escape(auditlog.MODE_CHANGE),
+            'target_change': connection.escape(auditlog.TARGET_CHANGE)
         }
 
         query = message_query % ', '.join(message_columns[f] % escaped_params for f in fields)
@@ -1153,7 +1153,7 @@ class Notifications(object):
     def __init__(self, config):
         master_sender = config['sender'].get('master_sender', config['sender'])
         self.sender_addr = (master_sender['host'], master_sender['port'])
-        logging.info('Sender used for notifications: %s:%s', *self.sender_addr)
+        logger.info('Sender used for notifications: %s:%s', *self.sender_addr)
 
     def on_post(self, req, resp):
         message = ujson.loads(req.context['body'])
@@ -2201,8 +2201,8 @@ class ReprioritizationMode(object):
     def on_delete(self, req, resp, username, src_mode_name):
         session = db.Session()
         affected_rows = session.execute(delete_reprioritization_settings_query, {
-          'target_name': username,
-          'mode_name': src_mode_name,
+            'target_name': username,
+            'mode_name': src_mode_name,
         }).rowcount
         session.commit()
         session.close()
@@ -2236,12 +2236,12 @@ class Stats(object):
 
     def on_get(self, req, resp):
         queries = {
-          'total_plans': 'SELECT COUNT(*) FROM `plan`',
-          'total_incidents': 'SELECT COUNT(*) FROM `incident`',
-          'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
-          'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
-          'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
-          'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
+            'total_plans': 'SELECT COUNT(*) FROM `plan`',
+            'total_incidents': 'SELECT COUNT(*) FROM `incident`',
+            'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
+            'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
+            'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
+            'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
         }
 
         stats = {}

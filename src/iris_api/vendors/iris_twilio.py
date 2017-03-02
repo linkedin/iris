@@ -19,8 +19,8 @@ class iris_twilio(object):
                                       self.config['proxy']['port'],
                                       proxy_rdns=True)
         self.modes = {
-          SMS_SUPPORT: self.send_sms,
-          CALL_SUPPORT: self.send_call,
+            SMS_SUPPORT: self.send_sms,
+            CALL_SUPPORT: self.send_call,
         }
 
     def get_twilio_client(self):

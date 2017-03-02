@@ -89,7 +89,8 @@ class TestAuth(falcon.testing.TestCase):
         self.assertEqual(result.status_code, 401)
 
         # Test bad auth header
-        result = self.simulate_get(path='/foo/bar', headers={'Authorization': 'foo'+auth})
+        result = self.simulate_get(path='/foo/bar',
+                                   headers={'Authorization': 'foo' + auth})
         self.assertEqual(result.status_code, 401)
 
         # Test read only

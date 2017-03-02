@@ -5,6 +5,9 @@ serve:
 		-e CONFIG=./configs/config.dev.yaml \
 		iris_api.wrappers.gunicorn:application
 
+sender:
+	iris-sender configs/config.dev.yaml
+
 test:
 	make unit
 	make e2e
@@ -14,6 +17,10 @@ e2e:
 
 unit:
 	py.test test
+
+check:
+	flake8
+	make test
 
 unit-cov:
 	py.test --cov-report term-missing --cov=iris_api test

@@ -181,16 +181,16 @@ class ApplicationQuota(object):
 
         # Make a new incident
         incident_data = {
-          'plan_name': plan_name,
-          'created': datetime.utcnow(),
-          'sender_app_id': self.iris_application['id'],
-          'context': ujson.dumps({
-            'quota_breach': {
-              'application': application,
-              'limit': limit,
-              'duration': duration
-            }
-          })
+            'plan_name': plan_name,
+            'created': datetime.utcnow(),
+            'sender_app_id': self.iris_application['id'],
+            'context': ujson.dumps({
+                'quota_breach': {
+                    'application': application,
+                    'limit': limit,
+                    'duration': duration
+                }
+            })
         }
 
         incident_id = session.execute(create_incident_query, incident_data).lastrowid
@@ -225,12 +225,12 @@ class ApplicationQuota(object):
 
         for username in targets:
             message = {
-              'application': self.iris_application['name'],
-              'priority_id': priority['id'],
-              'target': username,
-              'subject': 'Application %s exceeding message quota' % application,
-              'body': ('Hi %s\n\nYour application %s is currently exceeding its soft quota of %s messages per %s minutes.\n\n'
-                       'If this continues, your messages will eventually be dropped on the floor and an Iris incident will be raised.\n\n'
-                       'Regards,\nIris') % (username, application, limit, duration, )
+                'application': self.iris_application['name'],
+                'priority_id': priority['id'],
+                'target': username,
+                'subject': 'Application %s exceeding message quota' % application,
+                'body': ('Hi %s\n\nYour application %s is currently exceeding its soft quota of %s messages per %s minutes.\n\n'
+                         'If this continues, your messages will eventually be dropped on the floor and an Iris incident will be raised.\n\n'
+                         'Regards,\nIris') % (username, application, limit, duration, )
             }
             send_queue.put(message)

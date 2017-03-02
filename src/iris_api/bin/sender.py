@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 from gevent import monkey, sleep, spawn, queue
-monkey.patch_all()
+monkey.patch_all()  # NOQA
 
 import logging
 import sys
@@ -24,6 +24,8 @@ from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_ur
 from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
 from pymysql import DataError
+# queue for sending messages
+from iris_api.sender.shared import send_queue
 
 # sql
 
@@ -201,9 +203,6 @@ message_queue = queue.Queue()
 
 # Quota object used for rate limiting
 quota = None
-
-# queue for sending messages
-from iris_api.sender.shared import send_queue
 
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
@@ -931,7 +930,7 @@ def gwatch_renewer():
             logger.info('[*] gmail watcher loop finished')
 
         # only renew every 8 hours
-        sleep(60*60*8)
+        sleep(60 * 60 * 8)
 
 
 def prune_old_audit_logs_worker():
@@ -943,7 +942,7 @@ def prune_old_audit_logs_worker():
         cursor.close()
         connection.close()
         logger.info('Ran task to prune old audit logs. Waiting 4 hours until next run.')
-        sleep(60*60*4)
+        sleep(60 * 60 * 4)
 
 
 def mock_gwatch_renewer():
@@ -973,8 +972,8 @@ def init_sender(config):
 
     if should_skip_send:
         config['vendors'] = [{
-          'type': 'iris_dummy',
-          'name': 'iris dummy vendor'
+            'type': 'iris_dummy',
+            'name': 'iris dummy vendor'
         }]
 
     global quota

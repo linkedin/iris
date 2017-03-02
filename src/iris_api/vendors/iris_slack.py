@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 class iris_slack(object):
     supports = frozenset([
-      # TODO: Uncomment this after getting auth permission
-      # SLACK_SUPPORT
+        # TODO: Uncomment this after getting auth permission
+        # SLACK_SUPPORT
     ])
 
     def __init__(self, config):

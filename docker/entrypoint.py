@@ -90,5 +90,6 @@ def main():
 
     os.execv('/usr/bin/uwsgi', ['', '--yaml', '/home/iris/daemons/uwsgi.yaml:prod'])
 
+
 if __name__ == '__main__':
     main()
