@@ -11,6 +11,9 @@ import ujson
 from . import db
 import re
 import msgpack
+import logging
+
+logger = logging.getLogger(__name__)
 
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 allowed_text_response_actions = frozenset(['suppress', 'claim'])
@@ -45,9 +48,12 @@ def parse_response(response, mode, source):
     if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
         return msg_id, ' '.join([cmd] + args)
 
-    if re.match('[cC]laim\s+last', response):
+    if re.match('claim\s+last', response, re.IGNORECASE):
         session = db.Session()
         target_name = lookup_username_from_contact(mode, source, session=session)
+        if not target_name:
+            logger.error('Failed resolving %s:%s to target name', mode, source)
+            return None, 'claim'
         msg_id = session.execute('''SELECT `message`.`id` from `message`
                                     JOIN `target` on `target`.`id` = `message`.`target_id`
                                     WHERE `target`.`name` = :target_name
@@ -55,6 +61,19 @@ def parse_response(response, mode, source):
                                     LIMIT 1''', {'target_name': target_name}).scalar()
         session.close()
         return msg_id, 'claim'
+    elif re.match('claim\s+all', response, re.IGNORECASE):
+        session = db.Session()
+        target_name = lookup_username_from_contact(mode, source, session=session)
+        if not target_name:
+            logger.error('Failed resolving %s:%s to target name', mode, source)
+            return None, 'claim_all'
+        msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
+                                                        JOIN `target` on `target`.`id` = `message`.`target_id`
+                                                        JOIN `incident` on `incident`.`id` = `message`.`incident_id`
+                                                        WHERE `target`.`name` = :target_name
+                                                        AND `incident`.`active` = TRUE''', {'target_name': target_name})]
+        session.close()
+        return msg_ids, 'claim_all'
 
     return halves
 
@@ -70,6 +89,11 @@ def parse_email_response(first_line, subject, source):
 def get_incident_id_from_message_id(msg_id):
     sql = 'SELECT `message`.`incident_id` FROM `message` WHERE `message`.`id` = :msg_id'
     return db.Session().execute(sql, {'msg_id': msg_id}).scalar()
+
+
+def get_incident_ids_from_message_ids(msg_ids):
+    sql = 'SELECT DISTINCT `message`.`incident_id` FROM `message` WHERE `message`.`id` in :msg_ids'
+    return [row[0] for row in db.Session().execute(sql, {'msg_ids': tuple(msg_ids)})]
 
 
 def get_incident_context_from_message_id(msg_id):
@@ -139,6 +163,35 @@ def claim_incident(incident_id, owner, session=None):
     session.close()
 
     return active == 1
+
+
+def claim_bulk_incidents(incident_ids, owner):
+    session = db.Session()
+    incident_ids = tuple(incident_ids)
+    active = 0 if owner else 1
+    now = datetime.datetime.utcnow()
+    session.execute('''UPDATE `incident`
+                       SET `incident`.`updated` = :updated,
+                           `incident`.`active` = :active,
+                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner)
+                       WHERE `incident`.`id` IN :incident_ids''',
+                    {'incident_ids': incident_ids, 'active': active, 'owner': owner, 'updated': now})
+
+    session.execute('UPDATE `message` SET `active`=0 WHERE `incident_id` IN :incident_ids', {'incident_ids': incident_ids})
+    session.commit()
+
+    claimed = set()
+    not_claimed = set()
+
+    for incident_id, active in session.execute('SELECT `id`, `active` FROM `incident` WHERE `id` IN :incident_ids', {'incident_ids': incident_ids}):
+        if active == 1:
+            not_claimed.add(incident_id)
+        else:
+            claimed.add(incident_id)
+
+    session.close()
+
+    return claimed, not_claimed
 
 
 def claim_incidents_from_batch_id(batch_id, owner):
