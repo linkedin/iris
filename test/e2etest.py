@@ -211,6 +211,33 @@ def sample_plan_name():
             return result[0]
 
 
+def create_incident_with_message(application, plan, target, mode):
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+                          VALUES (
+                            (SELECT `plan_id` from `plan_active` WHERE `name` = %(plan)s),
+                            NOW(),
+                            "{}",
+                            0,
+                            TRUE,
+                            (SELECT `id` FROM `application` WHERE `name` = %(application)s)
+                          )''', {'application': application, 'plan': plan})
+        incident_id = cursor.lastrowid
+        assert incident_id
+        cursor.execute('''INSERT INTO `message` (`created`, `application_id`, `target_id`, `priority_id`, `mode_id`, `active`, `incident_id`)
+                          VALUES(
+                                  NOW(),
+                                  (SELECT `id` FROM `application` WHERE `name` = %(application)s),
+                                  (SELECT `id` FROM `target` WHERE `name` = %(target)s),
+                                  (SELECT `id` FROM `priority` WHERE `name` = 'low'),
+                                  (SELECT `id` FROM `mode` WHERE `name` = %(mode)s),
+                                  TRUE,
+                                  %(incident_id)s
+                          )''', {'application': application, 'target': target, 'mode': mode, 'incident_id': incident_id})
+        conn.commit()
+        return incident_id
+
+
 def test_api_acls(sample_user, sample_user2):
     re = requests.get(base_url + 'users/' + sample_user)
     assert re.status_code == 401
@@ -298,13 +325,6 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
     assert re.status_code == 200
     assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
 
-    # TODO figure out how to test successful claim last
-    data = base_body.copy()
-    data['Body'] = 'claim last'
-
-    re = requests.post(base_url + 'response/twilio/messages', data=data)
-    assert re.status_code == 200
-
     data = base_body.copy()
     data['Body'] = fake_message_id
 
@@ -338,6 +358,108 @@ def test_api_response_batch_sms(fake_batch_id):
     assert re.status_code == 400
 
 
+def test_api_response_claim_all(sample_user, sample_phone, sample_application_name, sample_plan_name, sample_email):
+    if not all([sample_user, sample_phone, sample_application_name, sample_plan_name]):
+        pytest.skip('Not enough data for this test')
+
+    # Verify SMS
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    sms_body = {
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'claim all'
+    }
+
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_body)
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify email
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    data = {
+        'body': 'claim all',
+        'headers': [
+            {'name': 'From', 'value': sample_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+    re = requests.post(base_url + 'response/gmail', json=data)
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+
+def test_api_response_claim_last(sample_user, sample_phone, sample_application_name, sample_plan_name, sample_email):
+    if not all([sample_user, sample_phone, sample_application_name, sample_plan_name]):
+        pytest.skip('Not enough data for this test')
+
+    # Verify SMS
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    sms_body = {
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'claim last'
+    }
+
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_body)
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify email
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    data = {
+        'body': 'claim last',
+        'headers': [
+            {'name': 'From', 'value': sample_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+    re = requests.post(base_url + 'response/gmail', json=data)
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+
 def test_api_response_email(fake_message_id, sample_email):
     if not all([fake_message_id, sample_email]):
         pytest.skip('Failed finding a batch ID to use for tests')
@@ -354,16 +476,6 @@ def test_api_response_email(fake_message_id, sample_email):
 
     data = {
         'body': 'claim %s' % fake_message_id,
-        'headers': [
-            {'name': 'From', 'value': sample_email},
-            {'name': 'Subject', 'value': 'fooject'},
-        ]
-    }
-    re = requests.post(base_url + 'response/gmail', json=data)
-    assert re.status_code == 204
-
-    data = {
-        'body': 'claim last',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},

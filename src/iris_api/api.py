@@ -1855,12 +1855,12 @@ class ResponseMixin(object):
 
         session = db.Session()
         is_batch = False
-        if isinstance(msg_id, int) or msg_id.isdigit():
+        if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
             # FIXME: return error if message not found for id
             app = get_app_from_msg_id(session, msg_id)
             validate_app(app)
             self.create_response(msg_id, source, content)
-        elif uuid4hex.match(msg_id):
+        elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
             # msg id is not pure digit, might be a batch id
             sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
             results = session.execute(sql, {'batch_id': msg_id})
@@ -1875,6 +1875,14 @@ class ResponseMixin(object):
             for mid in mid_lst:
                 self.create_response(mid, source, content)
             is_batch = True
+        elif isinstance(msg_id, list) and content == 'claim_all':
+            # Claim all functionality.
+            if not msg_id:
+                raise HTTPBadRequest('Invalid message id', 'No incidents to claim')
+            app = get_app_from_msg_id(session, msg_id[0])
+            validate_app(app)
+            for mid in msg_id:
+                self.create_response(mid, source, content)
         else:
             raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id.encode('utf-8'))
 

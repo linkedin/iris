@@ -55,6 +55,16 @@ def parse_response(response, mode, source):
                                     LIMIT 1''', {'target_name': target_name}).scalar()
         session.close()
         return msg_id, 'claim'
+    elif re.match('[cC]laim\s+all', response):
+        session = db.Session()
+        target_name = lookup_username_from_contact(mode, source, session=session)
+        msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
+                                                        JOIN `target` on `target`.`id` = `message`.`target_id`
+                                                        JOIN `incident` on `incident`.`id` = `message`.`incident_id`
+                                                        WHERE `target`.`name` = :target_name
+                                                        AND `incident`.`active` = TRUE''', {'target_name': target_name})]
+        session.close()
+        return msg_ids, 'claim_all'
 
     return halves
 
