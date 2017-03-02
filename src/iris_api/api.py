@@ -1855,6 +1855,7 @@ class ResponseMixin(object):
 
         session = db.Session()
         is_batch = False
+        is_claim_all = False
         if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
             # FIXME: return error if message not found for id
             app = get_app_from_msg_id(session, msg_id)
@@ -1877,22 +1878,42 @@ class ResponseMixin(object):
             is_batch = True
         elif isinstance(msg_id, list) and content == 'claim_all':
             # Claim all functionality.
+            is_claim_all = True
             if not msg_id:
                 raise HTTPBadRequest('Invalid message id', 'No incidents to claim')
-            app = get_app_from_msg_id(session, msg_id[0])
-            validate_app(app)
+            apps_to_message = defaultdict(list)
             for mid in msg_id:
+                msg_app = get_app_from_msg_id(session, mid)
+                if msg_app not in apps_to_message:
+                    validate_app(msg_app)
                 self.create_response(mid, source, content)
+                apps_to_message[msg_app].append(mid)
         else:
-            raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id.encode('utf-8'))
-
-        try:
-            resp = find_plugin(app).handle_response(
-                mode, msg_id, source, content, batch=is_batch)
-        except Exception as e:
-            raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+            raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id)
         session.close()
-        return app, resp
+
+        # Handle claim all differently as we might have messages from different applications
+        if is_claim_all:
+            try:
+                plugin_output = {app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
+                                 for app, msg_ids in apps_to_message.iteritems()}
+            except Exception as e:
+                logger.exception('Failed to handle %s response for mode %s for apps %s during claim all', content, mode, apps_to_message.keys())
+                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+
+            if len(plugin_output) > 1:
+                return plugin_output, '\n'.join('%s: %s' % (app, output) for app, output in plugin_output.iteritems())
+            else:
+                return plugin_output, '\n'.join(plugin_output.itervalues())
+
+        else:
+            try:
+                resp = find_plugin(app).handle_response(
+                    mode, msg_id, source, content, batch=is_batch)
+            except Exception as e:
+                logger.exception('Failed to handle %s response for mode %s for app %s', content, mode, app)
+                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+            return app, resp
 
 
 class ResponseGmail(ResponseMixin):
@@ -1928,10 +1949,20 @@ class ResponseGmail(ResponseMixin):
             logger.exception('Failed to handle email response: %s' % first_line)
             raise
         else:
-            success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
-            if not success:
-                logger.error('Failed to send user response email: %s' % re)
-                raise HTTPBadRequest('Failed to send user response email', re)
+            # When processing a claim all scenario, the first item returned by handle_user_response
+            # will be a dict mapping the app to its plugin output.
+            if isinstance(app, dict):
+                for app_name, app_response in app.iteritems():
+                    app_response = '%s: %s' % (app_name, app_response)
+                    success, re = self.create_email_message(app_name, source, 'Re: %s' % subject, app_response)
+                    if not success:
+                        logger.error('Failed to send user response email: %s' % re)
+                        raise HTTPBadRequest('Failed to send user response email', re)
+            else:
+                success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
+                if not success:
+                    logger.error('Failed to send user response email: %s' % re)
+                    raise HTTPBadRequest('Failed to send user response email', re)
             resp.status = HTTP_204
 
 
@@ -1940,11 +1971,14 @@ class ResponseGmailOneClick(ResponseMixin):
         gmail_params = ujson.loads(req.context['body'])
 
         try:
-            msg_id = gmail_params['msg_id']
+            msg_id = int(gmail_params['msg_id'])
             email_address = gmail_params['email_address']
             cmd = gmail_params['cmd']
-        except KeyError:
-            raise HTTPBadRequest('Post body missing required key', '')
+        except (ValueError, KeyError):
+            raise HTTPBadRequest('Post body missing required key or key of wrong type', '')
+
+        if cmd != 'claim':
+            raise HTTPBadRequest('GmailOneClick only supports claiming individual messages', '')
 
         try:
             app, response = self.handle_user_response('email', msg_id, email_address, cmd)

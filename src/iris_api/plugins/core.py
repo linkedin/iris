@@ -85,24 +85,22 @@ class IrisPlugin(object):
             return 'Failed to identify owner for these incidents.'
         if not msg_ids:
             return 'No messages to claim.'
-        claimed = set()
-        failed_to_claim = set()
-        for msg_id in msg_ids:
-            iid = utils.get_incident_id_from_message_id(msg_id)
-            if not iid:
-                logger.error('Couldn\'t get incident ID from message id %s', msg_id)
-                continue
-            is_active = utils.claim_incident(iid, owner)
-            if is_active:
-                failed_to_claim.add(str(iid))
-            else:
-                claimed.add(str(iid))
+        incident_ids = utils.get_incident_ids_from_message_ids(msg_ids)
+        if not incident_ids:
+            return 'No messages to claim.'
+
+        claimed, not_claimed = utils.claim_bulk_incidents(incident_ids, owner)
+
         msg = []
         if claimed:
-            msg.append('Iris Incidents claimed: %s' % ', '.join(claimed))
-        if failed_to_claim:
-            msg.append('Iris Incidents failed to claim: %s' % ', '.join(failed_to_claim))
-        return '\n'.join(msg)
+            msg.append('Iris Incidents claimed: %s' % ', '.join(map(str, claimed)))
+        if not_claimed:
+            msg.append('Iris Incidents failed to claim: %s' % ', '.join(map(str, not_claimed)))
+
+        if msg:
+            return '\n'.join(msg)
+        else:
+            return 'Unknown claim all result'
 
     def process_command(self, msg_id, source, mode, cmd, args=None):
         if cmd == 'claim':
