@@ -27,15 +27,26 @@ class iris_twilio(object):
         return TwilioRestClient(self.config['account_sid'],
                                 self.config['auth_token'])
 
+    def generate_message_text(self, message):
+        content = []
+
+        for key in ('subject', 'body'):
+            value = message.get(key)
+            if not isinstance(value, basestring):
+                continue
+            value = value.strip()
+            if value:
+                content.append(value)
+
+        return '. '.join(content)
+
     def send_sms(self, message):
         client = self.get_twilio_client()
 
         sender = client.messages.create
         from_ = self.config['twilio_number']
         start = time.time()
-        content = message['subject']
-        if 'body' in message:
-            content += '. %s' % message['body']
+        content = self.generate_message_text(message)
         sender(to=message['destination'],
                from_=from_,
                body=content[:480])
@@ -51,9 +62,7 @@ class iris_twilio(object):
         sender = client.calls.create
         from_ = self.config['twilio_number']
         url = self.config['relay_base_url'] + '/api/v0/twilio/calls/gather?'
-        content = message['subject']
-        if 'body' in message:
-            content += '. %s' % message['body']
+        content = self.generate_message_text(message)
 
         start = time.time()
         qs = urllib.urlencode({
