@@ -3,6 +3,9 @@
 
 from __future__ import absolute_import
 from . import db
+import logging
+
+logger = logging.getLogger(__name__)
 
 applications = {}  # name -> dict of info
 priorities = {}    # name -> dict of info
@@ -32,6 +35,7 @@ def cache_applications():
     applications = new_applications
     connection.close()
     cursor.close()
+    logger.info('Loaded applications: %s', ', '.join(applications))
 
 
 def cache_priorities():

@@ -596,6 +596,7 @@ class AuthMiddleware(object):
         try:
             app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
             if app not in cache.applications:
+                logger.warn('Tried authenticating with nonexistent app, %s', app)
                 raise HTTPUnauthorized('Authentication failure', 'Application not found', [])
             req.context['app'] = cache.applications[app]
         except TypeError:
@@ -615,10 +616,13 @@ class AuthMiddleware(object):
         if auth and auth.startswith('hmac '):
             username_header = req.get_header('X-IRIS-USERNAME')
             try:
-                app, client_digest = auth[5:].split(':', 1)
-                app = cache.applications[app]
+                app_name, client_digest = auth[5:].split(':', 1)
+                app = cache.applications.get(app_name)
+                if not app:
+                    logger.warn('Tried authenticating with nonexistent app, %s', app_name)
+                    raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
-                    logger.error('Unprivileged application %s tried authenticating %s', app['name'], username_header)
+                    logger.warn('Unprivileged application %s tried authenticating %s', app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 api_key = str(app['key'])
                 window = int(time.time()) // 5
@@ -646,12 +650,18 @@ class AuthMiddleware(object):
                         if username_header:
                             req.context['username'] = username_header
                     else:
+                        if username_header:
+                            logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                        else:
+                            logger.warn('HMAC doesn\'t validate for app %s', app['name'])
                         raise HTTPUnauthorized('Authentication failure', '', [])
 
             except (ValueError, KeyError):
+                logger.exception('Authentication failure')
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
         else:
+            logger.warn('Request has malformed/missing HMAC authorization header')
             raise HTTPUnauthorized('Authentication failure', '', [])
 
 
@@ -2264,13 +2274,14 @@ def get_api_app():
 
 def update_cache_worker():
     while True:
-        logger.debug('Reinitializing cache')
+        logger.info('Reinitializing cache')
         cache.init()
         sleep(60)
 
 
 def get_api(config):
-    logging.basicConfig()
+    logging.basicConfig(format='[%(asctime)s] [%(process)d] [%(levelname)s] %(name)s %(message)s',
+                        level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S %z')
     db.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
