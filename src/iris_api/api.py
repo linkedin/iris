@@ -1712,6 +1712,7 @@ class ApplicationQuota(object):
         session.close()
 
         resp.status = HTTP_204
+        resp.body = '{}'
 
 
 class Applications(object):
