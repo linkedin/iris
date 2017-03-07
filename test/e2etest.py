@@ -1623,15 +1623,17 @@ def test_get_priorities():
     assert 'urgent' in data
 
 
-def test_get_user(sample_user, sample_email):
+def test_get_user(sample_user, sample_email, sample_admin_user):
     re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
+    assert data.viewkeys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
-    assert 'teams' in data
-    assert 'modes' in data
-    assert 'per_app_modes' in data
+
+    re = requests.get(base_url + 'users/' + sample_admin_user, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    assert re.json()['admin'] is True
 
 
 def test_healthcheck():
