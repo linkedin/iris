@@ -1791,15 +1791,18 @@ class User(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         # Get user id/name
-        user_query = ''' SELECT `id`, `name` FROM `target`'''
+        user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
+                        FROM `target`
+                        JOIN `user` on `user`.`target_id` = `target`.`id`'''
         if username.isdigit():
-            user_query += ' WHERE `id` = %s'
+            user_query += ' WHERE `target`.`id` = %s'
         else:
-            user_query += ' WHERE `name` = %s'
+            user_query += ' WHERE `target`.`name` = %s'
         cursor.execute(user_query, username)
         if cursor.rowcount != 1:
             raise HTTPNotFound()
         user_data = cursor.fetchone()
+        user_data['admin'] = bool(user_data['admin'])
         user_id = user_data.pop('id')
 
         # Get user contact modes
