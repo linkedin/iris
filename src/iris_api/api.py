@@ -1455,11 +1455,40 @@ class TargetRoles(object):
     allow_read_only = False
 
     def on_get(self, req, resp):
+        '''
+        Target role fetch endpoint.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /api/v0/target_roles
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           [
+               {
+                   "name": "user",
+                   "type": "user"
+               },
+               {
+                   "name": "oncall",
+                   "type": "team"
+               }
+           ]
+        '''
         session = db.Session()
         try:
-            sql = '''SELECT `name` FROM `target_role`'''
+            sql = '''SELECT `target_role`.`name` AS `name`, `target_type`.`name` AS `type`
+                     FROM `target_role`
+                     JOIN `target_type` on `target_role`.`type_id` = `target_type`.`id`'''
             results = session.execute(sql)
-            payload = ujson.dumps([row for (row,) in results])
+            payload = ujson.dumps([{'name': row[0], 'type': row[1]} for row in results])
             session.close()
             resp.status = HTTP_200
             resp.body = payload
