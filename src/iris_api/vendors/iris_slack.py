@@ -11,10 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class iris_slack(object):
-    supports = frozenset([
-        # TODO: Uncomment this after getting auth permission
-        # SLACK_SUPPORT
-    ])
+    supports = frozenset([SLACK_SUPPORT])
 
     def __init__(self, config):
         self.config = config
@@ -40,15 +37,16 @@ class iris_slack(object):
                              "pretext": message_attachments['pretext'],
                              "title": message['subject'],
                              "title_link": self.config['iris_incident_url'] + '/' + message['incident_id'],
-                             "text": message['body']
+                             "text": message['body'],
+                             "mrkdwn_in": ["pretext"],
                              # Used for interactive buttons
-                             # "attachment_type": "default",
-                             # "callback_id": message['id'],
-                             # "actions": [{"name": "claim",
-                             #              "text": "Claim Incident",
-                             #              "type": "button",
-                             #              "value": "claimed"
-                             #              }]
+                             "attachment_type": "default",
+                             "callback_id": message['id'],
+                             "actions": [{"name": "claim",
+                                          "text": "Claim Incident",
+                                          "type": "button",
+                                          "value": "claimed"}]
+
                              }])
 
     def get_destination(self, destination):
