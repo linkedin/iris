@@ -46,6 +46,7 @@ class iris_slack(object):
                                           "text": "Claim Incident",
                                           "type": "button",
                                           "value": "claimed"}]
+
                              }])
 
     def get_destination(self, destination):

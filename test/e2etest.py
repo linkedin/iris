@@ -6,6 +6,7 @@
 # -*- coding:utf-8 -*-
 
 import pytest
+import json
 import requests
 import copy
 import iris_api.bin.iris_ctl as iris_ctl
@@ -33,6 +34,10 @@ sample_db_config = {
             'max_overflow': 100,
             'pool_timeout': 60
         }}}
+
+
+def username_header(username):
+    return {'X-IRIS-USERNAME': username}
 
 
 @pytest.fixture(scope='module')
@@ -117,6 +122,16 @@ def sample_user2(sample_user, iris_users):
 
 
 @pytest.fixture(scope='module')
+def sample_admin_user():
+    '''List of iris messages'''
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `name` FROM `target` JOIN `user` on `target`.`id` = `user`.`target_id` WHERE `user`.`admin` = TRUE LIMIT 1')
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+
+
+@pytest.fixture(scope='module')
 def sample_team(iris_teams):
     '''First team in our list of iris teams whose length is long enough for filtering'''
     for team in iris_teams:
@@ -135,7 +150,7 @@ def sample_team2(sample_team, iris_teams):
 @pytest.fixture(scope='module')
 def sample_email(sample_user):
     '''Email address of sample_user'''
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
     return data['contacts']['email']
@@ -144,7 +159,7 @@ def sample_email(sample_user):
 @pytest.fixture(scope='module')
 def sample_phone(sample_user):
     '''Email address of sample_user'''
-    re = requests.get(base_url + 'users/' + sample_user)
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
     return data['contacts']['call']
@@ -187,6 +202,60 @@ def sample_template_name(sample_application_name, sample_application_name2):
             return template['name']
 
 
+@pytest.fixture(scope='module')
+def sample_plan_name():
+    '''List of iris messages'''
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `name` FROM `plan_active` LIMIT 1')
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+
+
+def create_incident_with_message(application, plan, target, mode):
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+                          VALUES (
+                            (SELECT `plan_id` from `plan_active` WHERE `name` = %(plan)s),
+                            NOW(),
+                            "{}",
+                            0,
+                            TRUE,
+                            (SELECT `id` FROM `application` WHERE `name` = %(application)s)
+                          )''', {'application': application, 'plan': plan})
+        incident_id = cursor.lastrowid
+        assert incident_id
+        cursor.execute('''INSERT INTO `message` (`created`, `application_id`, `target_id`, `priority_id`, `mode_id`, `active`, `incident_id`)
+                          VALUES(
+                                  NOW(),
+                                  (SELECT `id` FROM `application` WHERE `name` = %(application)s),
+                                  (SELECT `id` FROM `target` WHERE `name` = %(target)s),
+                                  (SELECT `id` FROM `priority` WHERE `name` = 'low'),
+                                  (SELECT `id` FROM `mode` WHERE `name` = %(mode)s),
+                                  TRUE,
+                                  %(incident_id)s
+                          )''', {'application': application, 'target': target, 'mode': mode, 'incident_id': incident_id})
+        assert cursor.lastrowid
+        conn.commit()
+        return incident_id
+
+
+def test_api_acls(sample_user, sample_user2):
+    re = requests.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 401
+    assert re.json()['title'] == 'Username must be specified for this action'
+
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user2))
+    assert re.status_code == 401
+    assert re.json()['title'] == 'This user is not allowed to access this resource'
+
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'users/' + sample_user2, headers=username_header(sample_user2))
+    assert re.status_code == 200
+
+
 def test_api_bad_application():
     re = requests.post(base_url + 'incidents', headers={'Authorization': 'hmac fakeapplication123234234:abc'})
     assert re.status_code == 401
@@ -197,17 +266,17 @@ def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone
         pytest.skip('We do not have enough data in DB to do this test')
 
     data = {
-      'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
-      'To': sample_phone,
-      'ToZip': 15108,
-      'FromState': 'CA',
-      'Digits': 2,
-      'From': '+16504222677'
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'To': sample_phone,
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'Digits': 2,
+        'From': '+16504222677'
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
         'message_id': fake_message_id,
-        }, data=data)
+    }, data=data)
     assert re.status_code == 200
     assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
 
@@ -217,17 +286,17 @@ def test_api_response_batch_phone_call(fake_batch_id, sample_phone):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     data = {
-      'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
-      'To': sample_phone,
-      'ToZip': 15108,
-      'FromState': 'CA',
-      'Digits': '2',
-      'From': '+16504222677',
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'To': sample_phone,
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'Digits': '2',
+        'From': '+16504222677',
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
         'message_id': fake_batch_id,
-        }, data=data)
+    }, data=data)
     assert re.status_code == 200
     assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
@@ -257,13 +326,6 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
     assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
-
-    # TODO figure out how to test successful claim last
-    data = base_body.copy()
-    data['Body'] = 'claim last'
-
-    re = requests.post(base_url + 'response/twilio/messages', data=data)
-    assert re.status_code == 200
 
     data = base_body.copy()
     data['Body'] = fake_message_id
@@ -298,6 +360,192 @@ def test_api_response_batch_sms(fake_batch_id):
     assert re.status_code == 400
 
 
+def test_api_response_claim_all(sample_user, sample_phone, sample_application_name, sample_application_name2, sample_plan_name, sample_email):
+    if not all([sample_user, sample_phone, sample_application_name, sample_plan_name]):
+        pytest.skip('Not enough data for this test')
+
+    sms_claim_all_body = {
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'claim all'
+    }
+
+    email_claim_all_payload = {
+        'body': 'claim all',
+        'headers': [
+            {'name': 'From', 'value': sample_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+
+    # Clear out any existing unclaimed incidents, so they don't interfere with these tests
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    assert re.status_code in [400, 200]  # 400 if there are no unclaimed incidents.
+
+    # Verify SMS with two incidents from the same app
+    incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id_1
+
+    incident_id_2 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id_2
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    assert re.status_code == 200
+    assert re.json()['app_response'] in ('Iris Incidents claimed: %s, %s' % (incident_id_1, incident_id_2),
+                                         'Iris Incidents claimed: %s, %s' % (incident_id_2, incident_id_1))
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify email with two incidents from the same app
+    incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'email')
+    assert incident_id_1
+
+    incident_id_2 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'email')
+    assert incident_id_2
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.post(base_url + 'response/gmail', json=email_claim_all_payload)
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify SMS with two incidents from different apps
+    incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id_1
+
+    incident_id_2 = create_incident_with_message(sample_application_name2, sample_plan_name, sample_user, 'sms')
+    assert incident_id_2
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    # Response will be two lines, one for each application and its claimed incidents
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    assert re.status_code == 200
+    assert set(re.json()['app_response'].splitlines()) == {'%s: Iris Incidents claimed: %s' % (sample_application_name, incident_id_1),
+                                                           '%s: Iris Incidents claimed: %s' % (sample_application_name2, incident_id_2)}
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify email with two incidents from different apps
+    incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'email')
+    assert incident_id_1
+
+    incident_id_2 = create_incident_with_message(sample_application_name2, sample_plan_name, sample_user, 'email')
+    assert incident_id_2
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    re = requests.post(base_url + 'response/gmail', json=email_claim_all_payload)
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_1)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id_2)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+
+def test_api_response_claim_last(sample_user, sample_phone, sample_application_name, sample_plan_name, sample_email):
+    if not all([sample_user, sample_phone, sample_application_name, sample_plan_name]):
+        pytest.skip('Not enough data for this test')
+
+    # Verify SMS
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    sms_body = {
+        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'claim last'
+    }
+
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_body)
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Verify email
+    incident_id = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'email')
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 1
+
+    data = {
+        'body': 'claim last',
+        'headers': [
+            {'name': 'From', 'value': sample_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+    re = requests.post(base_url + 'response/gmail', json=data)
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+
 def test_api_response_email(fake_message_id, sample_email):
     if not all([fake_message_id, sample_email]):
         pytest.skip('Failed finding a batch ID to use for tests')
@@ -314,16 +562,6 @@ def test_api_response_email(fake_message_id, sample_email):
 
     data = {
         'body': 'claim %s' % fake_message_id,
-        'headers': [
-            {'name': 'From', 'value': sample_email},
-            {'name': 'Subject', 'value': 'fooject'},
-        ]
-    }
-    re = requests.post(base_url + 'response/gmail', json=data)
-    assert re.status_code == 204
-
-    data = {
-        'body': 'claim last',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},
@@ -363,16 +601,16 @@ def test_api_response_gmail_one_click(fake_message_id, sample_email):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     re = requests.post(base_url + 'response/gmail-oneclick', json={
-      'msg_id': fake_message_id,
-      'email_address': sample_email,
-      'cmd': 'claim'
+        'msg_id': fake_message_id,
+        'email_address': sample_email,
+        'cmd': 'claim'
     })
     assert re.status_code == 204
 
     re = requests.post(base_url + 'response/gmail-oneclick', json={
-      'msg_id': 'fakemessageid',
-      'email_address': sample_email,
-      'cmd': 'claim'
+        'msg_id': 'fakemessageid',
+        'email_address': sample_email,
+        'cmd': 'claim'
     })
     assert re.status_code == 400
 
@@ -441,7 +679,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "template": sample_template_name
                 },
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "high",
                     "wait": 300,
@@ -451,7 +689,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
             ],
             [
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "urgent",
                     "wait": 300,
@@ -479,7 +717,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     re = requests.post(base_url + 'plans', json=data)
     assert re.status_code == 201
     plan_id = re.content.strip()
-    new_data = requests.get(base_url+'plans/'+str(plan_id)).json()
+    new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
     assert new_data['description'] == data['description']
@@ -566,7 +804,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         'steps': [
             [
                 {
-                    'role': 'oncall',
+                    'role': 'oncall-primary',
                     'target': sample_user,
                     'priority': 'low',
                     'wait': 600,
@@ -579,7 +817,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
     }
     re = requests.post(base_url + 'plans', json=data)
     assert re.status_code == 400
-    assert re.json() == {'description': 'Role oncall is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
+    assert re.json() == {'description': 'Role oncall-primary is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
 
     data = {
         'creator': sample_user,
@@ -628,7 +866,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "template": sample_template_name
                 },
                 {
-                    "role": "oncall",
+                    "role": "oncall-primary",
                     "target": sample_team,
                     "priority": "high",
                     "wait": 300,
@@ -856,7 +1094,7 @@ def test_large_incident_context(sample_user, sample_application_name):
     ctx = {
         "nodes": [
             {
-                "device": "abc2-efg01.nw.example.com"*10000,
+                "device": "abc2-efg01.nw.example.com" * 10000,
                 "type": "BFD",
                 "message": "bar",
                 "component": "NA"
@@ -873,11 +1111,14 @@ def test_large_incident_context(sample_user, sample_application_name):
 
 
 def test_get_user_modes(sample_user, sample_application_name):
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert sorted(re.json()) == sorted(['high', 'urgent', 'medium', 'low'])
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert sorted(re.json()) == sorted(['high', 'urgent', 'medium', 'low'])
 
@@ -930,31 +1171,37 @@ def test_get_incident(iris_incidents):
 
 
 def test_post_user_modes(sample_user):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
     change_to = {
-      'high': 'default',
-      'urgent': 'default',
-      'medium': 'im',
-      'low': 'call'
+        'high': 'default',
+        'urgent': 'default',
+        'medium': 'im',
+        'low': 'call'
     }
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=change_to)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert re.json() == change_to
 
     # Now test update/delete functionality
     change_to['medium'] = 'call'
     change_to['low'] = 'default'
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=change_to)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/' + sample_user)
+    re = session.get(base_url + 'users/modes/' + sample_user)
     assert re.status_code == 200
     assert re.json() == change_to
 
 
 def test_post_target_application_modes(sample_user, sample_application_name):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
     mode_data = {
         'application': sample_application_name,
         'high': 'default',
@@ -964,11 +1211,11 @@ def test_post_target_application_modes(sample_user, sample_application_name):
     }
     modes = mode_data.copy()
     del modes['application']
-    re = requests.post(base_url + 'users/modes/' + sample_user,
-                       json=mode_data)
+    re = session.post(base_url + 'users/modes/' + sample_user,
+                      json=mode_data)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert re.json() == modes
 
@@ -978,26 +1225,91 @@ def test_post_target_application_modes(sample_user, sample_application_name):
     modes = mode_data.copy()
     del modes['application']
 
-    re = requests.post(base_url + 'users/modes/' + sample_user, json=mode_data)
+    re = session.post(base_url + 'users/modes/' + sample_user, json=mode_data)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
+    re = session.get(base_url + 'users/modes/%s?application=%s' % (sample_user, sample_application_name))
     assert re.status_code == 200
     assert re.json() == modes
 
 
+def test_post_target_multiple_application_modes(sample_user, sample_application_name, sample_application_name2):
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    # Set priorities for two apps in batch, as well as global defaults
+    modes_per_app = {
+        'per_app_modes': {
+            sample_application_name: {
+                'high': 'sms',
+                'urgent': 'call',
+                'medium': 'im',
+                'low': 'call'
+            },
+            sample_application_name2: {
+                'high': 'email',
+                'urgent': 'email',
+                'medium': 'im',
+                'low': 'call'
+            },
+        },
+        'high': 'call',
+        'urgent': 'call',
+        'medium': 'call',
+        'low': 'call'
+    }
+    re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app)
+    assert re.status_code == 200
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    result = re.json()
+    assert modes_per_app['per_app_modes'] == result['per_app_modes']
+    assert all(result['modes'][key] == modes_per_app[key] for key in ['high', 'urgent', 'medium', 'low'])
+
+    # Now try deleting both custom apps by setting all to default
+    modes_per_app_delete = {
+        'per_app_modes': {
+            sample_application_name: {
+                'high': 'default',
+                'urgent': 'default',
+                'medium': 'default',
+                'low': 'default'
+            },
+            sample_application_name2: {
+                'high': 'default',
+                'urgent': 'default',
+                'medium': 'default',
+                'low': 'default'
+            },
+        },
+        'high': 'default',
+        'urgent': 'default',
+        'medium': 'default',
+        'low': 'default'
+    }
+
+    re = session.post(base_url + 'users/modes/' + sample_user, json=modes_per_app_delete)
+    assert re.status_code == 200
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    result = re.json()
+    assert {} == result['per_app_modes'] == result['modes']
+
+
 def test_create_template(sample_user, sample_application_name):
     post_payload = {
-      'creator': sample_user,
-      'name': 'test_template',
-      'content': {
-        sample_application_name: {
-            'sms': {'subject': '', 'body': 'test_sms'},
-            'im': {'subject': '', 'body': 'test_im'},
-            'call': {'subject': '', 'body': 'test_call'},
-            'email': {'subject': 'email_subject', 'body': 'email_body'}
-          }
-      },
+        'creator': sample_user,
+        'name': 'test_template',
+        'content': {
+            sample_application_name: {
+                'sms': {'subject': '', 'body': 'test_sms'},
+                'im': {'subject': '', 'body': 'test_im'},
+                'call': {'subject': '', 'body': 'test_call'},
+                'email': {'subject': 'email_subject', 'body': 'email_body'}
+            }
+        },
     }
 
     re = requests.post(base_url + 'templates/', json=post_payload)
@@ -1079,88 +1391,88 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
     }
 
     invalid_steps = [
-      [
         [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'oncall-primary',
+                    'target': sample_team,
+                    'priority': 'high',
+                    'wait': 300,
+                    'repeat': 1,
+                    'template': sample_application_name
+                },
+            ]
         ],
         [
-          {
-            'role': 'oncall',
-            'target': sample_team,
-            'priority': 'high',
-            'wait': 300,
-            'repeat': 1,
-            'template': sample_application_name
-          },
-        ]
-      ],
-      [
-        [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          },
-        ]
-      ],
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                },
+            ]
+        ],
     ]
 
     valid_steps = [
-      [
         [
-          {
-            'role': 'user',
-            'target': sample_user,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': sample_user,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
         ],
-      ],
 
-      [
         [
-          {
-            'role': 'user',
-            'target': sample_user,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
+            [
+                {
+                    'role': 'user',
+                    'target': sample_user,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'manager',
+                    'target': sample_team,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
+            [
+                {
+                    'role': 'user',
+                    'target': 'noc',
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_application_name
+                }
+            ],
         ],
-        [
-          {
-            'role': 'manager',
-            'target': sample_team,
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
-        ],
-        [
-          {
-            'role': 'user',
-            'target': 'noc',
-            'priority': 'low',
-            'wait': 600,
-            'repeat': 0,
-            'template': sample_application_name
-          }
-        ],
-      ],
     ]
 
     for steps in invalid_steps:
@@ -1177,7 +1489,7 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
 
 
 def test_get_applications(sample_application_name):
-    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context', 'default_modes'])
+    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context', 'default_modes', 'supported_modes', 'owners'])
     # TODO: insert application data before get
     re = requests.get(base_url + 'applications/' + sample_application_name)
     assert re.status_code == 200
@@ -1195,10 +1507,13 @@ def test_get_applications(sample_application_name):
 
 
 def test_update_reprioritization_settings(sample_user):
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.status_code == 200
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     rules = re.json()
     assert len(rules) == 1
@@ -1208,69 +1523,72 @@ def test_update_reprioritization_settings(sample_user):
     assert rule['count'] == 1
     assert rule['duration'] == 120
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'fakesrc', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'fakesrc', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.json()['title'] == 'Invalid source mode.'
     assert re.status_code == 400
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'fakedst', 'count': '1', 'duration': '120'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'fakedst', 'count': '1', 'duration': '120'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid destination mode.'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'missingargs': 'foo'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'missingargs': 'foo'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Missing argument'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '1'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '1'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '3601'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '3601'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': 'fakeint'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': 'fakeint'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid duration'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': 'fakeint', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': 'fakeint', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '-10', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '-10', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '300', 'duration': '3600'})
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '300', 'duration': '3600'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid count'
 
 
 def test_delete_reprioritization_settings(sample_user):
-    re = requests.post(base_url + 'users/reprioritization/' + sample_user,
-                       json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    re = session.post(base_url + 'users/reprioritization/' + sample_user,
+                      json={'src_mode': 'call', 'dst_mode': 'sms', 'count': '1', 'duration': '120'})
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     assert 'call' in set(rule['src_mode'] for rule in re.json())
 
-    re = requests.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
+    re = session.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
     assert re.status_code == 200
 
-    re = requests.get(base_url + 'users/reprioritization/' + sample_user)
+    re = session.get(base_url + 'users/reprioritization/' + sample_user)
     assert re.status_code == 200
     assert 'call' not in set(rule['src_mode'] for rule in re.json())
 
-    re = requests.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
+    re = session.delete(base_url + 'users/reprioritization/%s/call' % sample_user)
     assert re.status_code == 404
 
 
@@ -1282,6 +1600,15 @@ def test_get_modes():
     assert 'email' in data
     assert 'call' in data
     assert 'im' in data
+    assert 'drop' not in data
+
+
+def test_get_target_roles():
+    re = requests.get(base_url + 'target_roles')
+    assert re.status_code == 200
+    data = re.json()
+    expected_set = set(['oncall-primary', 'manager', 'team', 'user', 'oncall-secondary'])
+    assert expected_set <= set([r['name'] for r in data])
 
 
 def test_get_priorities():
@@ -1295,14 +1622,17 @@ def test_get_priorities():
     assert 'urgent' in data
 
 
-def test_get_user(sample_user, sample_email):
-    re = requests.get(base_url + 'users/' + sample_user)
+def test_get_user(sample_user, sample_email, sample_admin_user):
+    re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
+    assert data.viewkeys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
-    assert 'teams' in data
-    assert 'modes' in data
+
+    re = requests.get(base_url + 'users/' + sample_admin_user, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    assert re.json()['admin'] is True
 
 
 def test_healthcheck():
@@ -1322,7 +1652,7 @@ def test_stats():
         assert isinstance(data[key], int)
 
 
-def test_post_invalid_notification(sample_user):
+def test_post_notification(sample_user, sample_application_name):
     re = requests.post(base_url + 'notifications', json={})
     assert re.status_code == 400
     assert 'Missing required atrributes' in re.text
@@ -1352,6 +1682,119 @@ def test_post_invalid_notification(sample_user):
     })
     assert re.status_code == 400
     assert 'Invalid mode' in re.text
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+
+def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):
+    if not all([sample_application_name, sample_admin_user, sample_plan_name]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    body = {
+        'hard_quota_threshold': 5,
+        'soft_quota_threshold': 3,
+        'hard_quota_duration': 60,
+        'soft_quota_duration': 60,
+        'plan_name': sample_plan_name,
+        'target_name': sample_admin_user,
+        'wait_time': 10
+    }
+
+    re = requests.post(base_url + 'applications/%s/quota' % sample_application_name, json=body, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 200
+
+    data = re.json()
+    assert all(data[key] == body[key] for key in body)
+
+    body['hard_quota_duration'] = 66
+    body['soft_quota_duration'] = 65
+
+    re = requests.post(base_url + 'applications/%s/quota' % sample_application_name, json=body, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 200
+
+    data = re.json()
+    assert all(data[key] == body[key] for key in body)
+
+    re = requests.delete(base_url + 'applications/%s/quota' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
+    assert re.status_code == 404
+
+
+def test_modify_application(sample_application_name, sample_admin_user, sample_user):
+    if not all([sample_application_name, sample_admin_user, sample_user]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    current_settings = re.json()
+
+    temp_test_variable = 'testvar2'
+
+    if temp_test_variable not in current_settings['variables']:
+        current_settings['variables'].append(temp_test_variable)
+
+    try:
+        json.loads(current_settings['sample_context'])
+    except ValueError:
+        current_settings['sample_context'] = '{}'
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert set(re.json()['variables']) == set(current_settings['variables'])
+
+    current_settings['variables'] = list(set(current_settings['variables']) - {temp_test_variable})
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert set(re.json()['variables']) == set(current_settings['variables'])
+
+    current_settings['sample_context'] = 'sdfdsf234234'
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'sample_context must be valid json'
+
+    # Take sample_user out of list of owners and set that
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    current_settings = re.json()
+    current_settings['owners'] = list(set(current_settings['owners']) - {sample_user})
+    assert sample_user not in current_settings['owners']
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify that user isn't there
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert sample_user not in re.json()['owners']
+
+    # add it back to the list of owners and ensure it's there
+    current_settings['owners'] = list(set(current_settings['owners']) | {sample_user})
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert sample_user in re.json()['owners']
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

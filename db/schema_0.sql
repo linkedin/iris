@@ -33,7 +33,8 @@ CREATE TABLE `application` (
   `summary_template` text,
   `sample_context` text,
   `auth_only` tinyint(1) DEFAULT '0',
-  `allow_other_app_incidents` tinyint(1) DEFAULT 0,
+  `allow_other_app_incidents` tinyint(1) unsigned NOT NULL DEFAULT '0',
+  `allow_authenticating_users` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -529,6 +530,7 @@ DROP TABLE IF EXISTS `user`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `user` (
   `target_id` bigint(20) NOT NULL,
+  `admin` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`target_id`),
   CONSTRAINT `user_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -565,6 +567,57 @@ CREATE TABLE `user_team` (
   CONSTRAINT `user_team_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`),
   CONSTRAINT `user_team_ibfk_2` FOREIGN KEY (`team_id`) REFERENCES `team` (`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `application_quotas`
+--
+
+DROP TABLE IF EXISTS `application_quota`;
+CREATE TABLE `application_quota` (
+  `application_id` int(11) NOT NULL,
+  `hard_quota_threshold` smallint(5) NOT NULL,
+  `soft_quota_threshold` smallint(5) NOT NULL,
+  `hard_quota_duration` smallint(5) NOT NULL,
+  `soft_quota_duration` smallint(5) NOT NULL,
+  `plan_name` varchar(255),
+  `target_id` bigint(20),
+  `wait_time` smallint(5) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`application_id`),
+  KEY `application_quota_plan_name_fk_idx` (`plan_name`),
+  KEY `application_quota_target_id_fk_idx` (`target_id`),
+  CONSTRAINT `application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `target_id_ibfk` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE SET NULL ON UPDATE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `application_mode`
+--
+
+DROP TABLE IF EXISTS `application_mode`;
+CREATE TABLE `application_mode` (
+  `application_id` int(11) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  PRIMARY KEY (`application_id`, `mode_id`),
+  CONSTRAINT `application_mode_application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_mode_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `application_owner`
+--
+
+DROP TABLE IF EXISTS `application_owner`;
+CREATE TABLE `application_owner` (
+  `application_id` int(11) NOT NULL,
+  `user_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`application_id`, `user_id`),
+  CONSTRAINT `application_owner_application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_owner_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

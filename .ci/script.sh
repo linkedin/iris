@@ -6,4 +6,4 @@ pushd ${TRAVIS_BUILD_DIR}
 make serve &
 iris-sender ./configs/config.dev.yaml &
 
-make test
+make check

@@ -21,12 +21,17 @@ from sqlalchemy.exc import IntegrityError
 from importlib import import_module
 import yaml
 
+from collections import defaultdict
 from streql import equals
 
 from . import db
 from . import utils
 from . import cache
 from iris_api.sender import auditlog
+from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
+                                   required_quota_keys, quota_int_keys)
+
+from gevent import spawn, sleep
 
 
 from .constants import (
@@ -390,6 +395,16 @@ JOIN `target` on `target`.`id` =  `target_application_mode`.`target_id`
 JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
 WHERE `target`.`name` = :username AND `application`.`name` = :app'''
 
+get_all_users_app_modes_query = '''SELECT
+    `application`.`name` as application,
+    `priority`.`name` as priority,
+    `mode`.`name` as mode from `priority`
+JOIN `target_application_mode` on `target_application_mode`.`priority_id` = `priority`.`id`
+JOIN `mode` on `mode`.`id` = `target_application_mode`.`mode_id`
+JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
+WHERE `target_application_mode`.`target_id` = %s
+'''
+
 get_default_application_modes_query = '''
 SELECT `priority`.`name` as priority, `mode`.`name` as mode
 FROM `default_application_mode`
@@ -397,6 +412,13 @@ JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
 JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
 JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
 WHERE `application`.`name` = %s'''
+
+get_supported_application_modes_query = '''
+SELECT `mode`.`name`
+FROM `mode`
+JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+WHERE `application_mode`.`application_id` = %s
+'''
 
 insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
@@ -441,6 +463,24 @@ get_allowed_roles_query = '''SELECT `target_role`.`id`
                              JOIN `target` ON `target`.`type_id` = `target_type`.`id`
                              WHERE `target`.`name` = :target'''
 
+check_username_admin_query = '''SELECT `user`.`admin`
+                                FROM `user`
+                                JOIN `target` ON `target`.`id` = `user`.`target_id`
+                                JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                WHERE `target`.`name` = %s
+                                AND `target_type`.`name` = "user"'''
+
+check_application_ownership_query = '''SELECT 1
+                                       FROM `application_owner`
+                                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                       WHERE `target`.`name` = :username
+                                       AND `application_owner`.`application_id` = :application_id'''
+
+get_application_owners_query = '''SELECT `target`.`name`
+                                  FROM `application_owner`
+                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                  WHERE `application_owner`.`application_id` = %s'''
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -451,10 +491,10 @@ def load_config_file(config_path):
     if 'init_config_hook' in config:
         try:
             module = config['init_config_hook']
-            logging.info('Bootstrapping config using %s' % module)
+            logger.info('Bootstrapping config using %s', module)
             getattr(import_module(module), module.split('.')[-1])(config)
         except ImportError:
-            logger.exception('Failed loading config hook %s' % module)
+            logger.exception('Failed loading config hook %s', module)
 
     return config
 
@@ -552,15 +592,18 @@ class AuthMiddleware(object):
             self.process_resource = self.debug_auth
 
     def debug_auth(self, req, resp, resource, params):
+        req.context['username'] = req.get_header('X-IRIS-USERNAME')
         try:
             app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
             if app not in cache.applications:
+                logger.warn('Tried authenticating with nonexistent app, %s', app)
                 raise HTTPUnauthorized('Authentication failure', 'Application not found', [])
             req.context['app'] = cache.applications[app]
         except TypeError:
             return
 
     def process_resource(self, req, resp, resource, params):  # pragma: no cover
+        req.context['username'] = None
         method = req.method
         if resource.allow_read_only and method == 'GET':
             return
@@ -571,31 +614,87 @@ class AuthMiddleware(object):
         body = req.context['body']
         auth = req.get_header('AUTHORIZATION')
         if auth and auth.startswith('hmac '):
+            username_header = req.get_header('X-IRIS-USERNAME')
             try:
-                app, client_digest = auth[5:].split(':', 1)
-                app = cache.applications[app]
+                app_name, client_digest = auth[5:].split(':', 1)
+                app = cache.applications.get(app_name)
+                if not app:
+                    logger.warn('Tried authenticating with nonexistent app, %s', app_name)
+                    raise HTTPUnauthorized('Authentication failure', '', [])
+                if username_header and not app['allow_authenticating_users']:
+                    logger.warn('Unprivileged application %s tried authenticating %s', app['name'], username_header)
+                    raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 api_key = str(app['key'])
                 window = int(time.time()) // 5
-                text = '%s %s %s %s' % (window, method, path, body)
+                # If username header is present, throw that into the hmac validation as well
+                if username_header:
+                    text = '%s %s %s %s %s' % (window, method, path, body, username_header)
+                else:
+                    text = '%s %s %s %s' % (window, method, path, body)
                 HMAC = hmac.new(api_key, text, hashlib.sha512)
                 digest = base64.urlsafe_b64encode(HMAC.digest())
                 if equals(client_digest, digest):
                     req.context['app'] = app
+                    if username_header:
+                        req.context['username'] = username_header
                     return
                 else:
-                    text = '%s %s %s %s' % (window - 1, method, path, body)
+                    if username_header:
+                        text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
+                    else:
+                        text = '%s %s %s %s' % (window - 1, method, path, body)
                     HMAC = hmac.new(api_key, text, hashlib.sha512)
                     digest = base64.urlsafe_b64encode(HMAC.digest())
                     if equals(client_digest, digest):
                         req.context['app'] = app
+                        if username_header:
+                            req.context['username'] = username_header
                     else:
+                        if username_header:
+                            logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                        else:
+                            logger.warn('HMAC doesn\'t validate for app %s', app['name'])
                         raise HTTPUnauthorized('Authentication failure', '', [])
 
             except (ValueError, KeyError):
+                logger.exception('Authentication failure')
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
         else:
+            logger.warn('Request has malformed/missing HMAC authorization header')
             raise HTTPUnauthorized('Authentication failure', '', [])
+
+
+class ACLMiddleware(object):
+    def __init__(self, debug):
+        pass
+
+    def process_resource(self, req, resp, resource, params):
+        req.context['is_admin'] = False
+
+        # Quickly check the username in the path matches who's logged in
+        enforce_user = getattr(resource, 'enforce_user', False)
+
+        if not req.context['username']:
+            if enforce_user:
+                raise HTTPUnauthorized('Username must be specified for this action', '', [])
+            return
+
+        # Check if user is an admin
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(check_username_admin_query, req.context['username'])
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+
+        if result:
+            req.context['is_admin'] = bool(result[0])
+
+        if enforce_user and not req.context['is_admin']:
+            path_username = params.get('username')
+            if not equals(path_username, req.context['username']):
+                raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
 
 
 class Plan(object):
@@ -970,10 +1069,15 @@ class Incident(object):
         resp.body = payload
 
     def on_post(self, req, resp, incident_id):
-        session = db.Session()
         incident_params = ujson.loads(req.context['body'])
+
         try:
             owner = incident_params['owner']
+        except KeyError:
+            raise HTTPBadRequest('"owner" field required', '')
+
+        session = db.Session()
+        try:
             is_active = utils.claim_incident(incident_id, owner, session)
             resp.status = HTTP_200
             resp.body = ujson.dumps({'incident_id': int(incident_id),
@@ -1032,8 +1136,8 @@ class Messages(object):
 
         connection = db.engine.raw_connection()
         escaped_params = {
-          'mode_change': connection.escape(auditlog.MODE_CHANGE),
-          'target_change': connection.escape(auditlog.TARGET_CHANGE)
+            'mode_change': connection.escape(auditlog.MODE_CHANGE),
+            'target_change': connection.escape(auditlog.TARGET_CHANGE)
         }
 
         query = message_query % ', '.join(message_columns[f] % escaped_params for f in fields)
@@ -1057,7 +1161,9 @@ class Notifications(object):
     required_attrs = frozenset(['target', 'role', 'subject'])
 
     def __init__(self, config):
-        self.sender_addr = (config['sender']['host'], config['sender']['port'])
+        master_sender = config['sender'].get('master_sender', config['sender'])
+        self.sender_addr = (master_sender['host'], master_sender['port'])
+        logger.info('Sender used for notifications: %s:%s', *self.sender_addr)
 
     def on_post(self, req, resp):
         message = ujson.loads(req.context['body'])
@@ -1260,6 +1366,7 @@ class Templates(object):
 
 class UserModes(object):
     allow_read_only = False
+    enforce_user = True
 
     def on_get(self, req, resp, username):
         session = db.Session()
@@ -1291,15 +1398,10 @@ class UserModes(object):
             modes = {name: 'default' for (name, ) in results}
 
             app = mode_params.pop('application', None)
+            multiple_apps = mode_params.pop('per_app_modes', None)
 
-            if app is None:
-                for p, m in mode_params.iteritems():
-                    if m != 'default':
-                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
-                    else:
-                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
-                result = session.execute(get_user_modes_query, {'username': username})
-            else:
+            # Configure priority -> mode for a single application
+            if app is not None:
                 for p, m in mode_params.iteritems():
                     if m != 'default':
                         session.execute(insert_target_application_modes_query,
@@ -1309,11 +1411,87 @@ class UserModes(object):
                                         {'name': username, 'priority': p, 'app': app})
                 result = session.execute(get_target_application_modes_query, {'username': username, 'app': app})
 
+            # Configure priority -> mode for multiple applications in one call (avoid MySQL deadlocks)
+            elif multiple_apps is not None:
+                for app, app_modes in multiple_apps.iteritems():
+                    for p, m in app_modes.iteritems():
+                        if m != 'default':
+                            session.execute(insert_target_application_modes_query,
+                                            {'name': username, 'priority': p, 'mode': m, 'app': app})
+                        else:
+                            session.execute(delete_target_application_modes_query,
+                                            {'name': username, 'priority': p, 'app': app})
+
+                # Also configure global defaults in the same call if they're specified
+                for p in mode_params.viewkeys() & modes.viewkeys():
+                    m = mode_params[p]
+                    if m != 'default':
+                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                    else:
+                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
+                result = session.execute(get_user_modes_query, {'username': username})
+
+            # Configure user's global priority -> mode which covers all applications that don't have defaults set
+            else:
+                for p, m in mode_params.iteritems():
+                    if m != 'default':
+                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                    else:
+                        session.execute(delete_user_modes_query, {'name': username, 'priority': p})
+                result = session.execute(get_user_modes_query, {'username': username})
+
             modes.update(list(result))
             session.commit()
             session.close()
             resp.status = HTTP_200
             resp.body = ujson.dumps(modes)
+        except Exception:
+            session.close()
+            logger.exception('ERROR')
+            raise
+
+
+class TargetRoles(object):
+    allow_read_only = False
+
+    def on_get(self, req, resp):
+        '''
+        Target role fetch endpoint.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /api/v0/target_roles
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           [
+               {
+                   "name": "user",
+                   "type": "user"
+               },
+               {
+                   "name": "oncall",
+                   "type": "team"
+               }
+           ]
+        '''
+        session = db.Session()
+        try:
+            sql = '''SELECT `target_role`.`name` AS `name`, `target_type`.`name` AS `type`
+                     FROM `target_role`
+                     JOIN `target_type` on `target_role`.`type_id` = `target_type`.`id`'''
+            results = session.execute(sql)
+            payload = ujson.dumps([{'name': row[0], 'type': row[1]} for row in results])
+            session.close()
+            resp.status = HTTP_200
+            resp.body = payload
         except Exception:
             session.close()
             logger.exception('ERROR')
@@ -1399,6 +1577,12 @@ class Application(object):
         cursor.execute(get_default_application_modes_query, app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
 
+        cursor.execute(get_supported_application_modes_query, app['id'])
+        app['supported_modes'] = [row['name'] for row in cursor]
+
+        cursor.execute(get_application_owners_query, app['id'])
+        app['owners'] = [row['name'] for row in cursor]
+
         cursor.close()
         connection.close()
 
@@ -1406,6 +1590,187 @@ class Application(object):
         payload = app
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
+
+    def on_put(self, req, resp, app_name):
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        session = db.Session()
+
+        app = session.execute(get_applications_query + ' AND `application`.`name` = :app_name', {'app_name': app_name}).fetchone()
+        if not app:
+            session.close()
+            raise HTTPBadRequest('Application %s not found' % app_name, '')
+
+        # Only admins and application owners can change app settings
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': app['id'], 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        try:
+            ujson.loads(data['sample_context'])
+        except (KeyError, ValueError):
+            raise HTTPBadRequest('sample_context must be valid json', '')
+
+        if 'context_template' not in data:
+            raise HTTPBadRequest('context_template must be specified', '')
+
+        if 'summary_template' not in data:
+            raise HTTPBadRequest('summary_template must be specified', '')
+
+        new_variables = data.get('variables')
+        if not isinstance(new_variables, list):
+            raise HTTPBadRequest('variables must be specified and be a list', '')
+        new_variables = set(new_variables)
+
+        existing_variables = {row[0] for row in session.execute('SELECT `name` FROM `template_variable` WHERE `application_id` = :application_id',
+                                                                {'application_id': app['id']})}
+
+        kill_variables = existing_variables - new_variables
+
+        for variable in new_variables - existing_variables:
+            session.execute('INSERT INTO `template_variable` (`application_id`, `name`) VALUES (:application_id, :variable)',
+                            {'application_id': app['id'], 'variable': variable})
+
+        if kill_variables:
+            session.execute('DELETE FROM `template_variable` WHERE `application_id` = :application_id AND `name` IN :variables',
+                            {'application_id': app['id'], 'variables': tuple(kill_variables)})
+
+        # Only admins can (optionally) change owners
+        new_owners = data.get('owners')
+        if req.context['is_admin'] and new_owners is not None:
+            if not isinstance(new_owners, list):
+                raise HTTPBadRequest('To change owners, you must pass a list of strings', '')
+
+            new_owners = set(new_owners)
+            existing_owners = {row[0] for row in session.execute('''SELECT `target`.`name`
+                                                                    FROM `target`
+                                                                    JOIN `application_owner` ON `target`.`id` = `application_owner`.`user_id`
+                                                                    WHERE `application_owner`.`application_id` = :application_id''', {'application_id': app['id']})}
+            kill_owners = existing_owners - new_owners
+
+            for owner in new_owners - existing_owners:
+                try:
+                    session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
+                                       VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
+                                                                 JOIN `target` on `target`.`id` = `user`.`target_id`
+                                                                 WHERE `target`.`name` = :owner))''', {'application_id': app['id'], 'owner': owner})
+                except IntegrityError:
+                    logger.exception('Integrity error whilst adding user %s as an owner to app %s', owner, app_name)
+
+            if kill_owners:
+                session.execute('''DELETE FROM `application_owner`
+                                   WHERE `application_id` = :application_id
+                                   AND `user_id` IN (SELECT `user`.`target_id` FROM `user`
+                                                     JOIN `target` on `target`.`id` = `user`.`target_id`
+                                                     WHERE `target`.`name` IN :owners)''', {'application_id': app['id'], 'owners': tuple(kill_owners)})
+
+        data['application_id'] = app['id']
+
+        session.execute('''UPDATE `application`
+                          SET `context_template` = :context_template, `summary_template` = :summary_template,
+                              `sample_context` = :sample_context
+                          WHERE `id` = :application_id LIMIT 1''', data)
+
+        session.commit()
+        session.close()
+
+        resp.body = '{}'
+
+
+class ApplicationQuota(object):
+    allow_read_only = True
+
+    def on_get(self, req, resp, app_name):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        quota_query = get_application_quotas_query + ' WHERE `application`.`name` = %s'
+        cursor.execute(quota_query, app_name)
+        quota = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        if not quota:
+            resp.body = '{}'
+            raise HTTPNotFound()
+        resp.body = ujson.dumps(quota)
+
+    def on_post(self, req, resp, app_name):
+
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        if data.viewkeys() != required_quota_keys:
+            raise HTTPBadRequest('Missing required keys in post body', '')
+
+        try:
+            for key in quota_int_keys:
+                if int(data[key]) < 1:
+                    raise HTTPBadRequest('All int keys must be over 0', '')
+        except ValueError:
+            raise HTTPBadRequest('Some int keys are not integers', '')
+
+        if data['hard_quota_threshold'] <= data['soft_quota_threshold']:
+            raise HTTPBadRequest('Hard threshold must be bigger than soft threshold', '')
+
+        session = db.Session()
+
+        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+
+        if not application_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that application', '')
+
+        # Only admins and application owners can change quota settings
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        if not session.execute('SELECT 1 FROM `plan_active` WHERE `name` = :plan_name', data).scalar():
+            session.close()
+            raise HTTPBadRequest('No active ID found for that plan', '')
+
+        target_id = session.execute('SELECT `id` FROM `target` WHERE `name` = :target_name', data).scalar()
+
+        if not target_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that target', '')
+
+        data['application_id'] = application_id
+        data['target_id'] = target_id
+
+        session.execute(insert_application_quota_query, data)
+        session.commit()
+        session.close()
+
+        resp.status = HTTP_201
+        resp.body = '{}'
+
+    def on_delete(self, req, resp, app_name):
+        session = db.Session()
+
+        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+
+        if not application_id:
+            session.close()
+            raise HTTPBadRequest('No ID found for that application', '')
+
+        if not req.context['is_admin']:
+            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+
+        session.execute('DELETE FROM `application_quota` WHERE `application_id` = :application_id', {'application_id': application_id})
+        session.commit()
+        session.close()
+
+        resp.status = HTTP_204
+        resp.body = '{}'
 
 
 class Applications(object):
@@ -1424,8 +1789,16 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
+
             cursor.execute(get_default_application_modes_query, app['name'])
             app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+
+            cursor.execute(get_supported_application_modes_query, app['id'])
+            app['supported_modes'] = [row['name'] for row in cursor]
+
+            cursor.execute(get_application_owners_query, app['id'])
+            app['owners'] = [row['name'] for row in cursor]
+
             del app['id']
         payload = apps
         cursor.close()
@@ -1439,13 +1812,14 @@ class Modes(object):
 
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-        mode_query = 'SELECT `id`,`name` FROM `mode`'''
+        cursor = connection.cursor()
+        # Deliberately omit "drop" as it's a special case only supported in very limited circumstances and shouldn't
+        # be thrown all over the UI
+        mode_query = 'SELECT `name` FROM `mode` WHERE `name` != "drop"'
         cursor.execute(mode_query)
-        results = cursor.fetchall()
+        payload = [r[0] for r in cursor]
         cursor.close()
         connection.close()
-        payload = [r['name'] for r in results]
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
 
@@ -1470,20 +1844,24 @@ class Priorities(object):
 
 class User(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_get(self, req, resp, user_id):
+    def on_get(self, req, resp, username):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         # Get user id/name
-        user_query = ''' SELECT `id`, `name` FROM `target`'''
-        if user_id.isdigit():
-            user_query += ' WHERE `id` = %s'
+        user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
+                        FROM `target`
+                        JOIN `user` on `user`.`target_id` = `target`.`id`'''
+        if username.isdigit():
+            user_query += ' WHERE `target`.`id` = %s'
         else:
-            user_query += ' WHERE `name` = %s'
-        cursor.execute(user_query, user_id)
+            user_query += ' WHERE `target`.`name` = %s'
+        cursor.execute(user_query, username)
         if cursor.rowcount != 1:
             raise HTTPNotFound()
         user_data = cursor.fetchone()
+        user_data['admin'] = bool(user_data['admin'])
         user_id = user_data.pop('id')
 
         # Get user contact modes
@@ -1496,6 +1874,12 @@ class User(object):
         user_data['modes'] = {}
         for row in cursor:
             user_data['modes'][row['priority']] = row['mode']
+
+        # Get user contact modes per app
+        user_data['per_app_modes'] = defaultdict(dict)
+        cursor.execute(get_all_users_app_modes_query, user_id)
+        for row in cursor:
+            user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
 
         # Get user teams
         teams_query = '''SELECT `target`.`name` AS `team`
@@ -1604,12 +1988,13 @@ class ResponseMixin(object):
 
         session = db.Session()
         is_batch = False
-        if isinstance(msg_id, int) or msg_id.isdigit():
+        is_claim_all = False
+        if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
             # FIXME: return error if message not found for id
             app = get_app_from_msg_id(session, msg_id)
             validate_app(app)
             self.create_response(msg_id, source, content)
-        elif uuid4hex.match(msg_id):
+        elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
             # msg id is not pure digit, might be a batch id
             sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
             results = session.execute(sql, {'batch_id': msg_id})
@@ -1624,16 +2009,44 @@ class ResponseMixin(object):
             for mid in mid_lst:
                 self.create_response(mid, source, content)
             is_batch = True
+        elif isinstance(msg_id, list) and content == 'claim_all':
+            # Claim all functionality.
+            is_claim_all = True
+            if not msg_id:
+                raise HTTPBadRequest('Invalid message id', 'No incidents to claim')
+            apps_to_message = defaultdict(list)
+            for mid in msg_id:
+                msg_app = get_app_from_msg_id(session, mid)
+                if msg_app not in apps_to_message:
+                    validate_app(msg_app)
+                self.create_response(mid, source, content)
+                apps_to_message[msg_app].append(mid)
         else:
-            raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id.encode('utf-8'))
-
-        try:
-            resp = find_plugin(app).handle_response(
-                mode, msg_id, source, content, batch=is_batch)
-        except Exception as e:
-            raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+            raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id)
         session.close()
-        return app, resp
+
+        # Handle claim all differently as we might have messages from different applications
+        if is_claim_all:
+            try:
+                plugin_output = {app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
+                                 for app, msg_ids in apps_to_message.iteritems()}
+            except Exception as e:
+                logger.exception('Failed to handle %s response for mode %s for apps %s during claim all', content, mode, apps_to_message.keys())
+                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+
+            if len(plugin_output) > 1:
+                return plugin_output, '\n'.join('%s: %s' % (app, output) for app, output in plugin_output.iteritems())
+            else:
+                return plugin_output, '\n'.join(plugin_output.itervalues())
+
+        else:
+            try:
+                resp = find_plugin(app).handle_response(
+                    mode, msg_id, source, content, batch=is_batch)
+            except Exception as e:
+                logger.exception('Failed to handle %s response for mode %s for app %s', content, mode, app)
+                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+            return app, resp
 
 
 class ResponseGmail(ResponseMixin):
@@ -1669,10 +2082,20 @@ class ResponseGmail(ResponseMixin):
             logger.exception('Failed to handle email response: %s' % first_line)
             raise
         else:
-            success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
-            if not success:
-                logger.error('Failed to send user response email: %s' % re)
-                raise HTTPBadRequest('Failed to send user response email', re)
+            # When processing a claim all scenario, the first item returned by handle_user_response
+            # will be a dict mapping the app to its plugin output.
+            if isinstance(app, dict):
+                for app_name, app_response in app.iteritems():
+                    app_response = '%s: %s' % (app_name, app_response)
+                    success, re = self.create_email_message(app_name, source, 'Re: %s' % subject, app_response)
+                    if not success:
+                        logger.error('Failed to send user response email: %s' % re)
+                        raise HTTPBadRequest('Failed to send user response email', re)
+            else:
+                success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
+                if not success:
+                    logger.error('Failed to send user response email: %s' % re)
+                    raise HTTPBadRequest('Failed to send user response email', re)
             resp.status = HTTP_204
 
 
@@ -1681,11 +2104,14 @@ class ResponseGmailOneClick(ResponseMixin):
         gmail_params = ujson.loads(req.context['body'])
 
         try:
-            msg_id = gmail_params['msg_id']
+            msg_id = int(gmail_params['msg_id'])
             email_address = gmail_params['email_address']
             cmd = gmail_params['cmd']
-        except KeyError:
-            raise HTTPBadRequest('Post body missing required key', '')
+        except (ValueError, KeyError):
+            raise HTTPBadRequest('Post body missing required key or key of wrong type', '')
+
+        if cmd != 'claim':
+            raise HTTPBadRequest('GmailOneClick only supports claiming individual messages', '')
 
         try:
             app, response = self.handle_user_response('email', msg_id, email_address, cmd)
@@ -1770,18 +2196,19 @@ class ResponseSlack(ResponseMixin):
 
 class Reprioritization(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_get(self, req, resp, target_name):
+    def on_get(self, req, resp, username):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(reprioritization_setting_query, target_name)
+        cursor.execute(reprioritization_setting_query, username)
         settings = cursor.fetchall()
         cursor.close()
         connection.close()
         resp.status = HTTP_200
         resp.body = ujson.dumps(settings)
 
-    def on_post(self, req, resp, target_name):
+    def on_post(self, req, resp, username):
         params = ujson.loads(req.context['body'])
         required_args = ['duration', 'count', 'src_mode', 'dst_mode']
         # Check for required arguments
@@ -1827,7 +2254,7 @@ class Reprioritization(object):
 
         session = db.Session()
         session.execute(update_reprioritization_settings_query, {
-            'target': target_name,
+            'target': username,
             'src_mode_id': src_mode_id,
             'dst_mode_id': dst_mode_id,
             'count': count,
@@ -1841,12 +2268,13 @@ class Reprioritization(object):
 
 class ReprioritizationMode(object):
     allow_read_only = False
+    enforce_user = True
 
-    def on_delete(self, req, resp, target_name, src_mode_name):
+    def on_delete(self, req, resp, username, src_mode_name):
         session = db.Session()
         affected_rows = session.execute(delete_reprioritization_settings_query, {
-          'target_name': target_name,
-          'mode_name': src_mode_name,
+            'target_name': username,
+            'mode_name': src_mode_name,
         }).rowcount
         session.commit()
         session.close()
@@ -1880,12 +2308,12 @@ class Stats(object):
 
     def on_get(self, req, resp):
         queries = {
-          'total_plans': 'SELECT COUNT(*) FROM `plan`',
-          'total_incidents': 'SELECT COUNT(*) FROM `incident`',
-          'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
-          'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
-          'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
-          'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
+            'total_plans': 'SELECT COUNT(*) FROM `plan`',
+            'total_incidents': 'SELECT COUNT(*) FROM `incident`',
+            'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
+            'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
+            'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
+            'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
         }
 
         stats = {}
@@ -1906,10 +2334,18 @@ def get_api_app():
     return get_api(config)
 
 
+def update_cache_worker():
+    while True:
+        logger.info('Reinitializing cache')
+        cache.init()
+        sleep(60)
+
+
 def get_api(config):
-    logging.basicConfig()
+    logging.basicConfig(format='[%(asctime)s] [%(process)d] [%(levelname)s] %(name)s %(message)s',
+                        level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S %z')
     db.init(config)
-    cache.init()
+    spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
     healthcheck_path = config['healthcheck_path']
@@ -1920,7 +2356,8 @@ def get_api(config):
     req = ReqBodyMiddleware()
     header = HeaderMiddleware()
     auth = AuthMiddleware(debug=debug)
-    middleware = [req, auth, header]
+    acl = ACLMiddleware(debug=debug)
+    middleware = [req, auth, acl, header]
 
     app = API(middleware=middleware)
 
@@ -1939,16 +2376,19 @@ def get_api(config):
     app.add_route('/v0/targets/{target_type}', Target())
     app.add_route('/v0/targets', Targets())
 
+    app.add_route('/v0/target_roles', TargetRoles())
+
     app.add_route('/v0/templates/{template_id}', Template())
     app.add_route('/v0/templates', Templates())
 
-    app.add_route('/v0/users/{user_id}', User())
+    app.add_route('/v0/users/{username}', User())
     app.add_route('/v0/users/modes/{username}', UserModes())
-    app.add_route('/v0/users/reprioritization/{target_name}', Reprioritization())
-    app.add_route('/v0/users/reprioritization/{target_name}/{src_mode_name}', ReprioritizationMode())
+    app.add_route('/v0/users/reprioritization/{username}', Reprioritization())
+    app.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
 
     app.add_route('/v0/modes', Modes())
 
+    app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 

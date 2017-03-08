@@ -24,12 +24,12 @@ def get_free_port():
 listen_port = get_free_port()
 
 config = {
-  'metrics': 'prometheus',
-  'prometheus': {
-    'test': {
-      'server_port': listen_port
+    'metrics': 'prometheus',
+    'prometheus': {
+        'test': {
+            'server_port': listen_port
+        }
     }
-  }
 }
 
 
@@ -40,7 +40,7 @@ def metrics():
 
 def test_guage(metrics):
     metrics.send_metrics({
-      'value1': 100
+        'value1': 100
     })
     data = requests.get('http://localhost:%d/' % listen_port).text
     m = re.search('^test_value1 (\S+)$', data, re.MULTILINE)

@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 from gevent import monkey, sleep, spawn
-monkey.patch_all()
+monkey.patch_all()  # NOQA
 
 import sys
 import logging

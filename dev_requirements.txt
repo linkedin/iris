@@ -6,3 +6,4 @@ pytest-mock==1.5.0
 pytest-cov
 # for py26 mock dep
 ordereddict
+flake8

@@ -12,15 +12,10 @@ from gevent.pool import Pool
 from .message import update_message_mode
 from .. import db
 from ..role_lookup import get_role_lookup
-from ..metrics import stats
 from . import auditlog
 
 import logging
 logger = logging.getLogger(__name__)
-
-# FIXME: remove this when we move to py27
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 logging.getLogger('requests').setLevel(logging.WARNING)
 
 
@@ -312,32 +307,36 @@ class TargetReprioritization(object):
             sleep(60)
 
     def __call__(self, message, seen=None):
+        original_mode = message.get('mode')
+
+        if not original_mode:
+            return
+
         if seen is None:
-            seen = set([message['mode']])
+            seen = set([original_mode])
         else:
-            if message['mode'] in seen:
+            if original_mode in seen:
                 logger.info('target reprioritization loop detected for %s, %s: %r',
-                            message['target'], message['mode'], seen)
+                            message['target'], original_mode, seen)
                 return
             else:
-                seen.add(message['mode'])
+                seen.add(original_mode)
         try:
-            dst_mode, destination, count, buckets = self.rates[(message['target'], message['mode'])]
+            dst_mode, destination, count, buckets = self.rates[(message['target'], original_mode)]
             logger.debug('reprioritization (%s, %s): (%s, %s, %d, %r)',
-                         message['target'], message['mode'], dst_mode, destination, count, buckets)
+                         message['target'], original_mode, dst_mode, destination, count, buckets)
             # increment the bucket for this minute
             buckets[-1] += 1
             if sum(buckets) > count:
                 logger.debug('target reprioritization rule triggered (%s, %s): (%s, %s, %d, %r)',
-                             message['target'], message['mode'], dst_mode, destination, count, buckets)
+                             message['target'], original_mode, dst_mode, destination, count, buckets)
                 # sum of all counts for duration exceeds count
                 # reprioritize to destination mode
-                old_mode = message['mode']
                 message['mode'] = dst_mode
                 message['destination'] = destination
                 update_message_mode(message)
                 self.__call__(message, seen)
-                auditlog.message_change(message['message_id'], auditlog.MODE_CHANGE, old_mode, dst_mode, 'Changing mode due to reprioritization')
+                auditlog.message_change(message['message_id'], auditlog.MODE_CHANGE, original_mode, dst_mode, 'Changing mode due to reprioritization')
             else:
                 return
         except KeyError:
@@ -358,29 +357,14 @@ class RoleTargets():
         try:
             return self.data[(role, target)]
         except KeyError:
-            names = []
             if role == 'user':
                 names = [target]
-            elif role == 'team':
-                names = self.role_lookup.team_members(target)
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
-            elif role == 'manager':
-                names = self.role_lookup.team_manager(target)
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
-            elif role.startswith('oncall'):
-                names = self.role_lookup.team_oncall(target, 'primary' if role == 'oncall' else role[7:])
-                if names is None:
-                    stats['oncall_error'] += 1
-                    return None
             else:
-                names = []
+                names = self.role_lookup.get(role, target)
+                if names is None:
+                    return None
 
             names = self.prune_inactive_targets(names)
-
             self.data[(role, target)] = names
             return names
 
@@ -417,7 +401,7 @@ def init(config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
     global roles, incidents, templates, plans, iris_client
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'))
+    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0)
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,

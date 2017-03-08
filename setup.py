@@ -19,7 +19,7 @@ setuptools.setup(
         'oauth2client==1.4.12',
         'slackclient==0.16',
         'PyYAML==3.11',
-        'gevent==1.0.2',
+        'gevent==1.1.2',
         'falcon==1.1.0',
         'ujson==1.35',
         'requests==2.9.1',

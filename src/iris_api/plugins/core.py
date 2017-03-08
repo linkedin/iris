@@ -53,7 +53,7 @@ class IrisPlugin(object):
                         self.name, mode, msg_id, content)
             cmd, args = parse_response(content)
         if batch:
-            cmd = 'batch_'+cmd
+            cmd = 'batch_' + cmd
         return self.process_command(msg_id, source, mode, cmd, args)
 
     def process_iris_claim(self, msg_id, source, mode, cmd, args=None):
@@ -79,11 +79,36 @@ class IrisPlugin(object):
         utils.claim_incidents_from_batch_id(msg_id, owner)
         return 'All iris incidents claimed for batch id %s.' % msg_id
 
+    def process_claim_all(self, msg_ids, source, mode):
+        owner = utils.lookup_username_from_contact(mode, source)
+        if not owner:
+            return 'Failed to identify owner for these incidents.'
+        if not msg_ids:
+            return 'No messages to claim.'
+        incident_ids = utils.get_incident_ids_from_message_ids(msg_ids)
+        if not incident_ids:
+            return 'No messages to claim.'
+
+        claimed, not_claimed = utils.claim_bulk_incidents(incident_ids, owner)
+
+        msg = []
+        if claimed:
+            msg.append('Iris Incidents claimed: %s' % ', '.join(map(str, claimed)))
+        if not_claimed:
+            msg.append('Iris Incidents failed to claim: %s' % ', '.join(map(str, not_claimed)))
+
+        if msg:
+            return '\n'.join(msg)
+        else:
+            return 'Unknown claim all result'
+
     def process_command(self, msg_id, source, mode, cmd, args=None):
         if cmd == 'claim':
             return self.process_iris_claim(msg_id, source, mode, cmd, args)
         elif cmd == 'batch_claim':
             return self.process_iris_batch_claim(msg_id, source, mode, cmd, args)
+        elif cmd == 'claim_all':
+            return self.process_claim_all(msg_id, source, mode)
         else:
             return 'Unknown command.'
 

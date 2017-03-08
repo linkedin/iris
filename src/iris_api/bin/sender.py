@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 from gevent import monkey, sleep, spawn, queue
-monkey.patch_all()
+monkey.patch_all()  # NOQA
 
 import logging
 import sys
@@ -22,6 +22,10 @@ from iris_api.sender import rpc, cache
 from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
+from iris_api.sender.quota import ApplicationQuota
+from pymysql import DataError
+# queue for sending messages
+from iris_api.sender.shared import send_queue
 
 # sql
 
@@ -197,8 +201,8 @@ sent = {}
 # this sets the ground work for not having to poll the DB for messages
 message_queue = queue.Queue()
 
-# queue for sending messages
-from iris_api.sender.shared import send_queue
+# Quota object used for rate limiting
+quota = None
 
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
@@ -209,7 +213,8 @@ default_sender_metrics = {
     'oncall_error': 0, 'role_target_lookup_error': 0, 'target_not_found': 0, 'message_send_cnt': 0,
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
-    'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0
+    'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
+    'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0
 }
 
 # TODO: make this configurable
@@ -592,7 +597,7 @@ def set_target_fallback_mode(message):
         return True
     # target doesn't have email either - bail
     except ValueError:
-        logger.error('target does not have mode(%s) %r', target_fallback_mode, message)
+        logger.exception('target does not have mode(%s) %r', target_fallback_mode, message)
         message['destination'] = message['mode'] = message['mode_id'] = None
         return False
 
@@ -600,48 +605,65 @@ def set_target_fallback_mode(message):
 def set_target_contact_by_priority(message):
     session = db.Session()
     result = session.execute('''
-        SELECT `destination`, `mode`.`name`, `mode`.`id`
-        FROM `target` JOIN `target_contact` ON `target_contact`.`target_id` = `target`.`id`
-        JOIN `mode` ON `mode`.`id` = `target_contact`.`mode_id`
-        WHERE `target`.`name` = :target AND `target_contact`.`mode_id` = IFNULL(
-            -- 1. lookup per application user setting
-            (
-                SELECT `target_application_mode`.`mode_id`
-                FROM `target_application_mode`
-                JOIN `application` ON `target_application_mode`.`application_id` = `application`.`id`
-                WHERE `target_application_mode`.`target_id` = `target`.`id` AND
-                        `application`.`name` = :application AND
-                        `target_application_mode`.`priority_id` = :priority_id
-            ), IFNULL(
-              -- 2. Lookup default setting for this app
-              (
-                  SELECT `default_application_mode`.`mode_id`
-                  FROM `default_application_mode`
-                  JOIN `application` ON `default_application_mode`.`application_id` = `application`.`id`
-                  WHERE `default_application_mode`.`priority_id` = :priority_id AND
-                        `application`.`name` = :application
-              ), IFNULL(
-                -- 3. lookup default user setting
-                    (
-                        SELECT `target_mode`.`mode_id`
-                        FROM `target_mode`
-                        WHERE `target_mode`.`target_id` = `target`.`id` AND
-                                `target_mode`.`priority_id` = :priority_id
-                    ), (
-                -- 4. lookup default iris setting
-                        SELECT `mode_id`
-                        FROM `priority`
-                        WHERE `id` = :priority_id
-                    )
+              SELECT `target_contact`.`destination` AS dest, `mode`.`name` AS mode_name, `mode`.`id` AS mode_id
+              FROM `mode`
+              JOIN `target` ON `target`.`name` = :target
+              JOIN `application` ON `application`.`name` = :application
+
+              -- left join because the "drop" mode isn't going to have a target_contact entry
+              LEFT JOIN `target_contact` ON `target_contact`.`mode_id` = `mode`.`id` AND `target_contact`.`target_id` = `target`.`id`
+
+              WHERE mode.id = IFNULL((
+                        SELECT `target_application_mode`.`mode_id`
+                        FROM `target_application_mode`
+                        WHERE `target_application_mode`.`target_id` = target.id AND
+                                `target_application_mode`.`application_id` = `application`.`id` AND
+                                `target_application_mode`.`priority_id` = :priority_id
+                    ), IFNULL(
+                      -- 2. Lookup default setting for this app
+                      (
+                          SELECT `default_application_mode`.`mode_id`
+                          FROM `default_application_mode`
+                          WHERE    `default_application_mode`.`priority_id` = :priority_id AND
+                                `default_application_mode`.`application_id` = `application`.`id`
+                      ), IFNULL(
+                        -- 3. lookup default user setting
+                            (
+                                SELECT `target_mode`.`mode_id`
+                                FROM `target_mode`
+                                WHERE `target_mode`.`target_id` = target.id AND
+                                        `target_mode`.`priority_id` = :priority_id
+                            ), (
+                        -- 4. lookup default iris setting
+                                SELECT `mode_id`
+                                FROM `priority`
+                                WHERE `id` = :priority_id
+                            )
+                        )
+                   )
                 )
-           )
-        )''', message)
-    [(destination, mode, mode_id)] = result
-    session.close()
+                -- Make sure this mode is allowed for this application. Eg important apps can't drop.
+                AND EXISTS (SELECT 1 FROM `application_mode`
+                            WHERE `application_mode`.`mode_id` = `mode`.`id`
+                            AND   `application_mode`.`application_id` = `application`.`id`)
+        ''', message)
+
+    try:
+        [(destination, mode, mode_id)] = result
+    except ValueError:
+        raise
+    finally:
+        session.close()
+
+    if not destination and mode != 'drop':
+        logger.error('Did not find destination for message %s and mode is not drop', message)
+        return False
 
     message['destination'] = destination
     message['mode'] = mode
     message['mode_id'] = mode_id
+
+    return True
 
 
 def set_target_contact(message):
@@ -659,13 +681,15 @@ def set_target_contact(message):
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
+            result = True
         else:
             # message triggered by incident will only have priority
-            set_target_contact_by_priority(message)
-        cache.target_reprioritization(message)
-        return True
+            result = set_target_contact_by_priority(message)
+        if result:
+            cache.target_reprioritization(message)
+        return result
     except ValueError:
-        logger.error('target does not have mode %r', message)
+        logger.exception('target does not have mode %r', message)
         return set_target_fallback_mode(message)
 
 
@@ -675,11 +699,11 @@ def render(message):
             # email response from iris does not use template this means the
             # message content is already in DB
             connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
-            cursor.execute('SELECT `subject`, `body` FROM `message` WHERE `id` = %s',
+            cursor = connection.cursor()
+            cursor.execute('SELECT `body`, `subject` FROM `message` WHERE `id` = %s',
                            message['message_id'])
             msg_content = cursor.fetchone()
-            message['body'], message['subject'] = msg_content['body'], msg_content['subject']
+            message['body'], message['subject'] = msg_content[0], msg_content[1]
             cursor.close()
             connection.close()
         else:
@@ -699,7 +723,8 @@ def render(message):
             try:
                 application_template = template[message['application']]
                 try:
-                    mode_template = application_template[message['mode']]
+                    # When we want to "render" a dropped message, treat it as if it's an email
+                    mode_template = application_template['email' if message['mode'] == 'drop' else message['mode']]
                     try:
                         message['subject'] = mode_template['subject'].render(**message['context'])
                     except Exception as e:
@@ -763,10 +788,16 @@ def mark_message_as_sent(message):
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
     if len(message['subject']) > 255:
         message['subject'] = message['subject'][:255]
-    cursor.execute(sql, params)
-    connection.commit()
-    cursor.close()
-    connection.close()
+    if len(message['body']) > 1048576:
+        message['body'] = message['body'][:1048576]
+    try:
+        cursor.execute(sql, params)
+        connection.commit()
+    except DataError:
+        logger.exception('Failed updating message status (message ID %s)', message.get('message_id', '?'))
+    finally:
+        cursor.close()
+        connection.close()
 
 
 def mark_message_has_no_contact(message):
@@ -808,6 +839,7 @@ def distributed_send_message(message):
 
 def fetch_and_send_message():
     message = send_queue.get()
+
     has_contact = set_target_contact(message)
     if not has_contact:
         mark_message_has_no_contact(message)
@@ -815,6 +847,35 @@ def fetch_and_send_message():
 
     if 'message_id' not in message:
         message['message_id'] = None
+
+    # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
+    if not quota.allow_send(message):
+        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
+        if message['message_id']:
+            drop_mode_id = api_cache.modes.get('drop')
+            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+                  'Dropping due to hard quota violation.')
+
+            # If we know the ID for the mode drop, reflect that for the message
+            if drop_mode_id:
+                message['mode'] = 'drop'
+                message['mode_id'] = drop_mode_id
+            else:
+                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s', message, 'drop')
+
+            # Render, so we're able to populate the message table with the proper subject/etc as well as
+            # information that it was dropped.
+            render(message)
+            mark_message_as_sent(message)
+        return
+
+    # If we're set to drop this message, no-op this before message gets sent to a vendor
+    if message.get('mode') == 'drop':
+        logging.info('Deliberately dropping message %s', message)
+        if message['message_id']:
+            render(message)
+            mark_message_as_sent(message)
+        return
 
     render(message)
     success = None
@@ -869,7 +930,7 @@ def gwatch_renewer():
             logger.info('[*] gmail watcher loop finished')
 
         # only renew every 8 hours
-        sleep(60*60*8)
+        sleep(60 * 60 * 8)
 
 
 def prune_old_audit_logs_worker():
@@ -881,7 +942,7 @@ def prune_old_audit_logs_worker():
         cursor.close()
         connection.close()
         logger.info('Ran task to prune old audit logs. Waiting 4 hours until next run.')
-        sleep(60*60*4)
+        sleep(60 * 60 * 4)
 
 
 def mock_gwatch_renewer():
@@ -895,6 +956,9 @@ def init_sender(config):
     db.init(config)
     cache.init(config)
     init_metrics(config, 'iris-sender', default_sender_metrics)
+    api_cache.cache_priorities()
+    api_cache.cache_applications()
+    api_cache.cache_modes()
 
     global should_mock_gwatch_renewer, send_message
     if config['sender'].get('debug'):
@@ -908,9 +972,12 @@ def init_sender(config):
 
     if should_skip_send:
         config['vendors'] = [{
-          'type': 'iris_dummy',
-          'name': 'iris dummy vendor'
+            'type': 'iris_dummy',
+            'name': 'iris dummy vendor'
         }]
+
+    global quota
+    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
 
 
 def main():
@@ -927,7 +994,6 @@ def main():
     init_sender(config)
     init_plugins(config.get('plugins', {}))
     init_vendors(config.get('vendors', []), config.get('applications', []))
-    api_cache.cache_priorities()
 
     send_task = spawn(send)
     worker_tasks = [spawn(worker) for x in xrange(100)]

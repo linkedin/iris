@@ -3,8 +3,8 @@
 
 import requests
 from requests.exceptions import RequestException
-from time import time
 import logging
+from iris_api.metrics import stats
 
 logger = logging.getLogger(__name__)
 
@@ -36,35 +36,29 @@ class oncall(object):
             logger.exception('Failed decoding json from oncall-api. URL: "%s" Code: %s', url, r.status_code)
             return None
 
-    def team_members(self, team_name):
-        result = self.call_oncall('/teams/%s/users' % team_name)
-        if not isinstance(result, list):
-            return None
-        return result
-
-    def team_manager(self, team_name):
-        now = int(time())
-
-        result = self.call_oncall('/events?role=manager&team=%s&start__le=%s&end__ge=%s' % (team_name, now, now))
-        if result:
-            return [user['user'] for user in result]
-
-        result = self.call_oncall('/teams/%s/admins' % team_name)
-        if result:
-            logger.warning('Failed looking up manager events, defaulting to team admins list, for team %s', team_name)
-            return result
-
-        logger.error('Failed looking up manager events, as well as defaulting to team admins, for team %s', team_name)
-        return None
-
-    def team_oncall(self, team_name, oncall_type='primary'):
-        result = self.call_oncall('/teams/%s/oncall/%s' % (team_name, oncall_type))
-        if not result:
-            return None
-        return [user['username'] for user in result]
-
-    def team_list(self):
-        result = self.call_oncall('/teams')
-        if not isinstance(result, list):
-            return None
-        return result
+    def get(self, role, target):
+        if role == 'team':
+            result = self.call_oncall('/teams/%s/rosters' % target)
+            if not isinstance(result, dict):
+                stats['oncall_error'] += 1
+                return None
+            user_list = []
+            for roster in result:
+                for user in result[roster]['users']:
+                    user_list.append(user['name'])
+            return user_list
+        elif role == 'manager':
+            result = self.call_oncall('/teams/%s/oncall/manager' % target)
+            if not isinstance(result, list):
+                stats['oncall_error'] += 1
+                return None
+            if result:
+                return [user['user'] for user in result]
+        elif role.startswith('oncall'):
+            oncall_type = 'primary' if role == 'oncall' else role[7:]
+            result = self.call_oncall('/teams/%s/oncall/%s' % (target, oncall_type))
+            if not isinstance(result, list):
+                stats['oncall_error'] += 1
+                return None
+            if result:
+                return [user['user'] for user in result]

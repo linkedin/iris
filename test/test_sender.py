@@ -11,6 +11,10 @@ import msgpack
 
 def test_configure(mocker):
     mocker.patch('iris_api.sender.cache.RoleTargets.initialize_active_targets')
+    mocker.patch('iris_api.db.init')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_priorities')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_applications')
+    mocker.patch('iris_api.bin.sender.api_cache.cache_modes')
     init_sender({
         'db': {
             'conn': {
@@ -41,6 +45,7 @@ def test_configure(mocker):
         'skipsend': True,
         'skipgmailwatch': True,
     })
+
 
 fake_message = {
     'message_id': 1234,
@@ -118,6 +123,7 @@ def test_fetch_and_send_message(mocker):
 
     mocker.patch('iris_api.bin.sender.db')
     mocker.patch('iris_api.bin.sender.send_message').return_value = 1
+    mocker.patch('iris_api.bin.sender.quota')
     mocker.patch('iris_api.bin.sender.update_message_mode')
     mock_mark_message_sent = mocker.patch('iris_api.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent
@@ -216,14 +222,14 @@ def test_render_email_response_message(mocker):
     mock_cursor = mocker.MagicMock()
     mock_db = mocker.patch('iris_api.bin.sender.db')
     mock_db.engine.raw_connection().cursor.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = {'subject': 'foo', 'body': 'bar'}
+    mock_cursor.fetchone.return_value = ['bar', 'foo']
 
     mock_message = {'message_id': 1}
     render(mock_message)
 
-    mock_cursor.execute.assert_called_once_with('SELECT `subject`, `body` FROM `message` WHERE `id` = %s', 1)
-    assert mock_message['subject'] == 'foo'
+    mock_cursor.execute.assert_called_once_with('SELECT `body`, `subject` FROM `message` WHERE `id` = %s', 1)
     assert mock_message['body'] == 'bar'
+    assert mock_message['subject'] == 'foo'
 
 
 def test_msgpack_handle_sets():
@@ -234,12 +240,36 @@ def test_msgpack_handle_sets():
 def test_generate_slave_message_payload():
     from iris_api.sender.rpc import generate_msgpack_message_payload
     data = {
-      'ids': set([1, 2, 3, 4])
+        'ids': set([1, 2, 3, 4])
     }
     result = generate_msgpack_message_payload(data)
     assert msgpack.unpackb(result) == {
-      'endpoint': 'v0/slave_send',
-      'data': {
-        'ids': [1, 2, 3, 4]
-      }
+        'endpoint': 'v0/slave_send',
+        'data': {
+            'ids': [1, 2, 3, 4]
+        }
     }
+
+
+def test_quotas(mocker):
+    from iris_api.sender.quota import ApplicationQuota
+    from iris_api.metrics import stats
+    from gevent import sleep
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.get_new_rules', return_value=[(u'testapp', 5, 2, 120, 120, u'testuser', u'user', u'iris-plan', 10)])
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.notify_incident')
+    mocker.patch('iris_api.sender.quota.ApplicationQuota.notify_target')
+    stats['quota_hard_exceed_cnt'] = stats['quota_soft_exceed_cnt'] = 0
+    quotas = ApplicationQuota(None, None, None)
+    sleep(1)
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})  # Breach soft quota
+    assert quotas.allow_send({'application': 'testapp'})
+    assert quotas.allow_send({'application': 'testapp'})
+    assert not quotas.allow_send({'application': 'testapp'})  # Breach hard quota
+    assert not quotas.allow_send({'application': 'testapp'})
+    assert stats['quota_soft_exceed_cnt'] == 3
+    assert stats['quota_hard_exceed_cnt'] == 2
+
+    for _ in xrange(10):
+        assert quotas.allow_send({'application': 'app_without_quota'})

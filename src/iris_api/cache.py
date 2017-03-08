@@ -3,66 +3,78 @@
 
 from __future__ import absolute_import
 from . import db
+import logging
 
-applications = {}
-priorities = {}
-target_types = {}
-target_roles = {}
-modes = {}
+logger = logging.getLogger(__name__)
+
+applications = {}  # name -> dict of info
+priorities = {}    # name -> dict of info
+target_types = {}  # name -> id
+target_roles = {}  # name -> id
+modes = {}         # name -> id
 
 
 def cache_applications():
+    global applications
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
-    cursor.execute('''SELECT `name`, `id`, `key`, `allow_other_app_incidents` FROM `application`''')
+    cursor.execute('''SELECT `name`, `id`, `key`, `allow_other_app_incidents`, `allow_authenticating_users` FROM `application`''')
     apps = cursor.fetchall()
+    new_applications = {}
     for app in apps:
         cursor.execute(
             'SELECT `name` FROM `template_variable` WHERE `application_id` = %s',
             app['id'])
         app['variables'] = [row['name'] for row in cursor]
-        applications[app['name']] = app
+        cursor.execute('''SELECT `mode`.`name`
+                          FROM `mode`
+                          JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+                          WHERE `application_mode`.`application_id` = %s''', app['id'])
+        app['supported_modes'] = [row['name'] for row in cursor]
+        new_applications[app['name']] = app
+    applications = new_applications
     connection.close()
     cursor.close()
+    logger.info('Loaded applications: %s', ', '.join(applications))
 
 
 def cache_priorities():
+    global priorities
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
     cursor.execute('''SELECT `priority`.`id`, `priority`.`name`, `priority`.`mode_id`
                       FROM `priority`''')
-    for row in cursor:
-        priorities[row['name']] = row
+    priorities = {row['name']: row for row in cursor}
     cursor.close()
     connection.close()
 
 
 def cache_target_types():
+    global target_types
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_type''')
-    for row in cursor:
-        target_types[row['name']] = row['id']
+    target_types = dict(cursor)
     cursor.close()
     connection.close()
 
 
 def cache_target_roles():
+    global target_roles
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM target_role''')
-    for row in cursor:
-        target_roles[row['name']] = row['id']
+    target_roles = dict(cursor)
     cursor.close()
     connection.close()
 
 
 def cache_modes():
+    global modes
     connection = db.engine.raw_connection()
-    cursor = connection.cursor(db.dict_cursor)
+    cursor = connection.cursor()
     cursor.execute('''SELECT `name`, `id` FROM mode''')
-    for row in cursor:
-        modes[row['name']] = row['id']
+    modes = dict(cursor)
     cursor.close()
     connection.close()
 
