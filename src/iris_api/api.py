@@ -1639,6 +1639,31 @@ class Application(object):
             session.execute('DELETE FROM `template_variable` WHERE `application_id` = :application_id AND `name` IN :variables',
                             {'application_id': app['id'], 'variables': tuple(kill_variables)})
 
+        # Only admins can (optionally) change owners
+        new_owners = data.get('owners')
+        if req.context['is_admin'] and new_owners:
+            if not isinstance(new_owners, list):
+                raise HTTPBadRequest('To change owners, you must pass a list of strings', '')
+
+            new_owners = set(new_owners)
+            existing_owners = {row[0] for row in session.execute('''SELECT `target`.`name`
+                                                                    FROM `target`
+                                                                    JOIN `application_owner` ON `target`.`id` = `application_owner`.`user_id`
+                                                                    WHERE `application_owner`.`application_id` = :application_id''', {'application_id': app['id']})}
+            kill_owners = existing_owners - new_owners
+
+            for owner in new_owners - existing_owners:
+                session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
+                                   VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
+                                                             JOIN `target` on `target`.`id` = `user`.`target_id`
+                                                             WHERE `target`.`name` = :owner))''', {'application_id': app['id'], 'owner': owner})
+            if kill_owners:
+                session.execute('''DELETE FROM `application_owner`
+                                   WHERE `application_id` = :application_id
+                                   AND `user_id` IN (SELECT `user`.`target_id` FROM `user`
+                                                     JOIN `target` on `target`.`id` = `user`.`target_id`
+                                                     WHERE `target`.`name` IN :owners)''', {'application_id': app['id'], 'owners': tuple(kill_owners)})
+
         data['application_id'] = app['id']
 
         session.execute('''UPDATE `application`

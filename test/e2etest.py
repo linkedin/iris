@@ -1735,8 +1735,8 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     assert re.status_code == 404
 
 
-def test_modify_application(sample_application_name, sample_admin_user):
-    if not all([sample_application_name, sample_admin_user]):
+def test_modify_application(sample_application_name, sample_admin_user, sample_user):
+    if not all([sample_application_name, sample_admin_user, sample_user]):
         pytest.skip('We do not have enough data in DB to do this test')
 
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
@@ -1760,7 +1760,7 @@ def test_modify_application(sample_application_name, sample_admin_user):
     assert re.status_code == 200
     assert set(re.json()['variables']) == set(current_settings['variables'])
 
-    current_settings['variables'] = list(set(current_settings['variables']) - set([temp_test_variable]))
+    current_settings['variables'] = list(set(current_settings['variables']) - {temp_test_variable})
 
     re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
     assert re.status_code == 200
@@ -1773,6 +1773,28 @@ def test_modify_application(sample_application_name, sample_admin_user):
     re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'sample_context must be valid json'
+
+    # Take sample_user out of list of owners and set that
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    current_settings = re.json()
+    current_settings['owners'] = list(set(current_settings['owners']) - {sample_user})
+    assert sample_user not in current_settings['owners']
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify that user isn't there
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert sample_user not in re.json()['owners']
+
+    # add it back to the list of owners and ensure it's there
+    current_settings['owners'] = list(set(current_settings['owners']) | {sample_user})
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    assert sample_user in re.json()['owners']
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
