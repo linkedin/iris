@@ -57,7 +57,7 @@ vendors: []
 #  name: slack
 #  auth_token: ''
 #  base_url: 'https://slack.com/api/chat.postMessage'
-#  iris_incident_url: 'https://iris.prod.linkedin.com/incidents'
+#  iris_incident_url: ''
 #  proxy: *proxy_shared
 #  message_attachments:
 #    fallback: 'Iris Alert Fired!'
