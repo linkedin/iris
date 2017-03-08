@@ -1641,7 +1641,7 @@ class Application(object):
 
         # Only admins can (optionally) change owners
         new_owners = data.get('owners')
-        if req.context['is_admin'] and new_owners:
+        if req.context['is_admin'] and new_owners is not None:
             if not isinstance(new_owners, list):
                 raise HTTPBadRequest('To change owners, you must pass a list of strings', '')
 
@@ -1653,10 +1653,14 @@ class Application(object):
             kill_owners = existing_owners - new_owners
 
             for owner in new_owners - existing_owners:
-                session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
-                                   VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
-                                                             JOIN `target` on `target`.`id` = `user`.`target_id`
-                                                             WHERE `target`.`name` = :owner))''', {'application_id': app['id'], 'owner': owner})
+                try:
+                    session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
+                                       VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
+                                                                 JOIN `target` on `target`.`id` = `user`.`target_id`
+                                                                 WHERE `target`.`name` = :owner))''', {'application_id': app['id'], 'owner': owner})
+                except IntegrityError:
+                    logger.exception('Integrity error whilst adding user %s as an owner to app %s', owner, app_name)
+
             if kill_owners:
                 session.execute('''DELETE FROM `application_owner`
                                    WHERE `application_id` = :application_id
