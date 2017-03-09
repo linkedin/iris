@@ -21,3 +21,9 @@ More indepth documentation for each Iris components:
    frontend
    sender
    relay
+
+
+Application Integration
+-----------------------
+.. toctree::
+   nagios
