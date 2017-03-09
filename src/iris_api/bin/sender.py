@@ -207,7 +207,8 @@ quota = None
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
     'email_min': 0, 'email_avg': 0, 'im_cnt': 0, 'im_total': 0, 'im_fail': 0, 'im_sent': 0,
-    'im_max': 0, 'im_min': 0, 'im_avg': 0, 'sms_cnt': 0, 'sms_total': 0, 'sms_fail': 0,
+    'im_max': 0, 'im_min': 0, 'im_avg': 0, 'slack_cnt': 0, 'slack_total': 0, 'slack_fail': 0,
+    'slack_sent': 0, 'slack_max': 0, 'slack_min': 0, 'slack_avg': 0, 'sms_cnt': 0, 'sms_total': 0, 'sms_fail': 0,
     'sms_sent': 0, 'sms_max': 0, 'sms_min': 0, 'sms_avg': 0, 'call_cnt': 0, 'call_total': 0,
     'call_fail': 0, 'call_sent': 0, 'call_max': 0, 'call_min': 0, 'call_avg': 0, 'task_failure': 0,
     'oncall_error': 0, 'role_target_lookup_error': 0, 'target_not_found': 0, 'message_send_cnt': 0,

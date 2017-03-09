@@ -2,13 +2,13 @@
 # See LICENSE in the project root for license information.
 
 import logging
-from iris_api.constants import EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT
+from iris_api.constants import EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT, SLACK_SUPPORT
 
 logger = logging.getLogger(__name__)
 
 
 class iris_dummy(object):
-    supports = frozenset([EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT])
+    supports = frozenset([EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT, SLACK_SUPPORT])
 
     def __init__(self, config):
         self.time_taken = 1
