@@ -16,7 +16,6 @@ from phonenumbers.phonenumberutil import NumberParseException
 
 from ldap.controls import SimplePagedResultsControl
 from iris_api.api import load_config_file
-from iris_api.role_lookup import get_role_lookup
 from iris_api.metrics import stats, init as init_metrics, emit_metrics
 
 from requests.packages.urllib3.exceptions import (
@@ -145,13 +144,13 @@ def fetch_ldap(config):
 
             if mail:
                 mail = mail[0]
-                im = mail.split('@')[0]
+                slack = mail.split('@')[0]
 
             if manager:
                 manager = manager[0]
 
             contacts = {'call': mobile, 'sms': mobile, 'email': mail,
-                        'im': im, 'manager': manager}
+                        'slack': slack, 'manager': manager}
             dn_map[dn] = name
             users[name] = contacts
 
@@ -195,11 +194,17 @@ def sync(config, engine, purge_old_users=True):
     iris_usernames = iris_users.viewkeys()
 
     # oncall
-    oncall_team_names = get_role_lookup(config).team_list()
+    oncall_base_url = config.get('oncall-api')
+    oncall_team_names = []
+    if oncall_base_url:
+        try:
+            re = requests.get('%s/api/v0/teams?fields=name' % oncall_base_url)
+            oncall_team_names = re.json()
+        except (ValueError, requests.exceptions.RequestException):
+            logger.exception('Failed hitting oncall endpoint to fetch list of team names')
 
     if not oncall_team_names:
-        logger.error('Failed getting oncall names')
-        return
+        logger.error('We do not have a list of team names')
 
     oncall_team_names = set(oncall_team_names)
 
