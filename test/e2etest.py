@@ -212,6 +212,14 @@ def sample_plan_name():
             return result[0]
 
 
+@pytest.fixture(scope='module')
+def sample_mode():
+    '''List of iris messages'''
+    modes = requests.get(base_url + 'modes').json()
+    if modes:
+        return modes[0]
+
+
 def create_incident_with_message(application, plan, target, mode):
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
@@ -1735,8 +1743,8 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     assert re.status_code == 404
 
 
-def test_modify_application(sample_application_name, sample_admin_user, sample_user):
-    if not all([sample_application_name, sample_admin_user, sample_user]):
+def test_modify_application(sample_application_name, sample_admin_user, sample_user, sample_mode):
+    if not all([sample_application_name, sample_admin_user, sample_user, sample_mode]):
         pytest.skip('We do not have enough data in DB to do this test')
 
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
@@ -1794,7 +1802,30 @@ def test_modify_application(sample_application_name, sample_admin_user, sample_u
 
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
     assert re.status_code == 200
-    assert sample_user in re.json()['owners']
+    current_settings = re.json()
+    assert sample_user in current_settings['owners']
+
+    # Same for mode
+    current_settings['supported_modes'] = list(set(current_settings['supported_modes']) - {sample_mode})
+    assert sample_mode not in current_settings['supported_modes']
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify that mode isn't there
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert sample_mode not in re.json()['supported_modes']
+
+    # Put it back and verify
+    current_settings['supported_modes'] = list(set(current_settings['supported_modes']) | {sample_mode})
+    assert sample_mode in current_settings['supported_modes']
+
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify that mode is there
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert sample_mode in re.json()['supported_modes']
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

@@ -1668,6 +1668,33 @@ class Application(object):
                                                      JOIN `target` on `target`.`id` = `user`.`target_id`
                                                      WHERE `target`.`name` IN :owners)''', {'application_id': app['id'], 'owners': tuple(kill_owners)})
 
+        # Only admins can (optionally) change supported modes
+        new_modes = data.get('supported_modes')
+        if req.context['is_admin'] and new_modes is not None:
+            if not isinstance(new_modes, list):
+                raise HTTPBadRequest('To change modes, you must pass a list of strings', '')
+
+            new_modes = set(new_modes)
+            existing_modes = {row[0] for row in session.execute('''SELECT `mode`.`name`
+                                                                   FROM `mode`
+                                                                   JOIN `application_mode` ON `application_mode`.`mode_id` = `mode`.`id`
+                                                                   WHERE `application_mode`.`application_id` = :application_id''', {'application_id': app['id']})}
+            kill_modes = existing_modes - new_modes
+
+            for mode in new_modes - existing_modes:
+                try:
+                    session.execute('''INSERT INTO `application_mode` (`application_id`, `mode_id`)
+                                       VALUES (:application_id, (SELECT `mode`.`id` FROM `mode`
+                                                                 WHERE `mode`.`name` = :mode))''', {'application_id': app['id'], 'mode': mode})
+                except IntegrityError:
+                    logger.exception('Integrity error whilst adding  %s as an mode to app %s', mode, app_name)
+
+            if kill_modes:
+                session.execute('''DELETE FROM `application_mode`
+                                   WHERE `application_id` = :application_id
+                                   AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
+                                                     WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
+
         data['application_id'] = app['id']
 
         session.execute('''UPDATE `application`
