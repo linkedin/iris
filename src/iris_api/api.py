@@ -255,7 +255,6 @@ single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
     `plan_notification`.`step` as `step`,
     `plan_notification`.`repeat` as `repeat`,
     `plan_notification`.`wait` as `wait`,
-    `plan_notification`.`template_id` as `template_id`,
     `target_role`.`name` as `role`,
     `target`.`name` as `target`,
     `plan_notification`.`template` as `template`,
@@ -333,7 +332,6 @@ insert_plan_query = '''INSERT INTO `plan` (
     :tracking_template
 )'''
 
-# FIXME: remove template_id column
 insert_plan_step_query = '''INSERT INTO `plan_notification` (
     `plan_id`, `step`, `priority_id`, `target_id`, `template`, `role_id`, `repeat`, `wait`
 ) VALUES (
