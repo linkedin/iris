@@ -64,14 +64,20 @@ class iris_twilio(object):
         url = self.config['relay_base_url'] + '/api/v0/twilio/calls/gather?'
         content = self.generate_message_text(message)
 
-        start = time.time()
-        qs = urllib.urlencode({
+        payload = {
             'content': content[:480],
             'instruction': plugin.get_phone_menu_text(),
             'loop': 3,
             'source': message['application'],
-            'message_id': message.get('message_id', 0),
-        })
+        }
+
+        # If message_id is None or 0, don't send it as it's likely OOB
+        message_id = message.get('message_id')
+        if message_id:
+            payload['message_id'] = message_id
+
+        start = time.time()
+        qs = urllib.urlencode(payload)
 
         sender(to=message['destination'],
                from_=from_,
