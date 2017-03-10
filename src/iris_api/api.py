@@ -2339,16 +2339,53 @@ class Stats(object):
             'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
             'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
+            'pct_incidents_claimed_last_month': '''SELECT ROUND(
+                                                   (SELECT COUNT(*) FROM `incident`
+                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                    AND `active` = FALSE
+                                                    AND NOT isnull(`owner_id`)) /
+                                                   (SELECT COUNT(*) FROM `incident`
+                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
+            'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
+                                                                                FROM `incident`
+                                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                                AND `active` = FALSE
+                                                                                AND NOT ISNULL(`owner_id`)
+                                                                                AND NOT ISNULL(`updated`)),
+                                                            @row_id := 0,
+                                                            (SELECT CEIL(AVG(time_to_claim)) as median
+                                                            FROM (SELECT `updated` - `created` as time_to_claim
+                                                                  FROM `incident`
+                                                                  WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                  AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                  AND `active` = FALSE
+                                                                  AND NOT ISNULL(`owner_id`)
+                                                                  AND NOT ISNULL(`updated`)
+                                                                  ORDER BY time_to_claim) as time_to_claim
+                                                            WHERE (SELECT @row_id := @row_id + 1)
+                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)'''
         }
 
         stats = {}
 
-        session = db.Session()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
         for key, query in queries.iteritems():
-            result = session.execute(query).scalar()
+            start = time.time()
+            cursor.execute(query)
+            result = cursor.fetchone()
+            if result:
+                result = result[-1]
+            else:
+                result = 0
+            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
             stats[key] = result
+        cursor.close()
+        connection.close()
 
-        session.close()
         resp.status = HTTP_200
         resp.body = ujson.dumps(stats)
 
