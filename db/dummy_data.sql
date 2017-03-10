@@ -46,6 +46,14 @@ LOCK TABLES `plan_active` WRITE;
 INSERT INTO `plan_active` VALUES ('demo-test-foo',31),('demo-test-incident-post',38),('test_nested_plan',40);
 UNLOCK TABLES;
 
+LOCK TABLES `template` WRITE;
+INSERT INTO `template` VALUES (1,'test_template','2017-01-25 10:50:13',1),(2,'test_template','2017-01-25 10:52:18',1),(3,'test_template','2017-01-25 10:55:03',1),(4,'test_template','2017-01-25 10:56:05',1),(5,'test_template','2017-01-25 12:30:40',1),(6,'test_template','2017-01-25 12:31:02',1),(7,'test_template','2017-01-25 12:46:12',1),(8,'test_template','2017-01-25 12:46:21',1),(9,'test_template','2017-01-25 12:46:29',1),(10,'test_template','2017-01-25 12:52:10',1),(11,'test_template','2017-01-25 15:25:47',1),(12,'test_template','2017-01-25 15:26:45',1),(13,'test_template','2017-01-25 15:30:35',1);
+UNLOCK TABLES;
+
+LOCK TABLES `template_active` WRITE;
+INSERT INTO `template_active` VALUES ('test_template',13);
+UNLOCK TABLES;
+
 LOCK TABLES `plan_notification` WRITE;
 INSERT INTO `plan_notification` VALUES
     (1,1,1,NULL,4,44,17,1,300),
@@ -103,14 +111,6 @@ LOCK TABLES `target_reprioritization` WRITE;
 UNLOCK TABLES;
 
 LOCK TABLES `team` WRITE;
-UNLOCK TABLES;
-
-LOCK TABLES `template` WRITE;
-INSERT INTO `template` VALUES (1,'test_template','2017-01-25 10:50:13',1),(2,'test_template','2017-01-25 10:52:18',1),(3,'test_template','2017-01-25 10:55:03',1),(4,'test_template','2017-01-25 10:56:05',1),(5,'test_template','2017-01-25 12:30:40',1),(6,'test_template','2017-01-25 12:31:02',1),(7,'test_template','2017-01-25 12:46:12',1),(8,'test_template','2017-01-25 12:46:21',1),(9,'test_template','2017-01-25 12:46:29',1),(10,'test_template','2017-01-25 12:52:10',1),(11,'test_template','2017-01-25 15:25:47',1),(12,'test_template','2017-01-25 15:26:45',1),(13,'test_template','2017-01-25 15:30:35',1);
-UNLOCK TABLES;
-
-LOCK TABLES `template_active` WRITE;
-INSERT INTO `template_active` VALUES ('test_template',13);
 UNLOCK TABLES;
 
 LOCK TABLES `template_content` WRITE;
