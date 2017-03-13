@@ -1676,7 +1676,7 @@ def test_app_stats(sample_application_name):
     data = re.json()
     for key in ('total_incidents_today', 'total_messages_sent_today',
                 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
-                'pct_successful_sms_last_month'):
+                'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month'):
         assert key in data
         assert isinstance(data[key], int) or isinstance(data[key], float)
 
