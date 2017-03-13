@@ -2379,6 +2379,8 @@ class Stats(object):
             result = cursor.fetchone()
             if result:
                 result = result[-1]
+                if not result:
+                    result = 0
             else:
                 result = 0
             logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
