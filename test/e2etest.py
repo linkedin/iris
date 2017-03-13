@@ -391,7 +391,12 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
 
     # Clear out any existing unclaimed incidents, so they don't interfere with these tests
     re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
-    assert re.status_code in [400, 200]  # 400 if there are no unclaimed incidents.
+    assert re.status_code == 200
+
+    # Shouldn't be any incidents. Verify response in this case.
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    assert re.status_code == 200
+    assert re.json()['app_response'] == 'No incidents to claim'
 
     # Verify SMS with two incidents from the same app
     incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
