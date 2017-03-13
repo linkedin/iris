@@ -2395,6 +2395,76 @@ class Stats(object):
         resp.body = ujson.dumps(stats)
 
 
+class ApplicationStats(object):
+    allow_read_only = True
+
+    def on_get(self, req, resp, app_name):
+        app = cache.applications.get(app_name)
+        if not app:
+            raise HTTPNotFound()
+
+        queries = {
+            'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE() AND `application_id` = %(application_id)s',
+            'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE() AND `application_id` = %(application_id)s',
+            'pct_incidents_claimed_last_month': '''SELECT ROUND(
+                                                   (SELECT COUNT(*) FROM `incident`
+                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                    AND `active` = FALSE
+                                                    AND NOT isnull(`owner_id`)
+                                                    AND `application_id` = %(application_id)s) /
+                                                   (SELECT COUNT(*) FROM `incident`
+                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                    AND `application_id` = %(application_id)s) * 100, 2)''',
+            'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
+                                                                                FROM `incident`
+                                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                                AND `active` = FALSE
+                                                                                AND NOT ISNULL(`owner_id`)
+                                                                                AND NOT ISNULL(`updated`)
+                                                                                AND `application_id` = %(application_id)s),
+                                                            @row_id := 0,
+                                                            (SELECT CEIL(AVG(time_to_claim)) as median
+                                                            FROM (SELECT `updated` - `created` as time_to_claim
+                                                                  FROM `incident`
+                                                                  WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                  AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                  AND `active` = FALSE
+                                                                  AND NOT ISNULL(`owner_id`)
+                                                                  AND NOT ISNULL(`updated`)
+                                                                  AND `application_id` = %(application_id)s
+                                                                  ORDER BY time_to_claim) as time_to_claim
+                                                            WHERE (SELECT @row_id := @row_id + 1)
+                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)'''
+        }
+
+        query_data = {'application_id': app['id']}
+
+        stats = {}
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        for key, query in queries.iteritems():
+            start = time.time()
+            cursor.execute(query, query_data)
+            result = cursor.fetchone()
+            if result:
+                result = result[-1]
+                if not result:
+                    result = 0
+            else:
+                result = 0
+            logger.info('App Stats (%s) query %s took %s seconds', app['name'], key, round(time.time() - start, 2))
+            stats[key] = result
+        cursor.close()
+        connection.close()
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(stats)
+
+
 def get_api_app():
     import sys
     config = load_config_file(sys.argv[1])
@@ -2457,6 +2527,7 @@ def get_api(config):
     app.add_route('/v0/modes', Modes())
 
     app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
+    app.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 
