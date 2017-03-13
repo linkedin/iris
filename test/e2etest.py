@@ -1666,6 +1666,19 @@ def test_stats():
         assert isinstance(data[key], int) or isinstance(data[key], float)
 
 
+def test_app_stats(sample_application_name):
+    re = requests.get(base_url + 'applications/sfsdf232423fakeappname/stats')
+    assert re.status_code == 404
+
+    re = requests.get(base_url + 'applications/%s/stats' % sample_application_name)
+    assert re.status_code == 200
+    data = re.json()
+    for key in ('total_incidents_today', 'total_messages_sent_today',
+                'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month'):
+        assert key in data
+        assert isinstance(data[key], int) or isinstance(data[key], float)
+
+
 def test_post_notification(sample_user, sample_application_name):
     re = requests.post(base_url + 'notifications', json={})
     assert re.status_code == 400
