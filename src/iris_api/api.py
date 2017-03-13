@@ -1932,6 +1932,9 @@ class User(object):
 class ResponseMixin(object):
     allow_read_only = False
 
+    def __init__(self, iris_sender_app):
+        self.iris_sender_app = iris_sender_app
+
     def create_response(self, msg_id, source, content):
         """
         Return the result of the insert
@@ -2036,9 +2039,9 @@ class ResponseMixin(object):
             is_batch = True
         elif isinstance(msg_id, list) and content == 'claim_all':
             # Claim all functionality.
-            is_claim_all = True
             if not msg_id:
-                raise HTTPBadRequest('Invalid message id', 'No incidents to claim')
+                return self.iris_sender_app, 'No incidents to claim'
+            is_claim_all = True
             apps_to_message = defaultdict(list)
             for mid in msg_id:
                 msg_app = get_app_from_msg_id(session, mid)
@@ -2411,6 +2414,7 @@ def get_api(config):
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
     healthcheck_path = config['healthcheck_path']
+    iris_sender_app = config['sender'].get('sender_app')
 
     debug = False
     if config['server'].get('disable_auth'):
@@ -2456,11 +2460,11 @@ def get_api(config):
 
     app.add_route('/v0/priorities', Priorities())
 
-    app.add_route('/v0/response/gmail', ResponseGmail())
-    app.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick())
-    app.add_route('/v0/response/twilio/calls', ResponseTwilioCalls())
-    app.add_route('/v0/response/twilio/messages', ResponseTwilioMessages())
-    app.add_route('/v0/response/slack', ResponseSlack())
+    app.add_route('/v0/response/gmail', ResponseGmail(iris_sender_app))
+    app.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
+    app.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
+    app.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
+    app.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
 
     app.add_route('/v0/stats', Stats())
 
