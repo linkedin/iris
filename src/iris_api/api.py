@@ -20,6 +20,7 @@ from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, H
 from sqlalchemy.exc import IntegrityError
 from importlib import import_module
 import yaml
+import falcon.uri
 
 from collections import defaultdict
 from streql import equals
@@ -2228,14 +2229,16 @@ class TwilioDeliveryUpdate(object):
     allow_read_only = False
 
     def on_post(self, req, resp):
-        try:
-            info = ujson.loads(req.context['body'])
-        except ValueError:
-            raise HTTPBadRequest('Invalid json in post body', '')
+        post_dict = falcon.uri.parse_query_string(req.context['body'])
 
-        for required_param in ('status', 'sid'):
-            if required_param not in info:
-                raise HTTPBadRequest('Missing %s from post body' % required_param, '')
+        try:
+            info = {
+                'status': post_dict['MessageStatus'],
+                'sid': post_dict['MessageSid']
+            }
+        except KeyError as e:
+            logger.exception('Invalid twilio delivery update request')
+            raise HTTPBadRequest('Missing %s from post body' % e, '')
 
         session = db.Session()
         affected = session.execute('''UPDATE `twilio_delivery_status`
@@ -2245,6 +2248,7 @@ class TwilioDeliveryUpdate(object):
         session.close()
 
         if not affected:
+            logger.warn('Trying to update delivery status for unknown twilio sid: %s', info['sid'])
             raise HTTPBadRequest('Invalid twilio sid')
 
         resp.status = HTTP_204
