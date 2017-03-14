@@ -1853,7 +1853,7 @@ def test_twilio_delivery_update(fake_message_id):
     if not fake_message_id:
         pytest.skip('We do not have enough data in DB to do this test')
 
-    re = requests.post(base_url + 'twilio/deliveryupdate', json={'sid': 'dsfds23442fakesid', 'status': 'delivered'})
+    re = requests.post(base_url + 'twilio/deliveryupdate', data={'MessageSid': 'dsfds23442fakesid', 'MessageStatus': 'delivered'})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid twilio sid'
 
@@ -1865,7 +1865,7 @@ def test_twilio_delivery_update(fake_message_id):
                           VALUES (%s, %s)''', (message_sid, fake_message_id))
         conn.commit()
 
-    re = requests.post(base_url + 'twilio/deliveryupdate', json={'sid': message_sid, 'status': 'delivered'})
+    re = requests.post(base_url + 'twilio/deliveryupdate', data={'MessageSid': message_sid, 'MessageStatus': 'delivered'})
     assert re.status_code == 204
 
     re = requests.get(base_url + 'messages/%s' % fake_message_id)
