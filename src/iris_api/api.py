@@ -115,12 +115,14 @@ single_message_query = '''SELECT `message`.`id` as `id`,
     `mode`.`name` as `mode`,
     `application`.`name` as `application`,
     `priority`.`name` as `priority`,
-    `target`.`name` as `target`
+    `target`.`name` as `target`,
+    `twilio_delivery_status`.`status` as `twilio_delivery_status`
 FROM `message`
 JOIN `priority` ON `message`.`priority_id` = `priority`.`id`
 JOIN `application` ON `message`.`application_id` = `application`.`id`
 JOIN `mode` ON `message`.`mode_id` = `mode`.`id`
 JOIN `target` ON `message`.`target_id`=`target`.`id`
+LEFT JOIN `twilio_delivery_status` ON `twilio_delivery_status`.`message_id` = `message`.`id`
 WHERE `message`.`id` = %s'''
 
 message_audit_log_query = '''SELECT `id`, `date`, `old`, `new`, `change_type`, `description`
@@ -2222,6 +2224,32 @@ class ResponseSlack(ResponseMixin):
             resp.body = ujson.dumps({'app_response': response})
 
 
+class TwilioDeliveryUpdate(object):
+    allow_read_only = False
+
+    def on_post(self, req, resp):
+        try:
+            info = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        for required_param in ('status', 'sid'):
+            if required_param not in info:
+                raise HTTPBadRequest('Missing %s from post body' % required_param, '')
+
+        session = db.Session()
+        affected = session.execute('''UPDATE `twilio_delivery_status`
+                                      SET `status` = :status
+                                      WHERE `twilio_sid` = :sid''', info).rowcount
+        session.commit()
+        session.close()
+
+        if not affected:
+            raise HTTPBadRequest('Invalid twilio sid')
+
+        resp.status = HTTP_204
+
+
 class Reprioritization(object):
     allow_read_only = False
     enforce_user = True
@@ -2437,7 +2465,39 @@ class ApplicationStats(object):
                                                                   AND `application_id` = %(application_id)s
                                                                   ORDER BY time_to_claim) as time_to_claim
                                                             WHERE (SELECT @row_id := @row_id + 1)
-                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)'''
+                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
+            'pct_successful_twilio_sms_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
+                                                                     JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                     JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                     WHERE `twilio_delivery_status`.`status` = 'delivered'
+                                                                           AND `mode`.`name` = 'sms'
+                                                                           AND `message`.`application_id` = %(application_id)s
+                                                                           AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                           AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
+                                                                    (SELECT count(*) FROM `message`
+                                                                     JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                     JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                     WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
+                                                                           AND `mode`.`name` = 'sms'
+                                                                           AND `message`.`application_id` = %(application_id)s
+                                                                           AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                           AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
+            'pct_successful_twilio_call_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
+                                                                      JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                      JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                      WHERE `twilio_delivery_status`.`status` = 'completed'
+                                                                            AND `mode`.`name` = 'call'
+                                                                            AND `message`.`application_id` = %(application_id)s
+                                                                            AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                            AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
+                                                                     (SELECT count(*) FROM `message`
+                                                                      JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                      JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                      WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
+                                                                            AND `mode`.`name` = 'call'
+                                                                            AND `message`.`application_id` = %(application_id)s
+                                                                            AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                            AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
         }
 
         query_data = {'application_id': app['id']}
@@ -2538,6 +2598,7 @@ def get_api(config):
     app.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
     app.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
     app.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
+    app.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
     app.add_route('/v0/stats', Stats())
 

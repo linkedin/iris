@@ -5,8 +5,12 @@ from iris_api.constants import SMS_SUPPORT, CALL_SUPPORT
 from iris_api.plugins import find_plugin
 from twilio.rest import TwilioRestClient
 from twilio.rest.resources import Connection
+from iris_api import db
 import time
 import urllib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class iris_twilio(object):
@@ -40,6 +44,13 @@ class iris_twilio(object):
 
         return '. '.join(content)
 
+    def initialize_twilio_message_status(self, sid, message_id):
+        session = db.Session()
+        session.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
+                           VALUES (:sid, :mid)''', {'sid': sid, 'mid': message_id})
+        session.commit()
+        session.close()
+
     def send_sms(self, message):
         client = self.get_twilio_client()
 
@@ -47,11 +58,28 @@ class iris_twilio(object):
         from_ = self.config['twilio_number']
         start = time.time()
         content = self.generate_message_text(message)
-        sender(to=message['destination'],
-               from_=from_,
-               body=content[:480])
+        status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
+        result = sender(to=message['destination'],
+                        from_=from_,
+                        body=content[:480],
+                        status_callback=status_callback_url)
 
-        return time.time() - start
+        send_time = time.time() - start
+
+        try:
+            sid = result.sid
+        except Exception:
+            logger.exception('Failed getting Message SID from Twilio')
+            sid = None
+
+        message_id = message.get('message_id')
+
+        if sid and message_id:
+            self.initialize_twilio_message_status(sid, message_id)
+        else:
+            logger.warning('Not initializing twilio SMS status row (mid: %s, sid: %s)', message_id, sid)
+
+        return send_time
 
     def send_call(self, message):
         plugin = find_plugin(message['application'])
@@ -61,7 +89,8 @@ class iris_twilio(object):
         client = self.get_twilio_client()
         sender = client.calls.create
         from_ = self.config['twilio_number']
-        url = self.config['relay_base_url'] + '/api/v0/twilio/calls/gather?'
+        calls_gather_url = self.config['relay_base_url'] + '/api/v0/twilio/calls/gather?'
+        status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
         content = self.generate_message_text(message)
 
         payload = {
@@ -79,12 +108,26 @@ class iris_twilio(object):
         start = time.time()
         qs = urllib.urlencode(payload)
 
-        sender(to=message['destination'],
-               from_=from_,
-               if_machine='Continue',
-               url=url + qs)
+        result = sender(to=message['destination'],
+                        from_=from_,
+                        if_machine='Continue',
+                        url=calls_gather_url + qs,
+                        status_callback=status_callback_url)
 
-        return time.time() - start
+        send_time = time.time() - start
+
+        try:
+            sid = result.sid
+        except Exception:
+            logger.exception('Failed getting Message SID from Twilio')
+            sid = None
+
+        if sid and message_id:
+            self.initialize_twilio_message_status(sid, message_id)
+        else:
+            logger.warning('Not initializing twilio call status row (mid: %s, sid: %s)', message_id, sid)
+
+        return send_time
 
     def send(self, message):
         return self.modes[message['mode']](message)

@@ -11,6 +11,7 @@ import requests
 import copy
 import iris_api.bin.iris_ctl as iris_ctl
 from click.testing import CliRunner
+import uuid
 
 
 server = 'http://localhost:16649/'
@@ -44,7 +45,7 @@ def username_header(username):
 def iris_messages():
     '''List of iris messages'''
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('SELECT `id`, `incident_id` FROM `message` WHERE NOT ISNULL(`incident_id`) LIMIT 3')
+        cursor.execute('SELECT `id`, `incident_id` FROM `message` WHERE NOT ISNULL(`incident_id`) ORDER BY `id` DESC LIMIT 3')
         return [dict(id=id, incident_id=incident_id) for (id, incident_id) in cursor]
 
 
@@ -1674,7 +1675,8 @@ def test_app_stats(sample_application_name):
     assert re.status_code == 200
     data = re.json()
     for key in ('total_incidents_today', 'total_messages_sent_today',
-                'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month'):
+                'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
+                'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month'):
         assert key in data
         assert isinstance(data[key], int) or isinstance(data[key], float)
 
@@ -1845,6 +1847,30 @@ def test_modify_application(sample_application_name, sample_admin_user, sample_u
     # Verify that mode is there
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
     assert sample_mode in re.json()['supported_modes']
+
+
+def test_twilio_delivery_update(fake_message_id):
+    if not fake_message_id:
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    re = requests.post(base_url + 'twilio/deliveryupdate', json={'sid': 'dsfds23442fakesid', 'status': 'delivered'})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Invalid twilio sid'
+
+    # Wouldn't surprise me if this is how twilio actually generates the SID on their end
+    message_sid = uuid.uuid4().hex
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
+                          VALUES (%s, %s)''', (message_sid, fake_message_id))
+        conn.commit()
+
+    re = requests.post(base_url + 'twilio/deliveryupdate', json={'sid': message_sid, 'status': 'delivered'})
+    assert re.status_code == 204
+
+    re = requests.get(base_url + 'messages/%s' % fake_message_id)
+    assert re.status_code == 200
+    assert re.json()['twilio_delivery_status'] == 'delivered'
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
