@@ -2237,7 +2237,7 @@ class TwilioDeliveryUpdate(object):
                 'sid': post_dict['MessageSid']
             }
         except KeyError as e:
-            logger.exception('Invalid twilio delivery update request')
+            logger.exception('Invalid twilio delivery update request. Payload: %s', post_dict)
             raise HTTPBadRequest('Missing %s from post body' % e, '')
 
         session = db.Session()
@@ -2248,8 +2248,7 @@ class TwilioDeliveryUpdate(object):
         session.close()
 
         if not affected:
-            logger.warn('Trying to update delivery status for unknown twilio sid: %s', info['sid'])
-            raise HTTPBadRequest('Invalid twilio sid')
+            logger.warn('No rows changed when updating delivery status for twilio sid: %s', info['sid'])
 
         resp.status = HTTP_204
 
