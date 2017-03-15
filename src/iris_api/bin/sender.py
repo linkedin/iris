@@ -208,8 +208,10 @@ default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
     'email_min': 0, 'email_avg': 0, 'im_cnt': 0, 'im_total': 0, 'im_fail': 0, 'im_sent': 0,
     'im_max': 0, 'im_min': 0, 'im_avg': 0, 'slack_cnt': 0, 'slack_total': 0, 'slack_fail': 0,
-    'slack_sent': 0, 'slack_max': 0, 'slack_min': 0, 'slack_avg': 0, 'sms_cnt': 0, 'sms_total': 0, 'sms_fail': 0,
-    'sms_sent': 0, 'sms_max': 0, 'sms_min': 0, 'sms_avg': 0, 'call_cnt': 0, 'call_total': 0,
+    'slack_sent': 0, 'slack_max': 0, 'slack_min': 0, 'slack_avg': 0, 'drop_cnt': 0,
+    'drop_total': 0, 'drop_fail': 0, 'drop_sent': 0, 'drop_max': 0, 'drop_min': 0, 'drop_avg': 0,
+    'sms_cnt': 0, 'sms_total': 0, 'sms_fail': 0, 'sms_sent': 0, 'sms_max': 0,
+    'sms_min': 0, 'sms_avg': 0, 'call_cnt': 0, 'call_total': 0,
     'call_fail': 0, 'call_sent': 0, 'call_max': 0, 'call_min': 0, 'call_avg': 0, 'task_failure': 0,
     'oncall_error': 0, 'role_target_lookup_error': 0, 'target_not_found': 0, 'message_send_cnt': 0,
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
@@ -561,7 +563,7 @@ def send():
 
 
 # sender stat adder
-def add_stat(mode, runtime):
+def add_mode_stat(mode, runtime):
     stats[mode + '_cnt'] += 1
     if runtime is None:
         stats[mode + '_fail'] += 1
@@ -576,6 +578,24 @@ def add_stat(mode, runtime):
             stats[mode + '_min'] = runtime
         elif runtime > stats[mode + '_max']:
             stats[mode + '_max'] = runtime
+
+
+def add_application_stat(application, metric, value=None):
+    # Populate default_sender_metrics at runtime as the applications
+    # we have will likely be changing and we want to incorporate
+    # that without sender bounces or hard coding that dict.
+    stats_key = 'app_%s_%s' % (application, metric)
+    if value:
+        stats[stats_key] = value
+        if stats_key not in default_sender_metrics:
+            default_sender_metrics[stats_key] = 0
+        return
+
+    try:
+        stats[stats_key] += 1
+    except KeyError:
+        default_sender_metrics[stats_key] = 0
+        stats[stats_key] = 1
 
 
 def set_target_fallback_mode(message):
@@ -831,7 +851,8 @@ def distributed_send_message(message):
     logger.info('Sending message (ID %s) locally', message.get('message_id', '?'))
 
     runtime = send_message(message)
-    add_stat(message['mode'], runtime)
+    add_mode_stat(message['mode'], runtime)
+    add_application_stat(message['application'], 'mode_%s_cnt' % message['mode'])
     if runtime is not None:
         return True
 
@@ -872,10 +893,11 @@ def fetch_and_send_message():
 
     # If we're set to drop this message, no-op this before message gets sent to a vendor
     if message.get('mode') == 'drop':
-        logging.info('Deliberately dropping message %s', message)
         if message['message_id']:
             render(message)
             mark_message_as_sent(message)
+        add_mode_stat('drop', 0)
+        add_application_stat(message['application'], 'mode_drop_cnt')
         return
 
     render(message)
@@ -978,7 +1000,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
+    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'), add_application_stat)
 
 
 def main():
@@ -1005,7 +1027,8 @@ def main():
             spawn(gwatch_renewer)
         spawn(prune_old_audit_logs_worker)
 
-    rpc.init(config['sender'], dict(send_message=send_message, add_stat=add_stat))
+    rpc.init(config['sender'], dict(send_message=send_message, add_mode_stat=add_mode_stat,
+                                    add_application_stat=add_application_stat))
     rpc.run(config['sender'])
 
     interval = 60

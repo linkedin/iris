@@ -57,9 +57,10 @@ quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
 
 class ApplicationQuota(object):
 
-    def __init__(self, db, expand_targets, sender_app):
+    def __init__(self, db, expand_targets, sender_app, add_application_stat):
         self.db = db
         self.expand_targets = expand_targets
+        self.add_application_stat = add_application_stat
         self.iris_application = None
         if sender_app:
             self.iris_application = applications.get(sender_app)
@@ -136,13 +137,27 @@ class ApplicationQuota(object):
         soft_buckets[-1] += 1
 
         # If hard limit breached, disallow sending this message and create incident
-        if sum(hard_buckets) > hard_limit:
+        hard_quota_usage = sum(hard_buckets)
+
+        hard_usage_pct = 0
+        if hard_limit > 0:
+            hard_usage_pct = (hard_quota_usage / hard_limit) * 100
+        self.add_application_stat(application, 'quota_hard_usage_pct', hard_usage_pct)
+
+        if hard_quota_usage > hard_limit:
             stats['quota_hard_exceed_cnt'] += 1
             self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
             return False
 
         # If soft limit breached, just notify owner and still send
-        if sum(soft_buckets) > soft_limit:
+        soft_quota_usage = sum(soft_buckets)
+
+        soft_usage_pct = 0
+        if soft_limit > 0:
+            soft_usage_pct = (soft_quota_usage / soft_limit) * 100
+        self.add_application_stat(application, 'quota_soft_usage_pct', soft_usage_pct)
+
+        if soft_quota_usage > soft_limit:
             stats['quota_soft_exceed_cnt'] += 1
             self.notify_target(application, soft_limit, len(soft_buckets), *target)
             return True
