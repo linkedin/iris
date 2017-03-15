@@ -125,7 +125,8 @@ def handle_slave_send(socket, address, req):
 
     try:
         runtime = send_funcs['send_message'](message)
-        send_funcs['add_stat'](message['mode'], runtime)
+        send_funcs['add_mode_stat'](message['mode'], runtime)
+        send_funcs['add_application_stat'](message['application'], 'mode_%s_cnt' % message['mode'])
         if runtime is not None:
             response = 'OK'
             logger.info('Message (ID %s) from master %s sent successfully', message_id, address)
