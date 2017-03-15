@@ -82,6 +82,9 @@ vendors: []
 #    twilio_number: ''
 #    relay_base_url: ''
 
+applications:
+ - dummy_app
+
 healthcheck_path: /tmp/status
 
 enable_gmail_oneclick: True
