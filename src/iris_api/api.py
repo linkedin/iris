@@ -2231,24 +2231,22 @@ class TwilioDeliveryUpdate(object):
     def on_post(self, req, resp):
         post_dict = falcon.uri.parse_query_string(req.context['body'])
 
-        try:
-            info = {
-                'status': post_dict['MessageStatus'],
-                'sid': post_dict['MessageSid']
-            }
-        except KeyError as e:
+        sid = post_dict.get('MessageSid', post_dict.get('CallSid'))
+        status = post_dict.get('MessageStatus', post_dict.get('CallStatus'))
+
+        if not sid or not status:
             logger.exception('Invalid twilio delivery update request. Payload: %s', post_dict)
-            raise HTTPBadRequest('Missing %s from post body' % e, '')
+            raise HTTPBadRequest('Invalid keys in payload', '')
 
         session = db.Session()
         affected = session.execute('''UPDATE `twilio_delivery_status`
                                       SET `status` = :status
-                                      WHERE `twilio_sid` = :sid''', info).rowcount
+                                      WHERE `twilio_sid` = :sid''', {'sid': sid, 'status': status}).rowcount
         session.commit()
         session.close()
 
         if not affected:
-            logger.warn('No rows changed when updating delivery status for twilio sid: %s', info['sid'])
+            logger.warn('No rows changed when updating delivery status for twilio sid: %s', sid)
 
         resp.status = HTTP_204
 
