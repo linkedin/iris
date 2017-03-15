@@ -1853,10 +1853,6 @@ def test_twilio_delivery_update(fake_message_id):
     if not fake_message_id:
         pytest.skip('We do not have enough data in DB to do this test')
 
-    re = requests.post(base_url + 'twilio/deliveryupdate', data={'MessageSid': 'dsfds23442fakesid', 'MessageStatus': 'delivered'})
-    assert re.status_code == 400
-    assert re.json()['title'] == 'Invalid twilio sid'
-
     # Wouldn't surprise me if this is how twilio actually generates the SID on their end
     message_sid = uuid.uuid4().hex
 
