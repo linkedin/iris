@@ -3,7 +3,7 @@ server:
   port: 16649
   disable_auth: True
 role_lookup: dummy
-metrics: influx
+metrics: dummy
 
 # use this for LDAP settings for sync script lookup
 # init_config_hook: iris_internal.api.init_config

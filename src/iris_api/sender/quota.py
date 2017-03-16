@@ -7,7 +7,7 @@ from collections import deque
 from datetime import datetime
 from iris_api.sender.shared import send_queue
 from iris_api.cache import priorities, applications
-from iris_api.metrics import stats
+from iris_api import metrics
 import logging
 import ujson
 
@@ -57,10 +57,9 @@ quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
 
 class ApplicationQuota(object):
 
-    def __init__(self, db, expand_targets, sender_app, add_application_stat):
+    def __init__(self, db, expand_targets, sender_app):
         self.db = db
         self.expand_targets = expand_targets
-        self.add_application_stat = add_application_stat
         self.iris_application = None
         if sender_app:
             self.iris_application = applications.get(sender_app)
@@ -69,6 +68,7 @@ class ApplicationQuota(object):
 
         self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
         self.last_incidents = {}  # application: (incident_id, time())
+        metrics.add_new_metrics({'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0})
         spawn(self.refresh)
 
     def get_new_rules(self):
@@ -116,6 +116,8 @@ class ApplicationQuota(object):
                 self.rates[key][0].append(0)
                 self.rates[key][1].append(0)
 
+            metrics.add_new_metrics({'app_%s_quota_%s_usage_pct' % (app, quota_type): 0 for quota_type in ('hard', 'soft') for app in new_keys})
+
             logger.info('Refreshed app quotas: %s', ', '.join(new_keys))
             sleep(60)
 
@@ -142,10 +144,10 @@ class ApplicationQuota(object):
         hard_usage_pct = 0
         if hard_limit > 0:
             hard_usage_pct = (hard_quota_usage / hard_limit) * 100
-        self.add_application_stat(application, 'quota_hard_usage_pct', hard_usage_pct)
+        metrics.set('app_%s_quota_hard_usage_pct' % application, hard_usage_pct)
 
         if hard_quota_usage > hard_limit:
-            stats['quota_hard_exceed_cnt'] += 1
+            metrics.incr('quota_hard_exceed_cnt')
             self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
             return False
 
@@ -155,10 +157,10 @@ class ApplicationQuota(object):
         soft_usage_pct = 0
         if soft_limit > 0:
             soft_usage_pct = (soft_quota_usage / soft_limit) * 100
-        self.add_application_stat(application, 'quota_soft_usage_pct', soft_usage_pct)
+        metrics.set('app_%s_quota_soft_usage_pct' % application, soft_usage_pct)
 
         if soft_quota_usage > soft_limit:
-            stats['quota_soft_exceed_cnt'] += 1
+            metrics.incr('quota_soft_exceed_cnt')
             self.notify_target(application, soft_limit, len(soft_buckets), *target)
             return True
 
