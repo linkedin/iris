@@ -6,6 +6,7 @@ from collections import defaultdict
 import logging
 import itertools
 import random
+import copy
 logger = logging.getLogger(__name__)
 
 _max_tries_per_message = 5
@@ -22,12 +23,12 @@ def init_vendors(vendors, application_vendors):
 
     vendor_instances = defaultdict(list)
     app_vendor_instances = defaultdict(lambda: defaultdict(list))
-    for vendor in vendors:
-        vendor_cls = import_custom_module('iris_api.vendors', vendor['type'])
+    for vendor_config in vendors:
+        vendor_cls = import_custom_module('iris_api.vendors', vendor_config['type'])
         for mode in vendor_cls.supports:
-            vendor_instances[mode].append(vendor_cls(vendor))
+            vendor_instances[mode].append(vendor_cls(copy.deepcopy(vendor_config)))
             for application_name, application_cls in applications.iteritems():
-                app_vendor_instances[application_name][mode].append(application_cls(vendor_cls(vendor)))
+                app_vendor_instances[application_name][mode].append(application_cls(vendor_cls(copy.deepcopy(vendor_config))))
 
     for mode, instances in vendor_instances.iteritems():
         random.shuffle(instances)
