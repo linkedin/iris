@@ -10,4 +10,4 @@ class dummy(object):
         self.appname = appname
 
     def send_metrics(self, metrics):
-        logger.debug('sending metrics: %s', metrics)
+        logging.info('Sending metrics: %s', ', '.join('%s: %s' % (key, metrics[key]) for key in sorted(metrics)))

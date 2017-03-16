@@ -16,7 +16,7 @@ from phonenumbers.phonenumberutil import NumberParseException
 
 from ldap.controls import SimplePagedResultsControl
 from iris_api.api import load_config_file
-from iris_api.metrics import stats, init as init_metrics, emit_metrics
+from iris_api import metrics
 
 from requests.packages.urllib3.exceptions import (
     InsecureRequestWarning, SNIMissingWarning, InsecurePlatformWarning
@@ -74,7 +74,7 @@ def get_predefined_users(config):
 
 
 def prune_user(engine, username):
-    stats['users_purged'] += 1
+    metrics.incr('users_purged')
 
     try:
         engine.execute('DELETE FROM `target` WHERE `name` = %s', username)
@@ -88,7 +88,7 @@ def prune_user(engine, username):
 
     except SQLAlchemyError as e:
         logger.error('Deleting user %s failed: %s', username, e)
-        stats['sql_errors'] += 1
+        metrics.incr('sql_errors')
 
 
 def fetch_ldap(config):
@@ -210,7 +210,7 @@ def sync(config, engine, purge_old_users=True):
 
     # users from ldap and config file
     ldap_users = fetch_ldap(config)
-    stats['ldap_found'] += len(ldap_users)
+    metrics.set('ldap_found', len(ldap_users))
     ldap_users.update(get_predefined_users(config))
     ldap_usernames = ldap_users.viewkeys()
 
@@ -239,11 +239,11 @@ def sync(config, engine, purge_old_users=True):
             target_id = engine.execute(target_add_sql, (username, target_types['user'])).lastrowid
             engine.execute(user_add_sql, (target_id, ))
         except SQLAlchemyError as e:
-            stats['users_failed_to_add'] += 1
-            stats['sql_errors'] += 1
+            metrics.incr('users_failed_to_add')
+            metrics.incr('sql_errors')
             logger.exception('Failed to add user %s' % username)
             continue
-        stats['users_added'] += 1
+        metrics.incr('users_added')
         for key, value in ldap_users[username].iteritems():
             if value and key in modes:
                 logger.info('%s: %s -> %s' % (username, key, value))
@@ -264,21 +264,21 @@ def sync(config, engine, purge_old_users=True):
                     if mode in db_contacts:
                         if ldap_contacts[mode] != db_contacts[mode]:
                             logger.info('%s: updating %s' % (username, mode))
-                            stats['user_contacts_updated'] += 1
+                            metrics.incr('user_contacts_updated')
                             engine.execute(contact_update_sql, (ldap_contacts[mode], username, modes[mode]))
                     else:
                         logger.info('%s: adding %s' % (username, mode))
-                        stats['user_contacts_updated'] += 1
+                        metrics.incr('user_contacts_updated')
                         engine.execute(contact_insert_sql, (username, modes[mode], ldap_contacts[mode]))
                 elif mode in db_contacts:
                     logger.info('%s: deleting %s' % (username, mode))
-                    stats['user_contacts_updated'] += 1
+                    metrics.incr('user_contacts_updated')
                     engine.execute(contact_delete_sql, (username, modes[mode]))
                 else:
                     logger.debug('%s: missing %s' % (username, mode))
         except SQLAlchemyError as e:
-            stats['users_failed_to_update'] += 1
-            stats['sql_errors'] += 1
+            metrics.incr('users_failed_to_update')
+            metrics.incr('sql_errors')
             logger.exception('Failed to update user %s' % username)
             continue
 
@@ -290,10 +290,10 @@ def sync(config, engine, purge_old_users=True):
         logger.info('Inserting %s' % t)
         try:
             target_id = engine.execute(target_add_sql, (t, target_types['team'])).lastrowid
-            stats['teams_added'] += 1
+            metrics.incr('teams_added')
         except SQLAlchemyError as e:
             logger.exception('Error inserting team %s: %s' % (t, e))
-            stats['teams_failed_to_add'] += 1
+            metrics.incr('teams_failed_to_add')
             continue
     session.commit()
     session.close()
@@ -307,7 +307,7 @@ def sync(config, engine, purge_old_users=True):
 
 def main():
     config = load_config_file(sys.argv[1])
-    init_metrics(config, 'iris-sync-targets', stats_reset)
+    metrics.init(config, 'iris-sync-targets', stats_reset)
 
     default_nap_time = 3600
 
@@ -319,9 +319,13 @@ def main():
     engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
                            **config['db']['kwargs'])
 
-    spawn(emit_metrics)
+    metrics_task = spawn(metrics.emit_forever)
 
     while True:
+        if not bool(metrics_task):
+            logger.error('metrics task failed, %s', metrics_task.exception)
+            metrics_task = spawn(metrics.emit_forever)
+
         sync(config, engine)
         logger.info('Sleeping for %d seconds' % nap_time)
         sleep(nap_time)

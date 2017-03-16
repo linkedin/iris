@@ -7,10 +7,10 @@ from gevent import Timeout, socket
 from gevent.server import StreamServer
 from itertools import cycle
 import msgpack
-from ..metrics import stats
 from ..utils import msgpack_unpack_msg_from_socket
 from . import cache
-from .shared import send_queue
+from .shared import send_queue, add_mode_stat
+from iris_api import metrics
 
 import logging
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def send_message_to_slave(message, address):
         payload = generate_msgpack_message_payload(message)
     except TypeError:
         logger.exception('Failed encoding message %s as msgpack', message)
-        stats['rpc_message_pass_fail_cnt'] += 1
+        metrics.incr('rpc_message_pass_fail_cnt')
         return False
 
     pretty_address = '%s:%s' % address
@@ -48,16 +48,16 @@ def send_message_to_slave(message, address):
         s.close()
     except socket.error:
         logging.exception('Failed connecting to %s to send message (ID %s)', pretty_address, message_id)
-        stats['rpc_message_pass_fail_cnt'] += 1
+        metrics.incr('rpc_message_pass_fail_cnt')
         return False
 
     if sender_resp == 'OK':
         logger.info('Successfully passed message (ID %s) to %s for sending', message_id, pretty_address)
-        stats['rpc_message_pass_success_cnt'] += 1
+        metrics.incr('rpc_message_pass_success_cnt')
         return True
     else:
         logger.error('Failed sending message (ID %s) through %s: %s', message_id, pretty_address, sender_resp)
-        stats['rpc_message_pass_fail_cnt'] += 1
+        metrics.incr('rpc_message_pass_fail_cnt')
         return False
 
 
@@ -115,7 +115,7 @@ def handle_api_notification_request(socket, address, req):
         temp_notification = notification.copy()
         temp_notification['target'] = _target
         send_queue.put(temp_notification)
-    stats['notification_cnt'] += 1
+    metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 
 
@@ -125,20 +125,24 @@ def handle_slave_send(socket, address, req):
 
     try:
         runtime = send_funcs['send_message'](message)
-        send_funcs['add_mode_stat'](message['mode'], runtime)
-        send_funcs['add_application_stat'](message['application'], 'mode_%s_cnt' % message['mode'])
+        add_mode_stat(message['mode'], runtime)
+
+        metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
+        metrics.add_new_metrics({metrics_key: 0})
+        metrics.incr(metrics_key)
+
         if runtime is not None:
             response = 'OK'
             logger.info('Message (ID %s) from master %s sent successfully', message_id, address)
-            stats['slave_message_send_success_cnt'] += 1
+            metrics.incr('slave_message_send_success_cnt')
         else:
             response = 'FAIL'
             logger.error('Got falsy value from send_message for message (ID %s) from master %s: %s', message_id, address, runtime)
-            stats['slave_message_send_fail_cnt'] += 1
+            metrics.incr('slave_message_send_fail_cnt')
     except Exception:
         response = 'FAIL'
         logger.exception('Sending message (ID %s) from master %s failed.')
-        stats['slave_message_send_fail_cnt'] += 1
+        metrics.incr('slave_message_send_fail_cnt')
 
     socket.sendall(msgpack.packb(response))
 
@@ -150,7 +154,7 @@ api_request_handlers = {
 
 
 def handle_api_request(socket, address):
-    stats['api_request_cnt'] += 1
+    metrics.incr('api_request_cnt')
     timeout = Timeout.start_new(rpc_timeout)
     try:
         req = msgpack_unpack_msg_from_socket(socket)
@@ -162,7 +166,7 @@ def handle_api_request(socket, address):
             logger.info('-> %s unknown request', address)
             socket.sendall(msgpack.packb('UNKNOWN'))
     except Timeout:
-        stats['api_request_timeout_cnt'] += 1
+        metrics.incr('api_request_timeout_cnt')
         logger.info('-> %s timeout', address)
         socket.sendall(msgpack.packb('TIMEOUT'))
     finally:

@@ -13,7 +13,7 @@ from collections import defaultdict
 from iris_api.plugins import init_plugins
 from iris_api.vendors import init_vendors, send_message
 from iris_api.sender import auditlog
-from iris_api.metrics import stats, init as init_metrics, emit_metrics
+from iris_api import metrics
 from uuid import uuid4
 from iris_api.gmail import Gmail
 from iris_api import db
@@ -25,7 +25,7 @@ from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
 from pymysql import DataError
 # queue for sending messages
-from iris_api.sender.shared import send_queue
+from iris_api.sender.shared import send_queue, add_mode_stat
 
 # sql
 
@@ -217,7 +217,6 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0
 }
 
 # TODO: make this configurable
@@ -238,7 +237,7 @@ def create_messages(incident_id, plan_notification_id):
     body = ''
 
     if not names:
-        stats['role_target_lookup_error'] += 1
+        metrics.incr('role_target_lookup_error')
 
         # Try to get creator of the plan and nag them instead
         name = None
@@ -284,7 +283,7 @@ def create_messages(incident_id, plan_notification_id):
                                         'Changing target as we failed resolving original target')
 
         else:
-            stats['target_not_found'] += 1
+            metrics.incr('target_not_found')
             logger.error('No target found: %s', name)
 
     connection.commit()
@@ -305,7 +304,7 @@ def deactivate():
     cursor.close()
     connection.close()
 
-    stats['deactivation'] = time.time() - start_deactivation
+    metrics.set('deactivation', time.time() - start_deactivation)
     logger.info('[*] deactivate task finished')
 
 
@@ -406,7 +405,7 @@ def escalate():
 
     logger.info('[*] %s new messages', msg_count)
     logger.info('[*] escalate task finished')
-    stats['notifications'] = time.time() - start_notifications
+    metrics.set('notifications', time.time() - start_notifications)
 
 
 def aggregate(now):
@@ -452,7 +451,7 @@ def aggregate(now):
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now
-    stats['aggregations'] = time.time() - start_aggregations
+    metrics.set('aggregations', time.time() - start_aggregations)
     logger.info('[*] aggregate task finished - queued: %s', len(messages))
 
 
@@ -470,7 +469,7 @@ def poll():
 
     new_msg_count = cursor.rowcount
     queued_msg_cnt = len(messages)
-    stats['new_msg_count'] = new_msg_count
+    metrics.set('new_msg_count', new_msg_count)
     logger.info('%d new messages waiting in database - queued: %d', new_msg_count, queued_msg_cnt)
 
     for m in cursor:
@@ -483,8 +482,8 @@ def poll():
             m['context'] = context
         message_queue.put(m)
 
-    stats['poll'] = time.time() - start_send
-    stats['queue'] = len(messages)
+    metrics.set('poll', time.time() - start_send)
+    metrics.set('queue', len(messages))
     logger.info('[*] send task finished')
     cursor.close()
     connection.close()
@@ -560,42 +559,6 @@ def send():
     while True:
         fetch_and_prepare_message()
     logger.info('[*] send loop finished...')
-
-
-# sender stat adder
-def add_mode_stat(mode, runtime):
-    stats[mode + '_cnt'] += 1
-    if runtime is None:
-        stats[mode + '_fail'] += 1
-    else:
-        stats[mode + '_total'] += runtime
-        stats[mode + '_sent'] += 1
-        if runtime > stats[mode + '_max']:
-            stats[mode + '_max'] = runtime
-        elif runtime < stats[mode + '_min']:
-            stats[mode + '_min'] = runtime
-        if runtime < stats[mode + '_min']:
-            stats[mode + '_min'] = runtime
-        elif runtime > stats[mode + '_max']:
-            stats[mode + '_max'] = runtime
-
-
-def add_application_stat(application, metric, value=None):
-    # Populate default_sender_metrics at runtime as the applications
-    # we have will likely be changing and we want to incorporate
-    # that without sender bounces or hard coding that dict.
-    stats_key = 'app_%s_%s' % (application, metric)
-    if value:
-        stats[stats_key] = value
-        if stats_key not in default_sender_metrics:
-            default_sender_metrics[stats_key] = 0
-        return
-
-    try:
-        stats[stats_key] += 1
-    except KeyError:
-        default_sender_metrics[stats_key] = 0
-        stats[stats_key] = 1
 
 
 def set_target_fallback_mode(message):
@@ -852,7 +815,11 @@ def distributed_send_message(message):
 
     runtime = send_message(message)
     add_mode_stat(message['mode'], runtime)
-    add_application_stat(message['application'], 'mode_%s_cnt' % message['mode'])
+
+    metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
+    metrics.add_new_metrics({metrics_key: 0})
+    metrics.incr(metrics_key)
+
     if runtime is not None:
         return True
 
@@ -897,7 +864,11 @@ def fetch_and_send_message():
             render(message)
             mark_message_as_sent(message)
         add_mode_stat('drop', 0)
-        add_application_stat(message['application'], 'mode_drop_cnt')
+
+        metrics_key = 'app_%(application)s_mode_drop_cnt' % message
+        metrics.add_new_metrics({metrics_key: 0})
+        metrics.incr(metrics_key)
+
         return
 
     render(message)
@@ -908,7 +879,7 @@ def fetch_and_send_message():
         logger.exception('Failed to send message: %s', message)
         if message['mode'] == 'email':
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-            stats['task_failure'] += 1
+            metrics.incr('task_failure')
         else:
             logger.error('reclassifying as email %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
             old_mode = message['mode']
@@ -922,10 +893,10 @@ def fetch_and_send_message():
                 success = distributed_send_message(message)
             # nope - log and bail
             except Exception:
-                stats['task_failure'] += 1
+                metrics.incr('task_failure')
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
     if success:
-        stats['message_send_cnt'] += 1
+        metrics.incr('message_send_cnt')
         if message['message_id']:
             mark_message_as_sent(message)
 
@@ -948,8 +919,8 @@ def gwatch_renewer():
         except KeyError:
             logger.exception('[*] gmail watcher run failed. Skipping this run.')
         else:
-            stats['gmail_history_id'] = history_id
-            stats['gmail_seconds_to_watch_expiration'] = expiration
+            metrics.set('gmail_history_id', history_id)
+            metrics.set('gmail_seconds_to_watch_expiration', expiration)
             logger.info('[*] gmail watcher loop finished')
 
         # only renew every 8 hours
@@ -978,7 +949,7 @@ def mock_gwatch_renewer():
 def init_sender(config):
     db.init(config)
     cache.init(config)
-    init_metrics(config, 'iris-sender', default_sender_metrics)
+    metrics.init(config, 'iris-sender', default_sender_metrics)
     api_cache.cache_priorities()
     api_cache.cache_applications()
     api_cache.cache_modes()
@@ -1000,7 +971,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'), add_application_stat)
+    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
 
 
 def main():
@@ -1027,8 +998,7 @@ def main():
             spawn(gwatch_renewer)
         spawn(prune_old_audit_logs_worker)
 
-    rpc.init(config['sender'], dict(send_message=send_message, add_mode_stat=add_mode_stat,
-                                    add_application_stat=add_application_stat))
+    rpc.init(config['sender'], dict(send_message=send_message))
     rpc.run(config['sender'])
 
     interval = 60
@@ -1047,24 +1017,24 @@ def main():
                 poll()
                 aggregate(runtime)
             except Exception:
-                stats['task_failure'] += 1
+                metrics.incr('task_failure')
                 logger.exception("Exception occured in main loop.")
 
         # check status for all background greenlets and respawn if necessary
         if not bool(send_task):
             logger.error("send task failed, %s", send_task.exception)
-            stats['task_failure'] += 1
+            metrics.incr('task_failure')
             send_task = spawn(send)
         bad_workers = []
         for i, task in enumerate(worker_tasks):
             if not bool(task):
                 logger.error("worker task failed, %s", task.exception)
-                stats['task_failure'] += 1
+                metrics.incr('task_failure')
                 bad_workers.append(i)
         for i in bad_workers:
             worker_tasks[i] = spawn(worker)
 
-        spawn(emit_metrics)
+        spawn(metrics.emit)
 
         now = time.time()
         elapsed_time = now - runtime
