@@ -416,8 +416,8 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
 
     re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
     assert re.status_code == 200
-    assert re.json()['app_response'] in ('Iris Incidents claimed: %s, %s' % (incident_id_1, incident_id_2),
-                                         'Iris Incidents claimed: %s, %s' % (incident_id_2, incident_id_1))
+    assert re.json()['app_response'] in ('Iris Incidents claimed (2): %s, %s' % (incident_id_1, incident_id_2),
+                                         'Iris Incidents claimed (2): %s, %s' % (incident_id_2, incident_id_1))
 
     re = requests.get(base_url + 'incidents/%s' % incident_id_1)
     assert re.status_code == 200
@@ -471,8 +471,8 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     # Response will be two lines, one for each application and its claimed incidents
     re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
     assert re.status_code == 200
-    assert set(re.json()['app_response'].splitlines()) == {'%s: Iris Incidents claimed: %s' % (sample_application_name, incident_id_1),
-                                                           '%s: Iris Incidents claimed: %s' % (sample_application_name2, incident_id_2)}
+    assert set(re.json()['app_response'].splitlines()) == {'%s: Iris Incidents claimed (1): %s' % (sample_application_name, incident_id_1),
+                                                           '%s: Iris Incidents claimed (1): %s' % (sample_application_name2, incident_id_2)}
 
     re = requests.get(base_url + 'incidents/%s' % incident_id_1)
     assert re.status_code == 200

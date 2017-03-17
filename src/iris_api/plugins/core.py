@@ -93,9 +93,9 @@ class IrisPlugin(object):
 
         msg = []
         if claimed:
-            msg.append('Iris Incidents claimed: %s' % ', '.join(map(str, claimed)))
+            msg.append('Iris Incidents claimed (%s): %s' % (len(claimed), ', '.join(map(str, claimed))))
         if not_claimed:
-            msg.append('Iris Incidents failed to claim: %s' % ', '.join(map(str, not_claimed)))
+            msg.append('Iris Incidents failed to claim (%s): %s' % (len(not_claimed), ', '.join(map(str, not_claimed))))
 
         if msg:
             return '\n'.join(msg)
