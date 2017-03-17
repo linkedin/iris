@@ -2097,7 +2097,7 @@ class ResponseGmail(ResponseMixin):
             raise HTTPBadRequest('Missing source', msg)
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
-        source = source.split(' ')[-1].strip('<>'),
+        source = source.split(' ')[-1].strip('<>')
         content = gmail_params['body'].strip()
 
         # Some people want to use emails to create iris incidents. Facilitate this.
@@ -2111,7 +2111,7 @@ class ResponseGmail(ResponseMixin):
                 'application_id': email_check_result['application_id'],
                 'created': datetime.datetime.utcnow(),
                 'plan_id': email_check_result['plan_id'],
-                'context': ujson.dumps({'body': content})
+                'context': ujson.dumps({'body': content, 'email': source})
             }
             incident_id = session.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
                                              VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''', incident_info).lastrowid
