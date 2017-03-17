@@ -2426,11 +2426,16 @@ class Stats(object):
 
         stats = {}
 
+        fields_filter = req.get_param_as_list('fields')
+        fields = queries.viewkeys()
+        if fields_filter:
+            fields &= set(fields_filter)
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
-        for key, query in queries.iteritems():
+        for key in fields:
             start = time.time()
-            cursor.execute(query)
+            cursor.execute(queries[key])
             result = cursor.fetchone()
             if result:
                 result = result[-1]
@@ -2528,11 +2533,16 @@ class ApplicationStats(object):
 
         stats = {}
 
+        fields_filter = req.get_param_as_list('fields')
+        fields = queries.viewkeys()
+        if fields_filter:
+            fields &= set(fields_filter)
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
-        for key, query in queries.iteritems():
+        for key in fields:
             start = time.time()
-            cursor.execute(query, query_data)
+            cursor.execute(queries[key], query_data)
             result = cursor.fetchone()
             if result:
                 result = result[-1]
