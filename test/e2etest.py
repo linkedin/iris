@@ -1666,6 +1666,14 @@ def test_stats():
         assert key in data
         assert isinstance(data[key], int) or isinstance(data[key], float)
 
+    re = requests.get(base_url + 'stats?fields=total_active_users&fields=total_plans')
+    assert re.status_code == 200
+    assert re.json().viewkeys() == {'total_active_users', 'total_plans'}
+
+    re = requests.get(base_url + 'stats?fields=fakefield')
+    assert re.status_code == 200
+    assert re.json() == {}
+
 
 def test_app_stats(sample_application_name):
     re = requests.get(base_url + 'applications/sfsdf232423fakeappname/stats')
@@ -1679,6 +1687,14 @@ def test_app_stats(sample_application_name):
                 'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month'):
         assert key in data
         assert isinstance(data[key], int) or isinstance(data[key], float)
+
+    re = requests.get(base_url + 'applications/%s/stats?fields=total_messages_sent_today&fields=total_incidents_today' % sample_application_name)
+    assert re.status_code == 200
+    assert re.json().viewkeys() == {'total_messages_sent_today', 'total_incidents_today'}
+
+    re = requests.get(base_url + 'applications/%s/stats?fields=fakefield' % sample_application_name)
+    assert re.status_code == 200
+    assert re.json() == {}
 
 
 def test_post_notification(sample_user, sample_application_name):
