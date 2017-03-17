@@ -2105,7 +2105,8 @@ class ResponseGmail(ResponseMixin):
         email_check_result = session.execute('''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
                                                 FROM `incident_emails`
                                                 JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                                                WHERE `email` = :email''', {'email': source}).fetchone()
+                                                WHERE `email` = :email
+                                                AND `email` NOT IN (SELECT `destination` FROM `target_contact` WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email'))''', {'email': source}).fetchone()
         if email_check_result:
             incident_info = {
                 'application_id': email_check_result['application_id'],
