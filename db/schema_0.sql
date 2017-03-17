@@ -631,6 +631,22 @@ CREATE TABLE `twilio_delivery_status` (
   CONSTRAINT `twilio_delivery_status_message_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `incident_emails`
+--
+
+DROP TABLE IF EXISTS `incident_emails`;
+CREATE TABLE `incident_emails` (
+  `email` varchar(255) NOT NULL,
+  `application_id` int(11) NOT NULL,
+  `plan_name` varchar(255) NOT NULL,
+  PRIMARY KEY (`email`),
+  KEY `incident_emails_plan_name_fk_idx` (`plan_name`),
+  KEY `incident_emails_application_id_fk_idx` (`application_id`),
+  CONSTRAINT `incident_emails_application_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `incident_emails_plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

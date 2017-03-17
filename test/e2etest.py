@@ -1869,6 +1869,40 @@ def test_twilio_delivery_update(fake_message_id):
     assert re.json()['twilio_delivery_status'] == 'delivered'
 
 
+def test_create_incident_by_email(sample_application_name, sample_plan_name):
+    if not sample_application_name or not sample_plan_name:
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    email = 'irisfoobar@fakeemail.com'
+
+    # Ensure this email is configured properly.
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
+                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
+                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
+                       {'email': email, 'application_name': sample_application_name, 'plan_name': sample_plan_name})
+        conn.commit()
+
+    email_make_incident_payload = {
+        'body': 'This is a new test incident with a test message to be delivered to people.',
+        'headers': [
+            {'name': 'From', 'value': email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+
+    re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
+    assert re.status_code == 204
+    assert re.headers['X-IRIS-INCIDENT']
+
+    re = requests.get(base_url + 'incidents/%s' % re.headers['X-IRIS-INCIDENT'])
+    assert re.status_code == 200
+    data = re.json()
+    assert data['context']['body'] == email_make_incident_payload['body']
+    assert data['application'] == sample_application_name
+    assert data['plan'] == sample_plan_name
+
+
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):

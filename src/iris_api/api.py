@@ -2098,10 +2098,33 @@ class ResponseGmail(ResponseMixin):
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
         source = source.split(' ')[-1].strip('<>'),
+        content = gmail_params['body'].strip()
+
+        # Some people want to use emails to create iris incidents. Facilitate this.
+        session = db.Session()
+        email_check_result = session.execute('''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                                                FROM `incident_emails`
+                                                JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
+                                                WHERE `email` = :email''', {'email': source}).fetchone()
+        if email_check_result:
+            incident_info = {
+                'application_id': email_check_result['application_id'],
+                'created': datetime.datetime.utcnow(),
+                'plan_id': email_check_result['plan_id'],
+                'context': ujson.dumps({'body': content})
+            }
+            incident_id = session.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+                                             VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''', incident_info).lastrowid
+            session.commit()
+            session.close()
+            resp.status = HTTP_204
+            resp.set_header('X-IRIS-INCIDENT', incident_id)  # Pass the new incident id back through a header so we can test this
+            return
+
+        session.close()
 
         # only parse first line of email content for now
-        content = gmail_params['body']
-        first_line = content.strip().split('\n', 1)[0].strip()
+        first_line = content.split('\n', 1)[0].strip()
         try:
             msg_id, cmd = utils.parse_email_response(first_line, subject, source)
         except (ValueError, IndexError):
