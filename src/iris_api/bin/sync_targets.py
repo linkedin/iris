@@ -28,7 +28,6 @@ logging.getLogger('requests').setLevel(logging.WARNING)
 
 
 stats_reset = {
-    'ldap_found': 0,
     'sql_errors': 0,
     'users_added': 0,
     'users_failed_to_add': 0,
@@ -318,6 +317,10 @@ def main():
 
     engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
                            **config['db']['kwargs'])
+
+    # Initialize this to zero at the start of the app, and don't reset it at every
+    # metrics interval
+    metrics.set('ldap_found', 0)
 
     metrics_task = spawn(metrics.emit_forever)
 
