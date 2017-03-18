@@ -62,6 +62,7 @@ CREATE TABLE `incident` (
   KEY `ix_incident_owner_id` (`owner_id`),
   KEY `ix_incident_active` (`active`),
   KEY `ix_incident_application_id` (`application_id`),
+  KEY `ix_incident_created` (`created`),
   CONSTRAINT `incident_ibfk_1` FOREIGN KEY (`plan_id`) REFERENCES `plan` (`id`),
   CONSTRAINT `incident_ibfk_2` FOREIGN KEY (`owner_id`) REFERENCES `user` (`target_id`),
   CONSTRAINT `incident_ibfk_3` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
@@ -95,6 +96,7 @@ CREATE TABLE `message` (
   PRIMARY KEY (`id`),
   KEY `plan_id` (`plan_id`),
   KEY `ix_message_sent` (`sent`),
+  KEY `ix_message_created` (`created`),
   KEY `ix_message_incident_id` (`incident_id`),
   KEY `ix_message_plan_notification_id` (`plan_notification_id`),
   KEY `ix_message_priority_id` (`priority_id`),
@@ -170,6 +172,7 @@ CREATE TABLE `plan` (
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
   KEY `team_id` (`team_id`),
+  KEY `ix_plan_created` (`created`),
   CONSTRAINT `plan_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`),
   CONSTRAINT `plan_ibfk_2` FOREIGN KEY (`team_id`) REFERENCES `team` (`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -255,6 +258,7 @@ CREATE TABLE `response` (
   `source` varchar(255) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_response_message_id` (`message_id`),
+  KEY `ix_response_created` (`created`),
   CONSTRAINT `response_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -453,6 +457,7 @@ CREATE TABLE `template` (
   PRIMARY KEY (`id`),
   KEY `ix_template_name` (`name`),
   KEY `ix_template_user_id` (`user_id`),
+  KEY `ix_template_created` (`created`),
   CONSTRAINT `template_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
