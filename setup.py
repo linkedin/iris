@@ -13,7 +13,6 @@ setuptools.setup(
         'streql==3.0.2',
         'dnspython==1.14.0',
         'phonenumbers==7.4.1',
-        'python-ldap==2.4.9',
         'twilio==4.5.0',
         'google-api-python-client==1.4.2',
         'oauth2client==1.4.12',

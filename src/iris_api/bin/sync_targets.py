@@ -10,11 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 import requests
-import ldap
 from phonenumbers import format_number, parse, PhoneNumberFormat
 from phonenumbers.phonenumberutil import NumberParseException
 
-from ldap.controls import SimplePagedResultsControl
 from iris_api.api import load_config_file
 from iris_api import metrics
 
@@ -63,7 +61,7 @@ def get_predefined_users(config):
 
     for user in config_users:
         users[user['name']] = user
-        for key in ['sms', 'call']:
+        for key in ('sms', 'call'):
             try:
                 users[user['name']][key] = normalize_phone_number(users[user['name']][key])
             except (NumberParseException, KeyError, AttributeError):
@@ -90,92 +88,53 @@ def prune_user(engine, username):
         metrics.incr('sql_errors')
 
 
-def fetch_ldap(config):
+def fetch_teams(oncall_base_url):
+    try:
+        return requests.get('%s/api/v0/teams?fields=name' % oncall_base_url).json()
+    except (ValueError, requests.exceptions.RequestException):
+        logger.exception('Failed hitting oncall endpoint to fetch list of team names')
+        return []
 
-    ldap_config = config['ldap']
 
-    # Some ldap settings are global and need to be set before we initialize
-    global_ldap_keys = set([ldap.OPT_X_TLS_REQUIRE_CERT])
-    for key in global_ldap_keys:
-        if key in ldap_config['options']:
-            ldap.set_option(key, ldap_config['options'][key])
-
-    l = ldap.initialize(ldap_config['url'])
-
-    for key in ldap_config['options'].viewkeys() - global_ldap_keys:
-        l.set_option(key, ldap_config['options'][key])
-
-    l.simple_bind_s(ldap_config['user'], ldap_config['pass'])
-
-    req_ctrl = SimplePagedResultsControl(True, size=1000, cookie='')
-
-    known_ldap_resp_ctrls = {
-        SimplePagedResultsControl.controlType: SimplePagedResultsControl,
-    }
-
-    dn_map = {}
-    users = {}
-
-    while True:
-        msgid = l.search_ext(ldap_config['search_base'],
-                             ldap.SCOPE_SUBTREE,
-                             ldap_config['search_query'],
-                             ldap_config['search_attrs'],
-                             serverctrls=[req_ctrl])
-        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, resp_ctrl_classes=known_ldap_resp_ctrls)
-        logger.info('Loaded %d entries from ldap.' % len(rdata))
-        for dn, ldap_dict in rdata:
-            if 'mail' not in ldap_dict:
-                logger.error('ERROR: invalid ldap entry for dn: %s' % dn)
-                continue
-
-            name = ldap_dict['sAMAccountName'][0]
-
-            mobile = ldap_dict.get('mobile')
-            mail = ldap_dict.get('mail')
-            manager = ldap_dict.get('manager')
-
-            if mobile:
-                try:
-                    mobile = normalize_phone_number(mobile[0])
-                except NumberParseException:
-                    mobile = None
-
-            if mail:
-                mail = mail[0]
-                slack = mail.split('@')[0]
-
-            if manager:
-                manager = manager[0]
-
-            contacts = {'call': mobile, 'sms': mobile, 'email': mail,
-                        'slack': slack, 'manager': manager}
-            dn_map[dn] = name
-            users[name] = contacts
-
-        pctrls = [c for c in serverctrls
-                  if c.controlType == SimplePagedResultsControl.controlType]
-
-        cookie = pctrls[0].cookie
-        if not cookie:
-            break
-        req_ctrl.cookie = cookie
-
-    for user in users:
-        if not users[user]['manager']:
-            logger.debug('%s does not have a manager' % user)
-            continue
+def fetch_users(oncall_base_url):
+    def fix_contacts(contacts):
         try:
-            users[user]['manager'] = dn_map[users[user]['manager']]
+            contacts['slack'] = contacts.pop('im')
         except KeyError:
-            logger.warning('Cannot resolve full name for %s\'s manager' % user)
+            pass
+        return contacts
 
-    return users
+    try:
+        return {user['name']: fix_contacts(user['contacts']) for user in requests.get('%s/api/v0/users?fields=name&fields=contacts' % oncall_base_url).json()}
+    except (ValueError, KeyError, requests.exceptions.RequestException):
+        logger.exception('Failed hitting oncall endpoint to fetch list of users')
+        return {}
 
 
 def sync(config, engine, purge_old_users=True):
+    # users and teams present in our oncall database
+    oncall_base_url = config.get('oncall-api')
+
+    if not oncall_base_url:
+        logger.error('Missing URL to oncall-api, which we use for user/team lookups. Bailing.')
+        return
+
+    oncall_users = fetch_users(oncall_base_url)
+
+    if not oncall_users:
+        logger.warning('No users found. Bailing.')
+        return
+
+    oncall_team_names = fetch_teams(oncall_base_url)
+
+    if not oncall_team_names:
+        logger.warning('We do not have a list of team names')
+
+    oncall_team_names = set(oncall_team_names)
+
     session = sessionmaker(bind=engine)()
-    # iris
+
+    # users present in iris' database
     iris_users = {}
     for row in engine.execute('''SELECT `target`.`name` as `name`, `mode`.`name` as `mode`,
                                         `target_contact`.`destination`
@@ -192,32 +151,17 @@ def sync(config, engine, purge_old_users=True):
 
     iris_usernames = iris_users.viewkeys()
 
-    # oncall
-    oncall_base_url = config.get('oncall-api')
-    oncall_team_names = []
-    if oncall_base_url:
-        try:
-            re = requests.get('%s/api/v0/teams?fields=name' % oncall_base_url)
-            oncall_team_names = re.json()
-        except (ValueError, requests.exceptions.RequestException):
-            logger.exception('Failed hitting oncall endpoint to fetch list of team names')
+    # users from the oncall endpoints and config files
+    metrics.set('users_found', len(oncall_users))
+    metrics.set('teams_found', len(oncall_team_names))
+    oncall_users.update(get_predefined_users(config))
+    oncall_usernames = oncall_users.viewkeys()
 
-    if not oncall_team_names:
-        logger.error('We do not have a list of team names')
-
-    oncall_team_names = set(oncall_team_names)
-
-    # users from ldap and config file
-    ldap_users = fetch_ldap(config)
-    metrics.set('ldap_found', len(ldap_users))
-    ldap_users.update(get_predefined_users(config))
-    ldap_usernames = ldap_users.viewkeys()
-
-    # set of ldap users not in iris
-    users_to_insert = ldap_usernames - iris_usernames
-    # set of existing iris users that are in ldap
-    users_to_update = iris_usernames & ldap_usernames
-    users_to_mark_inactive = iris_usernames - ldap_usernames
+    # set of users not presently in iris
+    users_to_insert = oncall_usernames - iris_usernames
+    # set of existing iris users that are in the user oncall database
+    users_to_update = iris_usernames & oncall_usernames
+    users_to_mark_inactive = iris_usernames - oncall_usernames
 
     # get objects needed for insertion
     target_types = {name: id for name, id in session.execute('SELECT `name`, `id` FROM `target_type`')}  # 'team' and 'user'
@@ -243,7 +187,7 @@ def sync(config, engine, purge_old_users=True):
             logger.exception('Failed to add user %s' % username)
             continue
         metrics.incr('users_added')
-        for key, value in ldap_users[username].iteritems():
+        for key, value in oncall_users[username].iteritems():
             if value and key in modes:
                 logger.info('%s: %s -> %s' % (username, key, value))
                 engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
@@ -257,18 +201,18 @@ def sync(config, engine, purge_old_users=True):
     for username in users_to_update:
         try:
             db_contacts = iris_users[username]
-            ldap_contacts = ldap_users[username]
+            oncall_contacts = oncall_users[username]
             for mode in modes:
-                if mode in ldap_contacts and ldap_contacts[mode]:
+                if mode in oncall_contacts and oncall_contacts[mode]:
                     if mode in db_contacts:
-                        if ldap_contacts[mode] != db_contacts[mode]:
+                        if oncall_contacts[mode] != db_contacts[mode]:
                             logger.info('%s: updating %s' % (username, mode))
                             metrics.incr('user_contacts_updated')
-                            engine.execute(contact_update_sql, (ldap_contacts[mode], username, modes[mode]))
+                            engine.execute(contact_update_sql, (oncall_contacts[mode], username, modes[mode]))
                     else:
                         logger.info('%s: adding %s' % (username, mode))
                         metrics.incr('user_contacts_updated')
-                        engine.execute(contact_insert_sql, (username, modes[mode], ldap_contacts[mode]))
+                        engine.execute(contact_insert_sql, (username, modes[mode], oncall_contacts[mode]))
                 elif mode in db_contacts:
                     logger.info('%s: deleting %s' % (username, mode))
                     metrics.incr('user_contacts_updated')
@@ -318,9 +262,10 @@ def main():
     engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
                            **config['db']['kwargs'])
 
-    # Initialize this to zero at the start of the app, and don't reset it at every
+    # Initialize these to zero at the start of the app, and don't reset them at every
     # metrics interval
-    metrics.set('ldap_found', 0)
+    metrics.set('users_found', 0)
+    metrics.set('teams_found', 0)
 
     metrics_task = spawn(metrics.emit_forever)
 
