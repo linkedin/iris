@@ -1664,7 +1664,7 @@ def test_stats():
     for key in ('total_active_users', 'total_messages_sent_today', 'total_incidents_today', 'total_messages_sent',
                 'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month'):
         assert key in data
-        assert isinstance(data[key], int) or isinstance(data[key], float)
+        assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
     re = requests.get(base_url + 'stats?fields=total_active_users&fields=total_plans')
     assert re.status_code == 200
@@ -1685,9 +1685,9 @@ def test_app_stats(sample_application_name):
     for key in ('total_incidents_today', 'total_messages_sent_today',
                 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
                 'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month',
-                'total_incidents_last_month', 'total_messages_sent_last_month'):
-        assert key in data
-        assert isinstance(data[key], int) or isinstance(data[key], float)
+                'total_incidents_last_month', 'total_messages_sent_last_month',
+                'pct_failed_twilio_call_last_month'):
+        assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
     re = requests.get(base_url + 'applications/%s/stats?fields=total_messages_sent_today&fields=total_incidents_today' % sample_application_name)
     assert re.status_code == 200

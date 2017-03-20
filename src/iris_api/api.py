@@ -2440,10 +2440,8 @@ class Stats(object):
             result = cursor.fetchone()
             if result:
                 result = result[-1]
-                if not result:
-                    result = 0
             else:
-                result = 0
+                result = None
             logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
             stats[key] = result
         cursor.close()
@@ -2501,7 +2499,7 @@ class ApplicationStats(object):
             'pct_successful_twilio_sms_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
                                                                      JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
                                                                      JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                     WHERE `twilio_delivery_status`.`status` = 'delivered'
+                                                                     WHERE `twilio_delivery_status`.`status` IN ('delivered', 'sent')
                                                                            AND `mode`.`name` = 'sms'
                                                                            AND `message`.`application_id` = %(application_id)s
                                                                            AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
@@ -2530,6 +2528,22 @@ class ApplicationStats(object):
                                                                             AND `message`.`application_id` = %(application_id)s
                                                                             AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                             AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
+            'pct_failed_twilio_call_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
+                                                                  JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                  JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                  WHERE `twilio_delivery_status`.`status` = 'failed'
+                                                                        AND `mode`.`name` = 'call'
+                                                                        AND `message`.`application_id` = %(application_id)s
+                                                                        AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                        AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
+                                                                 (SELECT count(*) FROM `message`
+                                                                  JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                                                                  JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                  WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
+                                                                        AND `mode`.`name` = 'call'
+                                                                        AND `message`.`application_id` = %(application_id)s
+                                                                        AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                        AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
         }
 
         query_data = {'application_id': app['id']}
@@ -2549,10 +2563,8 @@ class ApplicationStats(object):
             result = cursor.fetchone()
             if result:
                 result = result[-1]
-                if not result:
-                    result = 0
             else:
-                result = 0
+                result = None
             logger.info('App Stats (%s) query %s took %s seconds', app['name'], key, round(time.time() - start, 2))
             stats[key] = result
         cursor.close()
