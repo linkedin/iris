@@ -2464,6 +2464,8 @@ class ApplicationStats(object):
         queries = {
             'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE() AND `application_id` = %(application_id)s',
+            'total_incidents_last_month': 'SELECT COUNT(*) FROM `incident` WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY) AND `created` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
+            'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
             'pct_incidents_claimed_last_month': '''SELECT ROUND(
                                                    (SELECT COUNT(*) FROM `incident`
                                                     WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
