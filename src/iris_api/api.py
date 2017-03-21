@@ -58,6 +58,17 @@ operators = {
     'endswith': '%s LIKE CONCAT("%%%%", %s)',
 }
 
+
+def ts_to_sql_datetime(ts):
+    return 'FROM_UNIXTIME(%s)' % ts
+
+
+filter_escaped_value_transforms = {
+    'updated': ts_to_sql_datetime,
+    'created': ts_to_sql_datetime,
+    'sent': ts_to_sql_datetime,
+}
+
 message_columns = {
     'id': '`message`.`id` as `id`',
     'active': '`message`.`active` as `active`',
@@ -80,8 +91,8 @@ message_filters = {
     'id': '`message`.`id`',
     'active': '`message`.`active`',
     'batch': '`message`.`batch`',
-    'created': 'UNIX_TIMESTAMP(`message`.`created`)',
-    'sent': 'UNIX_TIMESTAMP(`message`.`sent`)',
+    'created': '`message`.`created`',
+    'sent': '`message`.`sent`',
     'destination': '`message`.`destination`',
     'subject': '`message`.`subject`',
     'incident_id': '`message`.`incident_id`',
@@ -91,6 +102,7 @@ message_filters = {
     'target': '`target`.`name`',
     'body': '`message`.`body`',
 }
+
 
 message_filter_types = {
     'id': int,
@@ -149,10 +161,10 @@ incident_filters = {
     'plan': '`plan`.`name`',
     'plan_id': '`incident`.`plan_id`',
     'active': '`incident`.`active`',
-    'updated': 'UNIX_TIMESTAMP(`incident`.`updated`)',
+    'updated': '`incident`.`updated`',
     'application': '`application`.`name`',
     'context': '`incident`.`context`',
-    'created': 'UNIX_TIMESTAMP(`incident`.`created`)',
+    'created': '`incident`.`created`',
     'owner': '`target`.`name`',
     'current_step': '`incident`.`current_step`',
 }
@@ -166,9 +178,9 @@ incident_filter_types = {
 }
 
 incident_query = '''SELECT %s FROM `incident`
- JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
- LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
- JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
+JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
+LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
+JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
 
 single_incident_query = '''SELECT `incident`.`id` as `id`,
     `incident`.`plan_id` as `plan_id`,
@@ -227,7 +239,7 @@ plan_filters = {
     'aggregation_window': '`plan`.`aggregation_window`',
     'aggregation_reset': '`plan`.`aggregation_reset`',
     'description': '`plan`.`description`',
-    'created': 'UNIX_TIMESTAMP(`plan`.`created`)',
+    'created': '`plan`.`created`',
     'creator': '`target`.`name`',
     'active': '`plan_active`.`plan_id`',
 }
@@ -281,7 +293,7 @@ template_filters = {
     'id': '`template`.`id`',
     'name': '`template`.`name`',
     'creator': '`target`.`name`',
-    'created': 'UNIX_TIMESTAMP(`template`.`created`)',
+    'created': '`template`.`created`',
     'active': '`template_active`.`template_id`',
 }
 
@@ -544,6 +556,13 @@ def is_valid_tracking_settings(t, k, tpl):
 
 
 def gen_where_filter_clause(connection, filters, filter_types, kwargs):
+    '''
+    How each where clauses are generated:
+        1. find out column part through filters[col]
+        2. find out operator part through operators[op]
+        3. escape value through connection.escape(filter_types.get(col, str)(value))
+        4. (optional) transform escaped value through filter_escaped_value_transforms[col](value)
+    '''
     where = []
     for key, values in kwargs.iteritems():
         col, _, op = key.partition('__')
@@ -561,7 +580,10 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
                     val = tuple([col_type(v) for v in values])
             else:
                 val = col_type(val)
-            where.append(operators[op] % (filters[col], connection.escape(val)))
+            val = connection.escape(val)
+            if col in filter_escaped_value_transforms:
+                val = filter_escaped_value_transforms[col](val)
+            where.append(operators[op] % (filters[col], val))
     return where
 
 
