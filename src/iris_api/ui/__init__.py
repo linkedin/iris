@@ -49,6 +49,13 @@ def hms(seconds):
 jinja2_env.filters['hms'] = hms
 
 
+def login_url(req):
+    if req.path and req.path != '/login' and req.path != '/':
+        return '/login/?next=%s' % uri.encode_value(req.path)
+    else:
+        return '/login/'
+
+
 # In many cases, these routes need window.appData populated with various bits of data which
 # are only retrievable by going through the API itself. Forge a request locally and keep the
 # beaker cookies so the current user can be authenticated. This will go away once each page

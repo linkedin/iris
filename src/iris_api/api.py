@@ -637,7 +637,7 @@ class AuthMiddleware(object):
         # If this is a frontend route and we're not loggedin as a user, redirect to
         # login page
         if getattr(resource, 'frontend_route', False) and req.path != '/login':
-            raise HTTPFound('/login')
+            raise HTTPFound(ui.login_url(req))
 
         # Proceed with authenticating this route as a third party application
         try:
@@ -665,7 +665,7 @@ class AuthMiddleware(object):
         # If this is a frontend route and we're not loggedin as a user, redirect to
         # login page
         if getattr(resource, 'frontend_route', False) and req.path != '/login':
-            raise HTTPFound('/login')
+            raise HTTPFound(ui.login_url(req))
 
         # Proceed with authenticating this route as a third party application, and enforce
         # hmac for the entire request, and still allow the username-by-header functionality
