@@ -16,7 +16,9 @@ from beaker.middleware import SessionMiddleware
 
 logger = logging.getLogger(__name__)
 
-ui_root = os.path.abspath(os.path.dirname(__file__))
+ui_root = os.environ.get('STATIC_ROOT', os.path.abspath(os.path.dirname(__file__)))
+
+
 assets_env = AssetsEnvironment(os.path.join(ui_root, 'static'), url='/static')
 
 assets_env.register('jquery_libs', Bundle('js/jquery-2.1.4.min.js', 'js/jquery.dataTables.min.js',
@@ -138,7 +140,8 @@ class Incidents(object):
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('incidents.html').render(request=req, applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('incidents.html').render(request=req,
+                                                                     applications=get_local(req, 'applications'))
 
 
 class Incident(object):
@@ -171,7 +174,8 @@ class Message(object):
 
     def on_get(self, req, resp, message):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('message.html').render(request=req, applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('message.html').render(request=req,
+                                                                   applications=get_local(req, 'applications'))
 
 
 class Templates(object):
@@ -180,7 +184,9 @@ class Templates(object):
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('templates.html').render(request=req, modes=get_local(req, 'modes'), applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('templates.html').render(request=req,
+                                                                     modes=get_local(req, 'modes'),
+                                                                     applications=get_local(req, 'applications'))
 
 
 class Template(object):
@@ -189,7 +195,9 @@ class Template(object):
 
     def on_get(self, req, resp, template):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('template.html').render(request=req, modes=get_local(req, 'modes'), applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('template.html').render(request=req,
+                                                                    modes=get_local(req, 'modes'),
+                                                                    applications=get_local(req, 'applications'))
 
 
 class Applications(object):
@@ -198,7 +206,8 @@ class Applications(object):
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('applications.html').render(request=req, applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('applications.html').render(request=req,
+                                                                        applications=get_local(req, 'applications'))
 
 
 class Application(object):
@@ -207,7 +216,8 @@ class Application(object):
 
     def on_get(self, req, resp, application):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('application.html').render(request=req, applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('application.html').render(request=req,
+                                                                       applications=get_local(req, 'applications'))
 
 
 class Login():
@@ -329,6 +339,7 @@ class JinjaValidate():
 def init(config, app):
     global auth_manager
 
+    logger.info('Web asset root: "%s"', ui_root)
     auth_module = config.get('auth', {'module': 'iris_api.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
