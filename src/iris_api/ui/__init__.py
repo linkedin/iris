@@ -229,6 +229,7 @@ class Application(object):
 
 class Login():
     allow_read_only = True
+    frontend_route = True
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
