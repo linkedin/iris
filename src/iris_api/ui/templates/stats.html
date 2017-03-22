@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="main stats">
+  <h3>Stats</h3>
+  <div class="module stats-module col-md-12 col-sm-12 col-xs-12">
+    <table id="stats-table" class="dataTable">
+    </table>
+  </div>
+</div>
+
+{% raw %}
+<script id="stats-table-template" type="text/x-handlebars-template">
+  <tbody>
+    {{#each .}}
+          <tr>
+             <th>{{@key}}</th>
+             <td>{{this}}</td>
+          </tr>
+    {{/each}}
+  </tbody>
+</script>
+{% endraw %}
+
+{% endblock %}

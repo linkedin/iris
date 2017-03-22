@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main login floating-module">
+  <div class="module">
+    <div class="logo-wrapper">
+      <img id="logo" src="/static/images/iris.png" height="70px" width="70px">
+      <p>Iris</p>
+    </div>
+    <form method="POST">
+      <input class="form-control border-bottom" name="username" type="text" placeholder="Username" autofocus>
+      <input class="form-control border-bottom" name="password" type="password" placeholder="Password">
+      <button class="form-control btn btn-primary">login</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

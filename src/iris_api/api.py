@@ -16,7 +16,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
-from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, API
+from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, API
 from sqlalchemy.exc import IntegrityError
 from importlib import import_module
 import yaml
@@ -28,6 +28,7 @@ from streql import equals
 from . import db
 from . import utils
 from . import cache
+from . import ui
 from iris_api.sender import auditlog
 from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                    required_quota_keys, quota_int_keys)
@@ -593,7 +594,30 @@ class AuthMiddleware(object):
             self.process_resource = self.debug_auth
 
     def debug_auth(self, req, resp, resource, params):
-        req.context['username'] = req.get_header('X-IRIS-USERNAME')
+
+        # For the purpose of e2etests, allow setting username via header, rather than going
+        # through beaker
+        username_header = req.get_header('X-IRIS-USERNAME')
+        if username_header:
+            req.context['username'] = username_header
+            return
+
+        # If we're authenticated using beaker, don't validate app as if this is an
+        # API call, but set 'app' to the internal iris user as some routes need it.
+        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
+        if req.context['username']:
+            req.context['app'] = cache.applications.get('iris')
+            return
+
+        if resource.allow_read_only and req.method == 'GET':
+            return
+
+        # If this is a frontend route and we're not loggedin as a user, redirect to
+        # login page
+        if getattr(resource, 'frontend_route', False) and req.path != '/login':
+            raise HTTPFound('/login')
+
+        # Proceed with authenticating this route as a third party application
         try:
             app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
             if app not in cache.applications:
@@ -604,10 +628,26 @@ class AuthMiddleware(object):
             return
 
     def process_resource(self, req, resp, resource, params):  # pragma: no cover
-        req.context['username'] = None
+        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         method = req.method
+
         if resource.allow_read_only and method == 'GET':
             return
+
+        # If we're authenticated using beaker, don't validate app as if this is an
+        # API call, but set 'app' to the internal iris user as some routes need it.
+        if req.context['username']:
+            req.context['app'] = cache.applications.get('iris')
+            return
+
+        # If this is a frontend route and we're not loggedin as a user, redirect to
+        # login page
+        if getattr(resource, 'frontend_route', False) and req.path != '/login':
+            raise HTTPFound('/login')
+
+        # Proceed with authenticating this route as a third party application, and enforce
+        # hmac for the entire request, and still allow the username-by-header functionality
+        # if we're being hit from an instance of iris-frontend
         path = req.env['PATH_INFO']
         qs = req.env['QUERY_STRING']
         if qs:
@@ -988,7 +1028,7 @@ class Incidents(object):
 
         if 'application' in incident_params:
             if not req.context['app']['allow_other_app_incidents']:
-                raise HTTPForbidden('This application does not allow creating incidents as other applications', '')
+                raise HTTPForbidden('This application %s does not allow creating incidents as other applications' % req.context['app']['name'], '')
 
             app = cache.applications.get(incident_params['application'])
 
@@ -2652,5 +2692,8 @@ def get_api(config):
     app.add_route('/v0/stats', Stats())
 
     app.add_route('/healthcheck', Healthcheck(healthcheck_path))
+
+    # Need to call this after all routes have been created
+    app = ui.init(config, app)
 
     return app

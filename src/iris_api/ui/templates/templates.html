@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main templates">
+  <h3 class="clearfix"><span class="pull-left">Templates</span><a href="/templates/new"><button type="button" class="btn btn-primary btn-sm pull-right" id="create-plan">Create New Template</button></a></h3>
+  <div class="module module-blue clearfix">
+    <form id="filter-form" action="">
+      <div class="row clearfix">
+        <span class="col-md-3 col-sm-3 col-xs-3">
+          <label for="filter-name">Template Name</label>
+          <input class="form-control border-bottom" type="text" placeholder="Filter by name" name="filter-name" id="filter-name" data-param="name__contains">
+        </span>
+        <span class="col-md-3 col-sm-3 col-xs-3">
+          <label for="filter-creator">Creator's Name</label>
+          <input class="form-control border-bottom typeahead" type="text" placeholder="Filter by creator" name="filter-creator" id="filter-creator" data-param="creator__contains">
+        </span>
+        <span class="col-md-6 col-sm-6 col-xs-6 form-inline">
+          <label for="filter-start">Start Date</label>
+          <label for="filter-end">End Date</label>
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="Start Date" name="filter-start" id="filter-start" data-param="created__ge">
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="End Date" name="filter-end" id="filter-end" data-param="created__le">
+          <button class="btn-primary pull-right btn" type="submit" id="filter-templates">Submit</button>
+        </span>
+      </div>
+      <div class="row checkbox">
+        <input type="radio" name="filter-active" id="filter-active" value="active" checked="checked"><label for="filter-active">Active</label>
+        <input type="radio" name="filter-active" id="filter-inactive" value="inactive"><label for="filter-inactive">Inactive</label>
+        <input type="radio" name="filter-active" id="filter-all" value="all"><label for="filter-all">All</label>
+      </div>
+    </form>
+  </div>
+  <div class="module">
+    <table class="display" id="templates-table" width="100%">
+      <!-- Templates table renders here -->
+      <tr>
+        <td>
+          <i class="loader"></i>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+{% raw %}
+<script id="templates-table-template" type="text/x-handlebars-template">
+  <thead>
+    <tr>
+      <td class="light name">Template Name <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light creator">Creator <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light created">Created On <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light active">Active <i class="glyphicon glyphicon-sort"></i></td>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each .}}
+      <tr data-route="{{id}}">
+        <td>
+          <div>{{name}}</div>
+        </td>
+        <td>{{creator}}</td>
+        <td>{{convertToLocal created}}</td>
+        {{#if active}}
+          <td>True</td>
+        {{else}}
+          <td>False</td>
+        {{/if}}
+      </tr>
+    {{/each}}
+  </tbody>
+  {{#if limit}}
+    <caption>Results limited to {{limit}} most recent entries. To access older templates, use more specific filters</caption>
+  {{/if}}
+</script>
+{% endraw %}
+{% endblock %}

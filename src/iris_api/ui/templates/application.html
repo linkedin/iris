@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main">
+  <!-- template renders here -->
+</div>
+{% raw %}
+<script id="application-template" type="text/x-handlebars-template">
+  <div class="module application-module {{# if @root.viewMode }}view{{else}}edit{{/if}}-application">
+    <h3>
+      {{name}}
+      {{# if @root.editable }}
+        {{# if @root.viewMode }}
+        <button id="application-edit-button" class="btn btn-default blue btn-sm pull-right">Edit Application</button>
+        {{else}}
+        <button id="application-save-button" class="btn btn-primary btn-sm pull-right">Save Application</button>
+        {{/if}}
+      {{/if}}
+    </h3>
+    <span class="light">Owners: {{#if owners}}{{#each owners}}<span class="label label-info">{{this}} {{# if @root.showEditOwners }}<i class="glyphicon glyphicon-remove remove-owner" data-owner="{{this}}"></i>{{/if}}</span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
+    {{# if @root.showEditOwners }}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br>
+    <span class="light">Variables: {{#if variables}}{{#each variables}}<span class="label label-info">{{this}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{this}}"></i></span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
+    <form id="add-variable-form"><input type="text" class="form-control border-bottom input-sm" placeholder="Add variable" id="add-variable-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>
+  </div>
+  <div class="module application-settings">
+    <h4>Context Template</h4>
+    {{# if @root.viewMode }}
+    <div class="application-setting">
+      <pre>{{context_template}}</pre>
+    </div>
+    <h4>Summary Template</h4>
+    <div class="application-setting">
+      <pre>{{summary_template}}</pre>
+    </div>
+    <h4>Sample Context</h4>
+    <div class="application-setting">
+      <pre>{{sample_context}}</pre>
+    </div>
+    {{else}}
+    <div class="application-setting">
+      <textarea data-field="context_template" class="form-control">{{context_template}}</textarea>
+    </div>
+    <h4>Summary Template</h4>
+    <div class="application-setting">
+      <textarea data-field="summary_template" class="form-control">{{summary_template}}</textarea>
+    </div>
+    <h4>Sample Context</h4>
+    <div class="application-setting">
+      <textarea data-field="sample_context" class="form-control">{{sample_context}}</textarea>
+    </div>
+    {{/if}}
+  </div>
+  <div class="module application-quota">
+    <h4>Message Volume Quotas</h4>
+    {{#if @root.showEditQuotas }}
+      Soft quota will be breached when <input type="number" name="soft_quota_threshold" class="form-control border-bottom" value="{{ quota.soft_quota_threshold }}"> messages occur within <input type="number" name="soft_quota_duration" class="form-control border-bottom" value="{{secondsToMinutes quota.soft_quota_duration }}"> minutes,
+      and will then notify <input type="text" name="target_name" class="form-control border-bottom quota-text typeahead" value="{{ quota.target_name }}"> via email.<br>
+      Hard quota (message drop) will be breached when <input type="number" name="hard_quota_threshold" class="form-control border-bottom" value="{{ quota.hard_quota_threshold }}"> messages occur within <input type="number" name="hard_quota_duration" class="form-control border-bottom" value="{{secondsToMinutes quota.hard_quota_duration }}"> minutes,
+      and will create an incident with plan <input type="text" name="plan_name" class="form-control border-bottom quota-text typeahead" data-typeaheadtype="plan" value="{{ quota.plan_name }}">.
+    {{else}}
+      {{#if quota}}
+        Soft quota will be breached when <strong>{{ quota.soft_quota_threshold }}</strong> messages occur within <strong>{{secondsToMinutes quota.soft_quota_duration }}</strong> minutes, and will then notify <strong>{{ quota.target_name }}</strong> via email.<br>
+        Hard quota (message drop) will be breached when <strong>{{ quota.hard_quota_threshold }}</strong> messages occur within <strong>{{secondsToMinutes quota.hard_quota_duration }}</strong> minutes, and will create an incident with plan <strong><a href="/plans/{{ quota.plan_name }}">{{ quota.plan_name }}</a></strong>.
+      {{else}}
+        <span class="light">No quota configured</span>
+      {{/if}}
+    {{/if}}
+  </div>
+</script>
+{% endraw %}
+{% endblock %}

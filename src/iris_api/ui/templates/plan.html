@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main plan-details"></div>
+
+<!-- Modal for creating a test incident out of this plan -->
+<div class="modal fade" id="test-plan-modal" tabindex="-1" role="dialog" aria-labelledby="test-plan-modal-btn">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Test plan</h4>
+      </div>
+      <div class="modal-body">
+        This will make a test incident for your plan.
+        <div class="form-inline">
+          <label for="test-plan-modal-application-select">Application: </label>
+          <select id="test-plan-modal-application-select" class="form-control"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="test-plan">Create Incident</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for publishing this plan -->
+<div class="modal fade" id="publish-plan-modal" tabindex="-1" role="dialog" aria-labelledby="publish-plan">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Publish Plan</h4>
+      </div>
+      <div class="modal-body">
+        Publishing a plan will deactivate other plans with the same name. Proceed?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="publish-plan">Publish Plan</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% raw %}
+<script id="plan-module-template" type="text/x-handlebars-template">
+  {{#if viewMode}}
+  <div class="module">
+    <h3>
+      {{name}} <i class="badge" data-active="{{active}}"> </i>
+      <button type="button" class="btn btn-default blue btn-sm pull-right" id="clone-plan">Clone Plan</button>
+      <button type="button" class="btn btn-default blue btn-sm pull-right" id="test-plan-modal-btn">Test Plan</button>
+    </h3>
+    <div class="form-inline version-container">
+      <label for="version-select"><strong>Version:</strong></label>
+      <select class="form-control border-bottom version-select">
+        <!--// Version loads here -->
+      </select>
+      <i class="start-tour" data-toggle="tooltip" title="Learn about versioning.">?</i>
+    </div>
+    <!--// <span class="light italic"><small>created by <strong>{{creator}}</strong> at {{convertToLocal created}}</small></span> -->
+    <div>{{description}}</div>
+    <div id="aggregation">
+      <h4>Aggregation <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+      <div class="aggregation-content">
+        If a user receives more than <strong>{{threshold_count}}</strong> messages from this plan via a given medium within <strong>{{divide threshold_window 60}}</strong> minutes, then group their messages for <strong>{{divide aggregation_window 60}}</strong> minutes. After <strong>{{divide aggregation_reset 60}}</strong> minutes without a message, aggregation stops.
+      </div>
+    </div>
+  </div>
+  {{else}}
+  <div class="module">
+    <h3>
+      Create a plan <i class="badge" data-active="draft"> </i>
+      <button type="button" class="btn btn-primary btn-sm pull-right" data-toggle="modal" data-target="#publish-plan-modal">Publish Plan</button>
+    </h3>
+    <input type="text" id="plan-name" class="form-control" placeholder="Enter a plan name" value="{{name}}">
+    <textarea rows="3" id="plan-desc" class="form-control" placeholder="Briefly describe the plan">{{description}}</textarea>
+    <div id="aggregation">
+      <h4>Aggregation <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+      <div class="aggregation-content">
+        If a user receives more than <input type="text" id="threshold-count" class="form-control border-bottom" data-default="true" value="{{threshold_count}}"> messages from this plan via a given medium within <input type="text" id="threshold-window" class="form-control border-bottom" data-default="true" value="{{divide threshold_window 60}}"> minutes, then group their messages for <input type="text" id="aggregation-window" class="form-control border-bottom" data-default="true" value="{{divide aggregation_window 60}}"> minutes. After <input type="text" id="aggregation-reset" class="form-control border-bottom" data-default="true" value="{{divide aggregation_reset 60}}"> minutes without a message, aggregation stops.
+      </div>
+    </div>
+  </div>
+  {{/if}}
+
+  <ol class="plan-steps module">
+  {{#each steps}}
+    {{>plan-step}}
+  {{/each}}
+  {{#unless viewMode}}
+    <div id="add-step" class="add-btn">
+      <h4><i class="icon-plus icon">+</i> Add plan step</h4>
+    </div>
+  {{/unless}}
+  </ol>
+
+  {{#if viewMode}}
+    {{#if tracking_type}}
+    <div id="tracking-notification" class="active module" data-view="true">
+      <div class="tracking-inner">
+        <h4>Incident Tracking</h4>
+        <div class="light tracking-desc">
+          <small>
+            Incident tracking will send an tracking message to the target specified when this plan is triggered. The message will only be sent once per each application template added.
+          </small>
+        </div>
+      </div>
+      <div class="tracking-settings">
+        <div class="tracking-target border-bottom border-top">
+          <span class="item-content" title="{{ tracking_type }}">
+            <label data-toggle="tooltip" title="Media type for the tracking message">Type: </label>
+            <strong>{{ tracking_type }}</strong>
+          </span>
+          <span class="item-content" title="{{ tracking_key }}">
+            <label data-toggle="tooltip" title="Target key for the tracking message">Target: </label>
+            <strong>{{ tracking_key }}</strong>
+          </span>
+        </div>
+        <ul class="template-steps">
+          {{>plan-tracking-notification}}
+        </ul>
+      </div>
+    </div>
+    {{/if}}
+  {{else}}
+    <div id="tracking-notification" class="{{isActive tracking_type}} module" data-view="false">
+      <div class="tracking-inner">
+        <h4>Incident Tracking <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+        <div class="light tracking-desc">
+          <small>
+            Incident tracking will send an tracking message to the target specified when this plan is triggered. The message will only be sent once per each application template added.
+          </small>
+        </div>
+      </div>
+      <div class="tracking-settings">
+        <div class="tracking-target border-bottom border-top">
+          <span class="item-content" title="{{ tracking_type }}">
+            <label data-toggle="tooltip" title="Media type for the tracking message" class="required">Type:</label>
+            <select id="tracking-type" class="form-control border-bottom" value="{{tracking_type}}">
+              <option value="email">email</option>
+            </select>
+          </span>
+          <span class="item-content" title="{{ tracking_key }}">
+            <label data-toggle="tooltip" title="Target key for the tracking message" class="required">Target:</label>
+            <input type="text" id="tracking-key" class="form-control border-bottom" data-default="true" value="{{ tracking_key }}" placeholder="example@example.com">
+          </span>
+        </div>
+        <ul class="template-steps">
+          {{>plan-tracking-notification}}
+          <div id="add-tracking-template" class="add-btn">
+            <h4><i class="icon-plus icon">+</i> Add application tracking template</h4>
+          </div>
+        </ul>
+      </div>
+    </div>
+  {{/if}}
+</script>
+
+<!--// Variables Partial -->
+<script id="variables-template" type="text/x-handlebars-template">
+<div class="variables">
+  {{#if variables}}
+  <span data-toggle="tooltip" title="Variables available for this application">Variables:</span>
+    {{#each variables}}
+      <span data-toggle="tooltip" title="This variable {{#if required }}will be present{{else}}might be empty{{/if}}" class="variable{{#if required }} variable-required{{/if}}">{{@key}}</span>
+    {{/each}}
+  {{/if}}
+</div>
+</script>
+
+<!--// tracking templates partial -->
+<script id="plan-tracking-notification-template" type="text/x-handlebars-template">
+  {{#each tracking_template}}
+  <li class="striped step tracking-template-step clearfix">
+    <div class="template-header">
+      {{#if @root.viewMode}}
+        <label for="template-application">Application:</label>
+        <strong>{{@key}}</strong>
+      {{else}}
+        <label for="template-application" class="required">Application:</label>
+        <select class="form-control border-bottom template-application" name="template-application">
+          <option value="">Pick an application</option>
+          {{#each @root.applications}}
+            <option value="{{name}}" {{isSelected name @../key}}>{{name}}</option>
+          {{/each}}
+        </select>
+        <div class="remove-step remove-tracking-template light"> X </div>
+      {{/if}}
+    </div>
+
+    <div class="template-body clearfix">
+        {{>variables}}
+        {{#if @root.viewMode}}
+        <!--// view-only template-->
+        <div class="template-notification" data-view="true" data-mode="email_subject">
+          <div class="notification-header">Subject</div>
+          <p class="notification-body">{{breakLines email_subject}}</p>
+        </div>
+        <div class="template-notification" data-view="true" data-mode="email_text">
+          <div class="notification-header">Text</div>
+          <pre class="notification-body">{{breakLines email_text}}</pre>
+        </div>
+        <div class="template-notification" data-view="true" data-mode="email_html">
+          <div class="notification-header">HTML</div>
+          <pre class="notification-body">{{breakLines email_html}}</pre>
+        </div>
+        {{else}}
+        <!--// edit-mode template -->
+        <div class="template-notification template-component" data-required="true" data-mode="email_subject">
+          <div class="notification-header required">Subject</div>
+          <input type="text" class="form-control notification-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}." value="{{email_subject}}">
+        </div>
+        <div class="template-notification template-component" data-required="true" data-mode="email_text">
+          <div class="notification-header required">Text</div>
+          <textarea rows="10" class="form-control notification-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}.">{{breakLines email_text 'input'}}</textarea>
+        </div>
+        <div class="template-notification template-component" data-mode="email_html">
+          <div class="notification-header">HTML</div>
+          <textarea rows="10" class="form-control notification-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}.">{{breakLines email_html 'input'}}</textarea>
+        </div>
+        <!--// TODO: support preview -->
+        </div>
+        {{/if}}
+  </li>
+  {{/each}}
+</script>
+
+<!--// step partial -->
+<script id="plan-step-template" type="text/x-handlebars-template">
+  {{#if @root.viewMode}}
+    <li class="striped plan-step clearfix" data-mode="view">
+  {{else}}
+    <li class="striped plan-step clearfix" draggable="true" data-mode="edit">
+      <div class="remove-step light"> X </div>
+  {{/if}}
+  {{#each .}}
+    {{>plan-notification}}
+  {{/each}}
+  {{#unless @root.viewMode}}
+    <div class="plan-notification-add">
+      <i class="icon-plus icon">+</i> Add Notification
+    </div>
+  {{/unless}}
+  </li>
+</script>
+
+<!--// notification partial -->
+<script id="plan-notification-template" type="text/x-handlebars-template">
+{{#if @root.viewMode}}
+  <div class="plan-notification {{ priority }}" data-mode="view">
+  <!--// view-only template-->
+    <p class="item-content" title="{{ role }}" ><label class="item-label light" data-toggle="tooltip" title="Role for target">Role</label> {{ role }}</p>
+    <p class="item-content" title="{{ target }}"><label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label> {{ target }}</p>
+    <p class="item-content" title="{{ priority }}"><label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label> {{ priority }}</p>
+    <p class="item-content" title="{{ secondsToMinutes wait }}"><label class="item-label light" data-toggle="tooltip" title="Minimum time that must elapse before repeating or moving onto the next escalation step.">Wait</label> {{ secondsToMinutes wait }} minutes</p>
+    <p class="item-content" title="{{ count }}"><label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label> {{ count }} times</p>
+    <p class="item-content" title="{{ template }}"><label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label> <a href="/templates/{{template}}">{{ template }}</a></p>
+  </div>
+{{else}}
+  <div draggable="true" class="plan-notification" data-mode="edit">
+  <!--// edit-mode template -->
+    <div class="plan-notification-remove"> X </div>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="Role for target">Role</label>
+      <select class="form-control border-bottom" data-type="role" value="{{role}}">
+        {{#each @root.target_roles}}
+          <option value="{{this.name}}" {{isSelected this.name ../role}} data-url-type="{{this.type}}"> {{this.name}} </option>
+        {{/each}}
+      </select>
+    </p>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label>
+      <input type="text" class="form-control border-bottom typeahead" placeholder="team name" data-type="target" value="{{target}}" data-url-type="team">
+    </p>
+    <p>
+      <label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label>
+      <select class="form-control border-bottom" data-type="priority" value={{priority}}>
+        {{#each @root.priorities}}
+        <option value="{{this.name}}" {{isSelected this.name ../priority}}>{{this.name}}</option>
+        {{/each}}
+      </select>
+    </p>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="Time to wait before repeating or moving onto the next escalation step">Wait</label>
+      <input type="text" class="form-control border-bottom" placeholder="Wait minutes" data-type="wait" data-default="true" value="{{ secondsToMinutes wait}}">
+    </p>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label>
+      <input type="number" class="form-control border-bottom" placeholder="# of times" data-type="count" value="{{count}}" min="1">
+    </p>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label>
+      <select class="content-template form-control border-bottom" data-type="template">
+        {{#each @root.availableTemplates}}
+          <option value="{{this}}" {{isSelected this ../template}}>{{this}}</option>
+        {{/each}}
+      </select>
+    </p>
+  </div>
+{{/if}}
+</script>
+{% endraw %}
+{% endblock %}

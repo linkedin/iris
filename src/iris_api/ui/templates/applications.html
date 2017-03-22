@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main applications">
+  <h3>Applications</h3>
+  <div class="module">
+    <table class="display" id="applications-table" width="100%">
+      <!-- applications table renders here -->
+    </table>
+  </div>
+</div>
+{% raw %}
+<script id="applications-table-template" type="text/x-handlebars-application">
+  <thead>
+    <tr>
+      <td class="light name">Application Name <i class="glyphicon glyphicon-sort"></i></td>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each .}}
+      <tr data-application="{{name}}">
+        <td>
+          <div>{{name}}</div>
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+</script>
+{% endraw %}
+{% endblock %}
+

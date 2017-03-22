@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main view-incident">
+  <!-- template renders here -->
+</div>
+{% raw %}
+<script id="message-template" type="text/x-handlebars-template">
+  <div class="module clearfix">
+    <h3>
+      Message {{id}}
+    </h3>
+    <span class="light italic"><small>created at {{convertToLocal created}}</small></span>
+  </div>
+  <div class="clearfix">
+    <div class="col-md-8 col-sm-8 col-xs-8 module message-module">
+      <p class="border-bottom">
+        <label><strong>To:</strong></label> {{target}}
+          {{#isEqual mode 'email'}}
+            ( <a href="mailto:{{destination}}" target="_blank">{{destination}}</a> )
+          {{/isEqual}}
+          {{#isEqual mode 'call'}}
+            ( <a href="tel:{{destination}}">{{destination}}</a> )
+          {{/isEqual}}
+          {{#isEqual mode 'sms'}}
+            ( <a href="tel:{{destination}}">{{destination}}</a> )
+          {{/isEqual}}
+          {{#isEqual mode 'im'}}
+            ( {{destination}} )
+          {{/isEqual}}
+      </p>
+      <p class="border-bottom">
+        <label><strong>Subject:</strong></label> {{subject}}
+      </p>
+      <p class="message-body{{#if changes}} border-bottom{{/if}}">
+        <label><strong>Body:</strong></label> <br />{{breakLines body}}
+      </p>
+
+      {{#if changes}}
+        <label><strong>Message Changes:</strong></label><br />
+        <table class="dataTable display table-striped">
+          <thead>
+            <tr>
+              <td class="light">Changed Item</td>
+              <td class="light">Old Value</td>
+              <td class="light">New Value</td>
+              <td class="light">Reason</td>
+            </tr>
+          </thead>
+          <tbody>
+          {{#each changes}}
+            <tr>
+              <td>{{ change_type }}</td>
+              <td>{{#if old_role}}<span class="label label-info">{{ old_role }}</span> {{/if}} {{ old }}</td>
+              <td>{{ new }}</td>
+              <td>{{ description }}</td>
+            </tr>
+          {{/each}}
+          </tbody>
+        </table>
+      {{/if}}
+
+    </div>
+    <div class="col-md-4 col-sm-4 col-xs-4 module message-module module-blue border-all ">
+      <p>
+        <label><strong>Incident ID:</strong></label> <a href="/incidents/{{incident_id}}">{{incident_id}}</a>
+      </p>
+      <p>
+        <label><strong>Priority:</strong></label> {{priority}} ({{mode}})
+      </p>
+      <p>
+        <label><strong>Application:</strong></label> {{application}}
+      </p>
+      <p>
+        <label><strong>Sent at:</strong></label>
+        {{#if sent}}
+          {{convertToLocal sent}}
+        {{else}}
+          Unsent
+        {{/if}}
+      </p>
+      {{#if twilio_delivery_status}}
+      <p>
+        <label><strong>Twilio Delivery Status:</strong></label> {{ twilio_delivery_status }}
+      </p>
+      {{/if}}
+    </div>
+  </div>
+</script>
+{% endraw %}
+{% endblock %}

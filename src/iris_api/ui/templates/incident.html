@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main view-incident">
+  <!-- template renders here -->
+</div>
+{% raw %}
+<script id="incident-template" type="text/x-handlebars-template">
+  <div class="module clearfix">
+    <h3>
+      {{application}} Incident #{{id}} <i class="badge" data-active="{{active}}"> </i>
+      <span class="incident-info">
+        <a href="/plans/{{plan_id}}">{{plan}}: step {{current_step}}</a>
+        <span class="light"> Owner:</span> {{#if owner}} {{owner}} {{else}} Unclaimed {{/if}}
+      </span>
+      {{#isUser owner}}
+        <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unclaim">Unclaim Incident</button>
+      {{else}}
+        {{#if active}}
+          <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="claim">Claim Incident</button>
+        {{else}}
+          {{#if owner}}
+            <button type="button" id="claim-incident" class="pull-right btn btn-default btn-sm disabled" disabled data-id="{{id}}" data-action="claim">Claimed</button>
+          {{else}}
+            <button type="button" id="claim-incident" class="pull-right btn btn-default btn-sm disabled" disabled data-id="{{id}}" data-action="claim">Inactive</button>
+          {{/if}}
+        {{/if}}
+      {{/isUser}}
+    </h3>
+    <span class="light italic"><small>created at {{convertToLocal created}}</small></span>
+    {{#if updated}}
+      <span class="light">|</span>
+      <span class="light italic"><small>updated at {{convertToLocal updated}}</small></span>
+    {{/if}}
+  </div>
+  <div class="module incident-details">
+    <div>
+      {{#> context_template}}
+        <label><strong>Context:</strong></label>
+        <table id="context-table">
+          {{#each context}}
+            {{#if this}}
+            <tr>
+              <td class="context-label">
+                <strong>{{@key}}:</strong>
+              </td>
+              <td class="context-data">
+                {{this}}
+              </td>
+            </tr>
+          {{/if}}
+          {{/each}}
+        </table>
+      {{/context_template}}
+    </div>
+  </div>
+  {{#if steps}}
+  <div class="module">
+    <label><strong>Messages:</strong></label>
+    <table class="display" id="incident-messages-table" width="100%">
+      <thead>
+        <tr>
+          <td class="light id">Message ID <i class="glyphicon glyphicon-sort"></i></td>
+          <td class="light step">Step <i class="glyphicon glyphicon-sort"></i></td>
+          <td class="light target">Target <i class="glyphicon glyphicon-sort"></i></td>
+          <td class="light priority">Priority <i class="glyphicon glyphicon-sort"></i></td>
+          <td class="light mode">Mode <i class="glyphicon glyphicon-sort"></i></td>
+          <td class="light sent">Sent <i class="glyphicon glyphicon-sort"></i></td>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each steps}}
+        <tr data-route="/incidents/{{id}}">
+          <td><a href="/messages/{{id}}">{{id}}</a></td>
+          <td> {{step}} </td>
+          <td> {{name}} {{#if target_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
+          <td> {{priority}} </td>
+          <td> {{mode}} {{#if mode_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
+          <td> {{convertToLocal sent}} </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{/if}}
+  </div>
+</script>
+{% endraw %}
+{% endblock %}

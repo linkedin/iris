@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main messages">
+  <h3 class="clearfix">
+    <span class="pull-left">Messages</span>
+    <!-- <a href="/messages/new"><button type="button" class="btn btn-primary btn-sm pull-right" id="create-message">Create New Message</button></a> -->
+  </h3>
+  <div class="module module-blue clearfix">
+    <form id="filter-form" action="">
+      <div class="row clearfix">
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-id">ID</label>
+          <input class="form-control border-bottom" type="text" placeholder="id" name="filter-id" id="filter-id" data-param="id">
+        </span>
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-batch">Batch</label>
+          <input class="form-control border-bottom" type="text" placeholder="batch" name="filter-batch" id="filter-batch" data-param="batch">
+        </span>
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-target">Target</label>
+          <input class="form-control border-bottom typeahead" type="text" placeholder="target" name="filter-target" id="filter-target" data-param="target">
+        </span>
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-incident">Incident</label>
+          <input class="form-control border-bottom" type="text" placeholder="incident" name="filter-incident" id="filter-incident" data-param="incident_id">
+        </span>
+        <span class="col-md-2 col-sm-2 col-xs-2">
+          <label for="filter-priority">Priority</label>
+          <select class="form-control border-bottom" name="filter-priority" id="filter-priority" data-param="priority__contains">
+            <option value=""></option>
+            <!-- options rendered by JS - Model = window.appData.priorities -->
+          </select>
+        </span>
+        <span class="col-md-2 col-sm-2 col-xs-2">
+          <label for="filter-application">Application</label>
+          <select class="form-control border-bottom" name="filter-application" id="filter-application" data-param="application">
+            <option value=""></option>
+            <!-- options rendered by JS - Model = window.appData.applications -->
+          </select>
+        </span>
+        <span class="col-md-4 col-sm-4 col-xs-4 form-inline">
+          <label for="filter-start">Start</label>
+          <label for="filter-end">End</label>
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="Start" name="filter-start" id="filter-start" data-param="created__ge">
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="End" name="filter-end" id="filter-end" data-param="created__le">
+          <button class="btn-primary pull-right btn" type="submit" id="filter-messages">Submit</button>
+        </span>
+      </div>
+      <div class="row checkbox">
+        <input type="radio" name="filter-active" id="filter-active" value="active" checked="checked"><label for="filter-active">Active</label>
+        <input type="radio" name="filter-active" id="filter-inactive" value="inactive"><label for="filter-inactive">Inactive</label>
+        <input type="radio" name="filter-active" id="filter-all" value="all"><label for="filter-all">All</label>
+      </div>
+    </form>
+  </div>
+  <div class="module">
+    <table class="display" id="messages-table" width="100%">
+      <!-- messages table renders here -->
+    </table>
+  </div>
+</div>
+{% raw %}
+<script id="messages-table-template" type="text/x-handlebars-template">
+  <thead>
+    <tr>
+      <td class="light id">Id <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light batch">Batch <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light target">Target <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light subject">Subject <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light incident">Incident <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light priority">Priority <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light application">Application <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light mode">Mode <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light sent">Sent <i class="glyphicon glyphicon-sort"></i></td>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each .}}
+      <tr data-route="{{id}}">
+        <td><a href="/messages/{{id}}">{{id}}</a></td>
+        <td><a href="/messages/?batch={{batch}}">{{trim batch 0 7}}</a></td>
+        <td>{{target}}{{#if target_changed}} <span class="label label-info">Changed</span>{{/if}}</td>
+        <td>{{subject}}</td>
+        <td><a href="/incidents/{{incident_id}}">{{incident_id}}</a></td>
+        <td>{{priority}}</td>
+        <td>{{application}}</td>
+        <td>{{mode}}{{#if mode_changed}} <span class="label label-info">Changed</span>{{/if}}</td>
+        <td>{{convertToLocal sent}}</td>
+      </tr>
+    {{/each}}
+  </tbody>
+  {{#if limit}}
+    <caption>Results limited to {{limit}} most recent entries. To access older messages, use more specific filters</caption>
+  {{/if}}
+</script>
+{% endraw %}
+{% endblock %}
