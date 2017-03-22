@@ -29,6 +29,11 @@ setuptools.setup(
         'Markdown==2.4.1',
         'click==6.6',
         'msgpack-python==0.4.5',
+        'cssmin==0.2.0',
+        'pycrypto==2.6.1',
+        'beaker==1.8.0',
+        'webassets==0.12.0',
+        'python-ldap==2.4.9',
         # plugin deps
         'prometheus_client',
         'influxdb',
@@ -39,6 +44,7 @@ setuptools.setup(
             'iris-sender = iris_api.bin.sender:main',
             'iris-sync-targets = iris_api.bin.sync_targets:main',
             'iris_ctl = iris_api.bin.iris_ctl:main',
+            'build_assets = iris_api.bin.ui_build_assets:main',
         ]
     }
 )

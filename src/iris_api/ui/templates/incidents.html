@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main incidents">
+  <h3 class="clearfix">
+    <span class="pull-left">Incidents</span>
+    <!-- <a href="/incidents/new"><button type="button" class="btn btn-primary btn-sm pull-right" id="create-incident">Create New Incident</button></a> -->
+  </h3>
+  <div class="module module-blue clearfix">
+    <form id="filter-form" action="">
+      <div class="row clearfix">
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-id">ID</label>
+          <input class="form-control border-bottom" type="text" placeholder="ID" name="filter-id" id="filter-id" data-param="id">
+        </span>
+       <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-target">Target</label>
+          <input class="form-control border-bottom typeahead" type="text" placeholder="Target" name="filter-target" id="filter-target" data-param="target">
+        </span>
+        <span class="col-md-1 col-sm-1 col-xs-1">
+          <label for="filter-owner">Owner</label>
+          <input class="form-control border-bottom typeahead" type="text" placeholder="Owner" name="filter-owner" id="filter-owner" data-param="owner__contains">
+        </span>
+        <span class="col-md-2 col-sm-2 col-xs-2">
+          <label for="filter-application">Application</label>
+          <select class="form-control border-bottom" name="filter-application" id="filter-application" data-param="application">
+            <option value=""></option>
+            <!-- options rendered by JS - Model = window.appData.applications -->
+          </select>
+        </span>
+        <span class="col-md-2 col-sm-2 col-xs-2">
+          <label for="filter-plan">Plan</label>
+          <input class="form-control border-bottom" type="text" placeholder="Filter by plan" name="filter-plan" id="filter-plan" data-param="plan__contains">
+        </span>
+        <span class="col-md-5 col-sm-5 col-xs-5 form-inline">
+          <label for="filter-start">Start Date</label>
+          <label for="filter-end">End Date</label>
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="Start Date" name="filter-start" id="filter-start" data-param="created__ge">
+          <input class="form-control border-bottom datetimepicker" type="text" placeholder="End Date" name="filter-end" id="filter-end" data-param="created__le">
+          <button class="btn-primary pull-right btn" type="submit" id="filter-incidents">Submit</button>
+        </span>
+      </div>
+      <div class="row checkbox">
+        <input type="radio" name="filter-active" id="filter-active" value="active" checked="checked"><label for="filter-active">Active</label>
+        <input type="radio" name="filter-active" id="filter-inactive" value="inactive"><label for="filter-inactive">Inactive</label>
+        <input type="radio" name="filter-active" id="filter-all" value="all"><label for="filter-all">All</label>
+      </div>
+    </form>
+  </div>
+  <div class="module">
+    <table class="display" id="incidents-table" width="100%">
+      <!-- Incidents table renders here -->
+    </table>
+  </div>
+</div>
+<div class="modal fade" id="summary-info-modal" tabindex="-1" role="dialog" aria-labelledby="summary-info">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Incident Summaries</h4>
+      </div>
+      <div class="modal-body">
+        Incident summaries are generated using an application specific Handlebars template. If no template exists, Iris will simply display all available data in the summary. <br /><br />
+        Having a template will remove unnecessary information from the summary and help users resolve incidents generated from your application quicker. <br /><br />
+
+        Sample Template:
+        {% raw %}
+        <pre><code>{{#context}}
+  &lt;ul&gt;
+  {{#if name}}
+    &lt;li data-toggle="tooltip" data-placement="top" title="{{name}}"&gt;
+      &lt;strong&gt; Name: &lt;/strong&gt; {{name}}
+    &lt;/li&gt;
+  {{/if}}
+  {{#if filename}}
+    &lt;li data-toggle="tooltip" data-placement="top" title="{{filename}}"&gt;
+      &lt;strong&gt; Dashboard: &lt;/strong&gt; {{filename}}
+    &lt;/li&gt;
+  {{/if}}
+  {{#if fabric}}
+    &lt;li data-toggle="tooltip" data-placement="top" title="{{fabric}}"&gt;
+      &lt;strong&gt;Fabric: &lt;/strong&gt; {{fabric}}
+    &lt;/li&gt;
+  {{/if}}
+  {{#if zones}}
+   &lt;li data-toggle="tooltip" data-placement="top" title="{{zones}}"&gt;
+    &lt;strong&gt;Zones: &lt;/strong&gt; {{zones}}
+   &lt;/li&gt;
+  {{/if}}
+  {{#if nodes}}
+    &lt;li&gt;
+      &lt;strong&gt;Nodes: &lt;/strong&gt;
+      &lt;ul&gt;
+        {{#each nodes}}
+          &lt;li data-toggle="tooltip" data-placement="top" title="{{this}}"&gt; {{this}} &lt;/li&gt;
+        {{/each}}
+      &lt;/ul&gt;
+    &lt;/li&gt;
+  {{/if}}
+  &lt;/ul&gt;
+{{/context}}</code></pre>
+        {% endraw %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% raw %}
+<script id="incidents-table-template" type="text/x-handlebars-template">
+  <thead>
+    <tr>
+      <td class="light id">Id <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light owner">Owner <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light summary">
+        Summary
+        <span data-toggle="modal" data-target="#summary-info-modal">
+          <i class="icon-question" data-toggle="tooltip" title="Learn about summaries">?</i>
+        </span>
+        <i class="loader"></i>
+      </td>
+      <td class="light application">Application <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light plan">Plan <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light created">Created On <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light active">Active <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light claim center">Claim <i class="glyphicon glyphicon-sort"></i></td>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each .}}
+      <tr data-route="{{id}}">
+        <td><a href="/incidents/{{id}}">{{id}}</a></td>
+        <td class="owner">
+          {{#if owner}}
+            {{owner}}
+          {{else}}
+            Unclaimed
+          {{/if}}
+        </td>
+        <td class="incident-summary"> Loading.. </td>
+        <td>{{application}}</td>
+        <td class="incident-plan-name">
+          <a title="{{plan}}" href="/plans/{{plan_id}}">{{plan}}</a><br />
+          <sub>Current Step: {{current_step}}</sub>
+        </td>
+        <td>
+          {{convertToLocal created}}<br />
+          <sub>Last Updated: {{convertToLocal updated}}</sub>
+        </td>
+        <td>{{#if active}} True {{else}} False {{/if}}</td>
+        <td class="center">
+        {{#isUser owner}}
+          <button type="button" class="btn btn-default blue btn-sm claim-incident" data-id="{{id}}" data-action="unclaim">Unclaim Incident</button>
+        {{else}}
+          {{#if active}}
+            <button type="button" class="btn btn-default blue btn-sm claim-incident" data-id="{{id}}" data-action="claim">Claim Incident</button>
+          {{else}}
+            {{#if owner}}
+              <button type="button" class="btn btn-default btn-sm claim-incident disabled" disabled data-id="{{id}}" data-action="claim">Claimed</button>
+            {{else}}
+              <button type="button" class="btn btn-default btn-sm claim-incident disabled" disabled data-id="{{id}}" data-action="claim">Inactive</button>
+            {{/if}}
+          {{/if}}
+        {{/isUser}}
+        </td>
+      </tr>
+    {{/each}}
+  </tbody>
+  {{#if limit}}
+    <caption>Results limited to {{limit}} most recent entries. To access older incidents, use more specific filters.</caption>
+  {{/if}}
+</script>
+<script id="summary-template" type="text/x-handlebars-template">
+  <ul>
+    {{#each context}}
+      {{#if this}}
+        <li data-toggle="tooltip" data-placement="right" title="{{@key}}: {{prettyPrint this}}"> <strong>{{@key}}:</strong> {{prettyPrint this}} </li>
+      {{/if}}
+    {{/each}}
+  </ul>
+</script>
+{% endraw %}
+{% endblock %}

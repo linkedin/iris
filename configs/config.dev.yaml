@@ -5,6 +5,11 @@ server:
 role_lookup: dummy
 metrics: dummy
 
+# Change these to random long values when you run this in production
+user_session:
+  encrypt_key: 'abc'
+  sign_key: '123'
+
 # use this for LDAP settings for sync script lookup
 # init_config_hook: iris_internal.api.init_config
 

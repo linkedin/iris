@@ -1,0 +1,60 @@
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1000 1000">
+<defs>
+<mask id="mask_0">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="500.0" cy="1200.0" r="900.0" />
+</mask>
+<mask id="mask_1">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="-47.2820377276" cy="936.442861301" r="900.0" />
+</mask>
+<mask id="mask_2">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="-182.449538527" cy="344.235346231" r="900.0" />
+</mask>
+<mask id="mask_3">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="196.281382618" cy="-130.678207532" r="900.0" />
+</mask>
+<mask id="mask_4">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="803.718617382" cy="-130.678207532" r="900.0" />
+</mask>
+<mask id="mask_5">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="1182.44953853" cy="344.235346231" r="900.0" />
+</mask>
+<mask id="mask_6">
+<rect width="100%" height="100%" fill="white"/>
+<circle cx="1047.28203773" cy="936.442861301" r="900.0" />
+</mask>
+<clipPath id="clip_0">
+<circle cx="-47.2820377276" cy="936.442861301" r="850.0" />
+</clipPath>
+<clipPath id="clip_1">
+<circle cx="-182.449538527" cy="344.235346231" r="850.0" />
+</clipPath>
+<clipPath id="clip_2">
+<circle cx="196.281382618" cy="-130.678207532" r="850.0" />
+</clipPath>
+<clipPath id="clip_3">
+<circle cx="803.718617382" cy="-130.678207532" r="850.0" />
+</clipPath>
+<clipPath id="clip_4">
+<circle cx="1182.44953853" cy="344.235346231" r="850.0" />
+</clipPath>
+<clipPath id="clip_5">
+<circle cx="1047.28203773" cy="936.442861301" r="850.0" />
+</clipPath>
+<clipPath id="clip_6">
+<circle cx="500.0" cy="1200.0" r="850.0" />
+</clipPath>
+</defs>
+<circle id="circle_0" cx="500" cy="500" r="500" mask="url(#mask_0)" clip-path="url(#clip_0)" fill="rgb(240,109,99)"/>
+<circle id="circle_1" cx="500" cy="500" r="500" mask="url(#mask_1)" clip-path="url(#clip_1)" fill="rgb(246,152,66)"/>
+<circle id="circle_2" cx="500" cy="500" r="500" mask="url(#mask_2)" clip-path="url(#clip_2)" fill="rgb(243,202,74)"/>
+<circle id="circle_3" cx="500" cy="500" r="500" mask="url(#mask_3)" clip-path="url(#clip_3)" fill="rgb(149,202,87)"/>
+<circle id="circle_4" cx="500" cy="500" r="500" mask="url(#mask_4)" clip-path="url(#clip_4)" fill="rgb(47,177,227)"/>
+<circle id="circle_5" cx="500" cy="500" r="500" mask="url(#mask_5)" clip-path="url(#clip_5)" fill="rgb(162,135,191)"/>
+<circle id="circle_6" cx="500" cy="500" r="500" mask="url(#mask_6)" clip-path="url(#clip_6)" fill="rgb(241,112,170)"/>
+</svg>

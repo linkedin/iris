@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+{% block head %}
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="/static/images/iris.png?v=2">
+    <title>Iris</title>
+    {% assets "css_libs" %} <link href="{{ ASSET_URL }}" rel="stylesheet"> {% endassets %}
+    {% assets "iris_css" %} <link href="{{ ASSET_URL }}" rel="stylesheet"> {% endassets %}
+  </head>
+{% endblock head %}
+  <body>
+    {% if request.context['username'] %}
+    {% block navigation %}
+    <header data-page="{{path}}">
+      <nav class="navbar navbar-inverse navbar-fixed-top">
+        <div class="container-fluid">
+          <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+              <span class="sr-only">Toggle navigation</span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+              <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="/"><span><img id="logo" src="/static/images/iris.png"></span><span>IRIS</span></a>
+
+          </div>
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-left">
+              <li class="{% if request.path.startswith("/plans") %}active{% endif %}"><a href="/plans/">Plans</a></li>
+              <li class="{% if request.path.startswith("/templates") %}active{% endif %}"><a href="/templates/">Templates</a></li>
+              <li class="{% if request.path.startswith("/incidents") %}active{% endif %}"><a href="/incidents/">Incidents</a></li>
+              <li class="{% if request.path.startswith("/messages") %}active{% endif %}"><a href="/messages/">Messages</a></li>
+              <li class="{% if request.path.startswith("/applications") %}active{% endif %}"><a href="/applications/">Applications</a></li>
+            </ul>
+            <div class="nav navbar-nav navbar-right dropdown">
+
+              <div class="dropdown-toggle" data-toggle="dropdown">
+                {{ request.context['username'] }}
+                <span class="caret"></span>
+              </div>
+              <ul class="dropdown-menu o">
+                <li><a href="/user">Settings</a></li>
+                <li><a href="/logout">Logout</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+    {% endblock navigation %}
+    {% endif %}
+
+    <div class="container-fluid"> <!-- content wrapper -->
+      {% block content %}{% endblock %}
+      <ul class="footer" data-page="{{path}}">
+        <li>Iris &copy; LinkedIn 2017</li>
+        {{ extra_footer_items|safe }}
+        <li><a href="/stats">Stats</a></li>
+      </ul>
+    </div>
+
+    {% block js %}
+    <script>
+      window.appData = {};
+      appData.user = {{ request.context['username']|tojson|safe }};
+      appData.user_admin = {{ request.context['is_admin']|tojson|safe }};
+      {% if modes %}
+      appData.modes = {{ modes|tojson|safe }};
+      {% else %}
+      appData.modes = [];
+      {% endif %}
+      {% if target_roles %}
+      appData.target_roles = {{ target_roles|tojson|safe }};
+      {% else %}
+      appData.target_roles = [];
+      {% endif %}
+      {% if priorities %}
+      appData.priorities = {{ priorities|tojson|safe }};
+      {% else %}
+      appData.priorities = [];
+      {% endif %}
+      {% if applications %}
+      appData.applications = {{ applications|tojson|safe }};
+      {% else %}
+      appData.applications = [];
+      {% endif %}
+      {% if templates %}
+      appData.templates = {{ templates|tojson|safe }};
+      {% else %}
+      appData.templates = [];
+      {% endif %}
+    </script>
+    {% assets "jquery_libs" %} <script src="{{ ASSET_URL }}"></script> {% endassets %}
+    {% assets "bootstrap_libs" %} <script src="{{ ASSET_URL }}"></script> {% endassets %}
+    {% block appjs %}
+    {% assets "iris_js" %} <script src="{{ ASSET_URL }}"></script> {% endassets %}
+    {% endblock appjs %}
+    {% endblock js %}
+  </body>
+</html>

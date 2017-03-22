@@ -10,3 +10,5 @@
 .coverage
 htmlcov
 venv
+/src/iris_api/ui/static/.webassets-cache
+/src/iris_api/ui/static/bundles

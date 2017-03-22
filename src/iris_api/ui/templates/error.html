@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block appjs %}
+{% endblock appjs %}
+
+{% block content %}
+<div class="main floating-module error-page">
+  <div class="module">
+    <div class="logo-wrapper">
+      <img id="logo" src="/static/images/iris.png" height="70px" width="70px">
+      <p>Iris</p>
+    </div>
+    <div>
+      <h1 class="error-code">{{error_code}}</h1>
+      <div class="error-status">{{error_status}}</div>
+      <div class="error-text">{{error_text}}</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

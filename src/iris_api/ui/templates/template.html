@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main view-template">
+  <!-- template renders here -->
+</div>
+<!-- Modal -->
+<div class="modal fade" id="publish-template-modal" tabindex="-1" role="dialog" aria-labelledby="publish-template">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Publish template</h4>
+      </div>
+      <div class="modal-body">
+        Publishing a template will deactivate other templates with the same name. Proceed?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="publish-template">Publish Template</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Validation Modal -->
+<div class="modal fade" id="preview-template-modal" tabindex="-1" role="dialog" aria-labelledby="preview-template">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Template Preview</h4>
+        <sub class="light">Note: Preview uses sample variable values to generate template.</sub>
+      </div>
+      <div class="modal-body">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Related Modal -->
+<div class="modal fade" id="view-related-modal" tabindex="-1" role="dialog" aria-labelledby="view-related">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Related Plans</h4>
+      </div>
+      <div class="modal-body">
+        <ul class="modal-list">
+          <li>No plans are currently using this template.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% raw %}
+<script id="template-template" type="text/x-handlebars-template">
+  <div class="module clearfix">
+    {{#if viewMode}}
+    <h3>
+      {{name}} <i class="badge" data-active="{{active}}"> </i>
+      <button type="button" class="btn btn-default blue btn-sm pull-right" id="clone-template">Clone template</button>
+    </h3>
+    <div><small><a class="view-related" data-toggle="modal" data-target="#view-related-modal" data-name="{{name}}" href=""> View all plans using this template. </a></small></div>
+    <div class="form-inline pull-left version-container">
+      <label for="version-select"><b>Version:</b></label>
+      <select name="version-select" class="form-control border-bottom version-select">
+        <!--// Version loads here -->
+      </select>
+      <i class="start-tour" data-toggle="tooltip" title="Learn about versioning.">?</i>
+    </div>
+    <!--// <span class="light italic"><small>created by <strong>{{creator}}</strong> at {{convertToLocal created}}</small></span> -->
+    {{else}}
+    <h3 class="form-inline">
+      <input type="text" class="form-control form-inline" id="template-name" placeholder="Enter a template name" value="{{name}}">
+      <button type="button" class="btn btn-primary btn-sm pull-right" data-toggle="modal" data-target="#publish-template-modal">Publish template</button>
+    </h3>
+    <span class="light italic"><small>created by <strong>{{creator}}</strong></small></span>
+    {{/if}}
+  </div>
+  <!--// End page header -->
+  <ul class="template-steps module">
+  {{>template-step}}
+  {{#unless viewMode}}
+    <div id="add-step" class="add-btn">
+      <h4><i class="icon-plus icon">+</i> Add application template</h4>
+    </div>
+  {{/unless}}
+  </ul>
+</script>
+
+<!--// step partial -->
+<script id="template-step-template" type="text/x-handlebars-template">
+  {{#each content}}
+  <li class="striped step clearfix">
+    <div class="template-header">
+      <label for="template-application">Application: </label>
+      {{#if @root.viewMode}}
+      <b>{{@key}}</b>
+      {{else}}
+      <select class="form-control border-bottom template-application" name="template-application">
+        <option value="">Pick an application</option>
+        {{#each @root.applications}}
+          <option value="{{name}}" {{isSelected name ../application}}>{{name}}</option>
+        {{/each}}
+      </select>
+      <div class="remove-step light"> X </div>
+      {{/if}}
+    </div>
+    <div class="template-body clearfix">
+      {{>variables}}
+      {{#each @root.modes}}
+        {{>template-notification ../this key=this}}
+      {{/each}}
+    </div>
+  </li>
+  {{/each}}
+</script>
+
+<!--// notification partial -->
+<script id="template-notification-template" type="text/x-handlebars-template">
+{{#if @root.viewMode}}
+  <div class="template-notification" data-view="true" data-mode="{{key}}">
+  <!--// view-only template-->
+    <div class="notification-header">{{key}}</div>
+    {{#isEqual key 'email'}}
+    <p class="notification-email-subject" title="{{getValForKey this key 'subject' true}}">{{getValForKey this key 'subject' true}}</p>
+    {{/isEqual}}
+    <pre class="notification-body">{{getValForKey this key 'body' true}}</pre>
+  </div>
+{{else}}
+  <div class="template-notification" data-mode="{{key}}">
+  <!--// edit-mode template -->
+    <div class="notification-header">{{key}}</div>
+    {{#isEqual key 'email'}}
+    <input type="text" class="form-control template-subject" placeholder="e.g. fault detected on \{{ var }}." value="{{getValForKey this key 'subject'}}">
+    {{/isEqual}}
+    <textarea rows="10" class="form-control template-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}.">{{getValForKey this key 'body'}}</textarea>
+    {{#isEqual key 'sms'}}
+    <div class="light editor-tip">Best to keep this under 140 characters</div>
+    {{/isEqual}}
+    <div class="preview-template" data-mode="{{key}}" data-toggle="modal" data-target="#preview-template-modal"> Preview template </div>
+  </div>
+{{/if}}
+</script>
+
+<!--// Variables Partial -->
+<script id="variables-template" type="text/x-handlebars-template">
+<div class="variables">
+  {{#if variables}}
+  <span data-toggle="tooltip" title="Variables available for this application">Variables:</span>
+    {{#each variables}}
+      <span data-toggle="tooltip" title="This variable {{#if required }}will be present{{else}}might be empty{{/if}}" class="variable{{#if required }} variable-required{{/if}}">{{@key}}</span>
+    {{/each}}
+  {{/if}}
+</div>
+</script>
+{% endraw %}
+{% endblock %}
