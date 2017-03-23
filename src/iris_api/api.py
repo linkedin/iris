@@ -2655,6 +2655,11 @@ def update_cache_worker():
         sleep(60)
 
 
+def json_error_serializer(req, resp, exception):
+    resp.body = exception.to_json()
+    resp.content_type = 'application/json'
+
+
 def get_api(config):
     logging.basicConfig(format='[%(asctime)s] [%(process)d] [%(levelname)s] %(name)s %(message)s',
                         level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S %z')
@@ -2675,6 +2680,8 @@ def get_api(config):
     middleware = [req, auth, acl, header]
 
     app = API(middleware=middleware)
+
+    app.set_error_serializer(json_error_serializer)
 
     app.add_route('/v0/plans/{plan_id}', Plan())
     app.add_route('/v0/plans', Plans())
