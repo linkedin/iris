@@ -5,7 +5,6 @@ from jinja2 import FileSystemLoader
 from jinja2.sandbox import SandboxedEnvironment
 from webassets import Environment as AssetsEnvironment, Bundle
 from webassets.ext.jinja2 import AssetsExtension
-# from webassets.script import CommandLineEnvironment
 import os
 import ujson
 import requests
@@ -50,7 +49,7 @@ jinja2_env.filters['hms'] = hms
 
 
 def login_url(req):
-    if req.path and req.path != '/login' and req.path != '/':
+    if req.path and req.path != '/login' and req.path != '/logout' and req.path != '/':
         return '/login/?next=%s' % uri.encode_value(req.path)
     else:
         return '/login/'
@@ -102,7 +101,7 @@ def static_fonts(req, resp):
 
 
 class Index(object):
-    allow_read_only = True
+    allow_read_only = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -228,8 +227,11 @@ class Application(object):
 
 
 class Login():
-    allow_read_only = True
+    allow_read_only = False
     frontend_route = True
+
+    def __init__(self, auth_manager):
+        self.auth_manager = auth_manager
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
@@ -244,7 +246,7 @@ class Login():
         except KeyError:
             raise HTTPFound('/login')
 
-        if auth_manager.authenticate(username, password):
+        if self.auth_manager.authenticate(username, password):
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
@@ -345,8 +347,6 @@ class JinjaValidate():
 
 
 def init(config, app):
-    global auth_manager
-
     logger.info('Web asset root: "%s"', ui_root)
     auth_module = config.get('auth', {'module': 'iris_api.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
@@ -367,7 +367,7 @@ def init(config, app):
     app.add_route('/templates/{template}', Template())
     app.add_route('/applications/', Applications())
     app.add_route('/applications/{application}', Application())
-    app.add_route('/login/', Login())
+    app.add_route('/login/', Login(auth_manager))
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())

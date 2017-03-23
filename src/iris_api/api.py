@@ -616,6 +616,18 @@ class AuthMiddleware(object):
             self.process_resource = self.debug_auth
 
     def debug_auth(self, req, resp, resource, params):
+        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
+        method = req.method
+
+        if resource.allow_read_only and method == 'GET':
+            return
+
+        # If we're authenticated using beaker, don't validate app as if this is an
+        # API call, but set 'app' to the internal iris user as some routes (test incident creation)
+        # need it.
+        if req.context['username']:
+            req.context['app'] = cache.applications.get('iris')
+            return
 
         # For the purpose of e2etests, allow setting username via header, rather than going
         # through beaker
@@ -624,25 +636,10 @@ class AuthMiddleware(object):
             req.context['username'] = username_header
             return
 
-        # If we're authenticated using beaker, don't validate app as if this is an
-        # API call, but set 'app' to the internal iris user as some routes need it.
-        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
-        if req.context['username']:
-            req.context['app'] = cache.applications.get('iris')
-            if req.path == '/login':
-                raise HTTPFound('/')
-            return
-
-        if resource.allow_read_only and req.method == 'GET':
-            return
-
-        # If this is a frontend route and we're not loggedin as a user, redirect to
-        # login page. If we're showing the login page, halt further auth processing.
+        # If this is a frontend route, and we're not logged in, don't fall through to process as
+        # an app. This will allow the ACLMiddleware to force the login page.
         if getattr(resource, 'frontend_route', False):
-            if req.path == '/login' and req.method == 'POST':
-                return
-            else:
-                raise HTTPFound(ui.login_url(req))
+            return
 
         # Proceed with authenticating this route as a third party application
         try:
@@ -662,20 +659,16 @@ class AuthMiddleware(object):
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
-        # API call, but set 'app' to the internal iris user as some routes need it.
+        # API call, but set 'app' to the internal iris user as some routes (test incident creation)
+        # need it.
         if req.context['username']:
             req.context['app'] = cache.applications.get('iris')
-            if req.path == '/login':
-                raise HTTPFound('/')
             return
 
-        # If this is a frontend route and we're not loggedin as a user, redirect to
-        # login page. If we're showing the login page, halt further auth processing.
+        # If this is a frontend route, and we're not logged in, don't fall through to process as
+        # an app either. This will allow the ACLMiddleware to force the login page.
         if getattr(resource, 'frontend_route', False):
-            if req.path == '/login' and req.method == 'POST':
-                return
-            else:
-                raise HTTPFound(ui.login_url(req))
+            return
 
         # Proceed with authenticating this route as a third party application, and enforce
         # hmac for the entire request, and still allow the username-by-header functionality
@@ -743,6 +736,22 @@ class ACLMiddleware(object):
         pass
 
     def process_resource(self, req, resp, resource, params):
+        self.process_frontend_routes(req, resource)
+        self.process_admin_acl(req, resource, params)
+
+    def process_frontend_routes(self, req, resource):
+        if req.context['username']:
+            # Logged in and looking at /login page? Redirect to home.
+            if req.path == '/login':
+                raise HTTPFound('/')
+        else:
+            # If we're not logged in and this is a frontend route, we're only allowed
+            # to view the login form
+            if getattr(resource, 'frontend_route', False):
+                if req.path != '/login':
+                    raise HTTPFound(ui.login_url(req))
+
+    def process_admin_acl(self, req, resource, params):
         req.context['is_admin'] = False
 
         # Quickly check the username in the path matches who's logged in

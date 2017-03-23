@@ -16,6 +16,7 @@ import uuid
 
 server = 'http://localhost:16649/'
 base_url = server + 'v0/'
+ui_url = server
 
 sample_db_config = {
     'db': {
@@ -1919,6 +1920,83 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name):
     assert data['context']['email'] == email
     assert data['application'] == sample_application_name
     assert data['plan'] == sample_plan_name
+
+
+def test_ui_routes(sample_user, sample_admin_user):
+    # When not logged in, various pages redirect to login page
+    re = requests.get(ui_url + 'user', allow_redirects=False)
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/login/?next=%2Fuser'
+
+    re = requests.get(ui_url + 'incidents', allow_redirects=False)
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/login/?next=%2Fincidents'
+
+    re = requests.get(ui_url, allow_redirects=False)
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/login/'
+
+    # And login page displays itself
+    re = requests.get(ui_url + 'login', allow_redirects=False)
+    assert re.status_code == 200
+
+    # And allows itself to work & login & set the beaker session cookie
+    re = requests.post(ui_url + 'login', allow_redirects=False, data={'username': sample_user, 'password': 'foo'})
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/incidents'
+    assert 'iris-auth' in re.cookies
+
+    # Similarly it obeys the next GET param
+    re = requests.post(ui_url + 'login/?next=%2Fuser', allow_redirects=False, data={'username': sample_user, 'password': 'foo'})
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/user'
+    assert 'iris-auth' in re.cookies
+
+    # When logged in, home page redirects to /incidents
+    re = requests.get(ui_url, allow_redirects=False, headers=username_header(sample_user))
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/incidents'
+
+    # And other pages display themselves, and have the username specified in javascript
+    re = requests.get(ui_url + 'incidents', allow_redirects=False, headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'text/html'
+    assert ' appData.user = "%s";' % sample_user in re.text
+
+    # When passed an admin user, the admin flag should be "true"
+    re = requests.get(ui_url + 'incidents', allow_redirects=False, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'text/html'
+    assert ' appData.user = "%s";' % sample_admin_user in re.text
+    assert ' appData.user_admin = true;' in re.text
+
+    # And logout redirects to login page
+    re = requests.get(ui_url + 'logout', allow_redirects=False, headers=username_header(sample_user))
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/login'
+
+    # And login redirects to home page
+    re = requests.get(ui_url + 'login', allow_redirects=False, headers=username_header(sample_user))
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/'
+
+    # Test actual login + logout session using beaker's cookies in requests session, rather than using the header trick:
+    session = requests.Session()
+
+    re = session.post(ui_url + 'login', allow_redirects=False, data={'username': sample_user, 'password': 'foo'})
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/incidents'
+    assert 'iris-auth' in session.cookies
+
+    re = session.get(ui_url + 'incidents', allow_redirects=False)
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'text/html'
+    assert ' appData.user = "%s";' % sample_user in re.text
+
+    re = session.get(ui_url + 'logout', allow_redirects=False)
+    assert re.status_code == 302
+    assert re.headers['Location'] == '/login'
+    assert 'iris-auth' not in session.cookies
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
