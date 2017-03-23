@@ -629,6 +629,8 @@ class AuthMiddleware(object):
         req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         if req.context['username']:
             req.context['app'] = cache.applications.get('iris')
+            if req.path == '/login':
+                raise HTTPFound('/')
             return
 
         if resource.allow_read_only and req.method == 'GET':
@@ -663,6 +665,8 @@ class AuthMiddleware(object):
         # API call, but set 'app' to the internal iris user as some routes need it.
         if req.context['username']:
             req.context['app'] = cache.applications.get('iris')
+            if req.path == '/login':
+                raise HTTPFound('/')
             return
 
         # If this is a frontend route and we're not loggedin as a user, redirect to
