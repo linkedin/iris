@@ -222,6 +222,15 @@ def sample_mode():
         return modes[0]
 
 
+def configure_email_incident_creation(application_name, plan_name, email):
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
+                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
+                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
+                       {'email': email, 'application_name': application_name, 'plan_name': plan_name})
+        conn.commit()
+
+
 def create_incident_with_message(application, plan, target, mode):
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
@@ -1887,24 +1896,19 @@ def test_twilio_delivery_update(fake_message_id):
     assert re.json()['twilio_delivery_status'] == 'delivered'
 
 
-def test_create_incident_by_email(sample_application_name, sample_plan_name):
-    if not sample_application_name or not sample_plan_name:
+def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_email):
+    if not sample_application_name or not sample_plan_name or not sample_email:
         pytest.skip('We do not have enough data in DB to do this test')
 
-    email = 'irisfoobar@fakeemail.com'
+    special_email = 'irisfoobar@fakeemail.com'
 
     # Ensure this email is configured properly.
-    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
-                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
-                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
-                       {'email': email, 'application_name': sample_application_name, 'plan_name': sample_plan_name})
-        conn.commit()
+    configure_email_incident_creation(sample_application_name, sample_plan_name, special_email)
 
     email_make_incident_payload = {
         'body': 'This is a new test incident with a test message to be delivered to people.',
         'headers': [
-            {'name': 'From', 'value': email},
+            {'name': 'From', 'value': special_email},
             {'name': 'Subject', 'value': 'fooject'},
         ]
     }
@@ -1917,9 +1921,26 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name):
     assert re.status_code == 200
     data = re.json()
     assert data['context']['body'] == email_make_incident_payload['body']
-    assert data['context']['email'] == email
+    assert data['context']['email'] == special_email
     assert data['application'] == sample_application_name
     assert data['plan'] == sample_plan_name
+
+    # Try doing the same logic, but coming from a user's email address. Its sanity checks should prevent
+    # incident creation, and give back the 4xx as it can't parse the response in terms of incident
+    # claiming/etc.
+    configure_email_incident_creation(sample_application_name, sample_plan_name, sample_email)
+
+    email_make_incident_payload = {
+        'body': 'This string should not become an incident',
+        'headers': [
+            {'name': 'From', 'value': sample_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+
+    re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
+    assert re.status_code == 400
+    assert 'X-IRIS-INCIDENT' not in re.headers
 
 
 def test_ui_routes(sample_user, sample_admin_user):
