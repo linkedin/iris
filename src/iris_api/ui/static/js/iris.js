@@ -79,9 +79,9 @@ iris = {
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
           if ((e.ctrlKey || e.metaKey)) {
-            window.open($(this).attr('data-route'));
+            window.open('/plans/' + $(this).attr('data-route'));
           } else {
-            window.location = $(this).attr('data-route');
+            window.location = '/plans/' + $(this).attr('data-route');
           }
         }
       });
@@ -717,9 +717,9 @@ iris = {
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
           if ((e.ctrlKey || e.metaKey)) {
-            window.open($(this).attr('data-route'));
+            window.open('/templates/' + $(this).attr('data-route'));
           } else {
-            window.location = $(this).attr('data-route');
+            window.location = '/templates/' + $(this).attr('data-route');
           }
         }
       });
@@ -1142,9 +1142,9 @@ iris = {
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
           if ((e.ctrlKey || e.metaKey)) {
-            window.open($(this).attr('data-route'));
+            window.open('/incidents/' + $(this).attr('data-route'));
           } else {
-            window.location = $(this).attr('data-route');
+            window.location = '/incidents/' + $(this).attr('data-route');
           }
         }
       });
@@ -1388,9 +1388,9 @@ iris = {
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
           if ((e.ctrlKey || e.metaKey)) {
-            window.open($(this).attr('data-route'));
+            window.open('/messages/' + $(this).attr('data-route'));
           } else {
-            window.location = $(this).attr('data-route');
+            window.location = '/messages/' + $(this).attr('data-route');
           }
         }
       });
