@@ -743,7 +743,7 @@ class ACLMiddleware(object):
         if req.context['username']:
             # Logged in and looking at /login page? Redirect to home.
             if req.path == '/login':
-                raise HTTPFound('/')
+                raise HTTPFound(ui.default_route)
         else:
             # If we're not logged in and this is a frontend route, we're only allowed
             # to view the login form

@@ -1999,7 +1999,7 @@ def test_ui_routes(sample_user, sample_admin_user):
     # And login redirects to home page
     re = requests.get(ui_url + 'login', allow_redirects=False, headers=username_header(sample_user))
     assert re.status_code == 302
-    assert re.headers['Location'] == '/'
+    assert re.headers['Location'] == '/incidents'
 
     # Test actual login + logout session using beaker's cookies in requests session, rather than using the header trick:
     session = requests.Session()

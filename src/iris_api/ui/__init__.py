@@ -48,6 +48,11 @@ def hms(seconds):
 jinja2_env.filters['hms'] = hms
 
 
+default_route = '/incidents'
+
+
+jinja2_env.globals['default_route'] = default_route
+
 def login_url(req):
     if req.path and req.path != '/login' and req.path != '/logout' and req.path != '/':
         return '/login/?next=%s' % uri.encode_value(req.path)
@@ -105,7 +110,7 @@ class Index(object):
     frontend_route = True
 
     def on_get(self, req, resp):
-        raise HTTPFound('/incidents')
+        raise HTTPFound(default_route)
 
 
 class Stats(object):
@@ -256,7 +261,7 @@ class Login():
         url = req.get_param('next')
 
         if not url or url.startswith('/'):
-            raise HTTPFound(url or '/incidents')
+            raise HTTPFound(url or default_route)
         else:
             raise HTTPBadRequest('Invalid next parameter', '')
 
