@@ -20,6 +20,9 @@
     {{# if @root.showEditOwners }}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br>
     <span class="light">Variables: {{#if variables}}{{#each variables}}<span class="label label-info">{{this}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{this}}"></i></span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
     <form id="add-variable-form"><input type="text" class="form-control border-bottom input-sm" placeholder="Add variable" id="add-variable-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>
+    {{# if @root.supportViewingKey }}
+    <div id="api-key-box" class="light">API key: {{# if @root.apiKey }}<code>{{ @root.apiKey }}</code>{{else}}<button id="show-api-key-button" class="btn btn-default blue btn-xs">Show</button>{{/if}}</div>
+    {{/if}}
   </div>
   <div class="module application-settings">
     <h4>Context Template</h4>

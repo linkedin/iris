@@ -1882,6 +1882,36 @@ class ApplicationQuota(object):
         resp.body = '{}'
 
 
+class ApplicationKey(object):
+    allow_read_only = False
+
+    def on_get(self, req, resp, app_name):
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to view this app\'s key', '')
+
+        session = db.Session()
+
+        if not req.context['is_admin']:
+            if not session.execute('''SELECT 1
+                                      FROM `application_owner`
+                                      JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                      JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                                      WHERE `target`.`name` = :username
+                                      AND `application`.`name` = :app_name''', {'app_name': app_name, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPForbidden('You don\'t have permissions to view this app\'s key.', '')
+
+        key = session.execute('''SELECT `key` FROM `application` WHERE `name` = :app_name LIMIT 1''', {'app_name': app_name}).scalar()
+
+        if not key:
+            session.close()
+            raise HTTPBadRequest('Key for this application not found', '')
+
+        session.close()
+
+        resp.body = ujson.dumps({'key': key})
+
+
 class Applications(object):
     allow_read_only = True
 
@@ -2725,6 +2755,7 @@ def get_api(config):
 
     app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     app.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
+    app.add_route('/v0/applications/{app_name}/key', ApplicationKey())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 
