@@ -1876,6 +1876,20 @@ def test_modify_application(sample_application_name, sample_admin_user, sample_u
     assert sample_mode in re.json()['supported_modes']
 
 
+def test_view_app_key(sample_application_name, sample_admin_user):
+    re = requests.get(base_url + 'applications/%s/key' % sample_application_name)
+    assert re.status_code == 401
+    assert re.json()['title'] == 'You must be a logged in user to view this app\'s key'
+
+    re = requests.get(base_url + 'applications/fakeapp124324/key', headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Key for this application not found'
+
+    re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    assert re.json().viewkeys() == {'key'}
+
+
 def test_twilio_delivery_update(fake_message_id):
     if not fake_message_id:
         pytest.skip('We do not have enough data in DB to do this test')

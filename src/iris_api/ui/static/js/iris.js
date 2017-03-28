@@ -1811,6 +1811,7 @@ iris = {
       applicationSavebutton: '#application-save-button',
       removeVariableButton: '.remove-variable',
       removeOwnerButton: '.remove-owner',
+      showApiKeyButton: '#show-api-key-button',
       addVariableForm: '#add-variable-form',
       addOwnerForm: '#add-owner-form',
       application: null,
@@ -1826,6 +1827,7 @@ iris = {
       var self = this, data = this.data;
       data.$page.on('click', data.applicationEditbutton, this.editApplication.bind(this));
       data.$page.on('click', data.applicationSavebutton, this.saveApplication.bind(this));
+      data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
       data.$page.on('click', data.removeVariableButton, function() {
         var variable = $(this).data('variable');
         var pos = self.data.model.variables.indexOf(variable);
@@ -1903,10 +1905,13 @@ iris = {
         // When quota does not exist, that endpoint 404s even though application is real
         app.quota = null;
       }).always(function() {
+        var owner = app.owners.indexOf(window.appData.user) !== -1;
         app.viewMode = true;
-        app.editable = window.appData.user_admin || app.owners.indexOf(window.appData.user) !== -1;
+        app.editable = window.appData.user_admin || owner;
+        app.supportViewingKey = window.appData.user_admin || owner;
         app.showEditOwners = window.appData.user_admin;
         app.showEditQuotas = false;
+        app.apiKey = false;
         self.data.model = app;
         self.render();
         self.events();
@@ -1916,6 +1921,16 @@ iris = {
       this.data.model.viewMode = false;
       this.data.model.showEditQuotas = window.appData.user_admin;
       this.render();
+    },
+    showApiKey: function() {
+      var self = this;
+      $.get('/v0/applications/' + self.data.application + '/key').done(function(result) {
+        self.data.model.apiKey = result.key;
+        self.modelPersist();
+        self.render();
+      }).fail(function(result) {
+        iris.createAlert('Unable to get key: ' + result.responseJSON.title);
+      });
     },
     saveApplication: function() {
       var self = this, failedCheck = false;
