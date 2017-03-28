@@ -53,6 +53,7 @@ default_route = '/incidents'
 
 jinja2_env.globals['default_route'] = default_route
 
+
 def login_url(req):
     if req.path and req.path != '/login' and req.path != '/logout' and req.path != '/':
         return '/login/?next=%s' % uri.encode_value(req.path)
