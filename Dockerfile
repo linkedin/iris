@@ -20,4 +20,4 @@ RUN chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx \
 
 EXPOSE 16649
 
-CMD ["bash", "-c", "source /home/iris/env/bin/activate && python /home/iris/entrypoint.py"]
+CMD ["sudo", "-Hu", "iris", "bash", "-c", "source /home/iris/env/bin/activate && python /home/iris/entrypoint.py"]
