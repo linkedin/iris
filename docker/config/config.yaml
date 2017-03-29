@@ -1,11 +1,15 @@
 server:
   disable_auth: True
 
-# This will soon be replaced with a ldap module bundled with iris-api
-role_lookup:
+role_lookup: dummy
+metrics: dummy
 
-metrics: prometheus
+# Change these to random long values when you run this in production
+user_session:
+  encrypt_key: 'abc'
+  sign_key: '123'
 
+#metrics: prometheus
 #prometheus:
 #  iris-sync-targets:
 #    server_port: 8001
@@ -27,8 +31,8 @@ db: &db
       scheme: mysql+pymysql
 
       # fill these in:
-      user:
-      password:
+      user: iris
+      password: iris
       host:
       database: iris
       charset: utf8
