@@ -1696,7 +1696,7 @@ def test_app_stats(sample_application_name):
                 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
                 'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month',
                 'total_incidents_last_month', 'total_messages_sent_last_month',
-                'pct_failed_twilio_call_last_month'):
+                'pct_failed_twilio_call_last_month', 'pct_successful_email_last_month'):
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
     re = requests.get(base_url + 'applications/%s/stats?fields=total_messages_sent_today&fields=total_incidents_today' % sample_application_name)

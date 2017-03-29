@@ -1443,6 +1443,9 @@ iris = {
           template = this.data.template = Handlebars.compile(this.data.incidentSource),
           template_vars = {changes: []};
       $.getJSON(self.data.url + path).done(function(data) {
+          if (data.generic_message_sent_status != null) {
+              data.generic_message_sent_status = data.generic_message_sent_status ? 'sent' : 'failed to send';
+          }
           $.extend(template_vars, data);
           $.getJSON(self.data.url + path + '/auditlog').done(function(data) {
             data.forEach(function(change) {

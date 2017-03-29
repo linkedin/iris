@@ -130,13 +130,15 @@ single_message_query = '''SELECT `message`.`id` as `id`,
     `application`.`name` as `application`,
     `priority`.`name` as `priority`,
     `target`.`name` as `target`,
-    `twilio_delivery_status`.`status` as `twilio_delivery_status`
+    `twilio_delivery_status`.`status` as `twilio_delivery_status`,
+    `generic_message_sent_status`.`status` as `generic_message_sent_status`
 FROM `message`
 JOIN `priority` ON `message`.`priority_id` = `priority`.`id`
 JOIN `application` ON `message`.`application_id` = `application`.`id`
 JOIN `mode` ON `message`.`mode_id` = `mode`.`id`
 JOIN `target` ON `message`.`target_id`=`target`.`id`
 LEFT JOIN `twilio_delivery_status` ON `twilio_delivery_status`.`message_id` = `message`.`id`
+LEFT JOIN `generic_message_sent_status` ON `generic_message_sent_status`.`message_id` = `message`.`id`
 WHERE `message`.`id` = %s'''
 
 message_audit_log_query = '''SELECT `id`, `date`, `old`, `new`, `change_type`, `description`
@@ -2655,6 +2657,22 @@ class ApplicationStats(object):
                                                                         AND `message`.`application_id` = %(application_id)s
                                                                         AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                         AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
+            'pct_successful_email_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
+                                                                JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
+                                                                JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                WHERE `generic_message_sent_status`.`status` = TRUE
+                                                                      AND `mode`.`name` = 'email'
+                                                                      AND `message`.`application_id` = %(application_id)s
+                                                                      AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                      AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
+                                                               (SELECT count(*) FROM `message`
+                                                                JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
+                                                                JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                                                                WHERE NOT ISNULL(`generic_message_sent_status`.`status`)
+                                                                      AND `mode`.`name` = 'email'
+                                                                      AND `message`.`application_id` = %(application_id)s
+                                                                      AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                      AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100'''
         }
 
         query_data = {'application_id': app['id']}

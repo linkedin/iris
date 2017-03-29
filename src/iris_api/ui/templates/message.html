@@ -82,6 +82,12 @@
       <p>
         <label><strong>Twilio Delivery Status:</strong></label> {{ twilio_delivery_status }}
       </p>
+      {{else}}
+        {{#if generic_message_sent_status }}
+        <p>
+          <label><strong>Status:</strong></label> {{ generic_message_sent_status }}
+        </p>
+        {{/if}}
       {{/if}}
     </div>
   </div>
