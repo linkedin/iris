@@ -23,7 +23,7 @@ from iris_api.sender.message import update_message_mode
 from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris_api import cache as api_cache
 from iris_api.sender.quota import ApplicationQuota
-from pymysql import DataError
+from pymysql import DataError, IntegrityError
 # queue for sending messages
 from iris_api.sender.shared import send_queue, add_mode_stat
 
@@ -784,6 +784,31 @@ def mark_message_as_sent(message):
         connection.close()
 
 
+def update_message_sent_status(message, status):
+    message_id = message.get('message_id')
+    if not message_id:
+        return
+
+    mode = message.get('mode')
+
+    if not mode:
+        return
+
+    # Don't track this for twilio as those are kept track of separately. Make use of this for email,
+    # and, as a side effect of that for slack
+    if mode in ('sms', 'call'):
+        return
+
+    session = db.Session()
+    try:
+        session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`) VALUES (:message_id, :status)
+                           ON DUPLICATE KEY UPDATE `status` =  :status''', {'message_id': message_id, 'status': status})
+        session.commit()
+    except (DataError, IntegrityError):
+        logger.exception('Failed setting message sent status for message %s', message)
+    session.close()
+
+
 def mark_message_has_no_contact(message):
     message_id = message.get('message_id')
     if not message_id:
@@ -899,6 +924,9 @@ def fetch_and_send_message():
         metrics.incr('message_send_cnt')
         if message['message_id']:
             mark_message_as_sent(message)
+
+    if message['message_id']:
+        update_message_sent_status(message, success)
 
 
 def worker():

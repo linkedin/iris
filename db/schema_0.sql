@@ -652,6 +652,18 @@ CREATE TABLE `incident_emails` (
   CONSTRAINT `incident_emails_plan_name_ibfk` FOREIGN KEY (`plan_name`) REFERENCES `plan_active` (`name`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `generic_message_sent_status`
+--
+
+DROP TABLE IF EXISTS `generic_message_sent_status`;
+CREATE TABLE `generic_message_sent_status` (
+  `message_id` bigint(20) NOT NULL,
+  `status` tinyint(1) NOT NULL,
+  PRIMARY KEY (`message_id`),
+  CONSTRAINT `generic_message_sent_status_message_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
