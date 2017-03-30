@@ -222,15 +222,6 @@ def sample_mode():
         return modes[0]
 
 
-def configure_email_incident_creation(application_name, plan_name, email):
-    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
-                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
-                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
-                       {'email': email, 'application_name': application_name, 'plan_name': plan_name})
-        conn.commit()
-
-
 def create_incident_with_message(application, plan, target, mode):
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
@@ -1910,14 +1901,45 @@ def test_twilio_delivery_update(fake_message_id):
     assert re.json()['twilio_delivery_status'] == 'delivered'
 
 
-def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_email):
+def test_configure_email_incidents(sample_application_name, sample_application_name2, sample_plan_name, sample_email, sample_admin_user):
+    # Test wiping incident email addresses for an app
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={}, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s/incident_emails' % sample_application_name)
+    assert re.status_code == 200
+    assert re.json() == {}
+
+    # Block trying to set a users email to create an incident
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={sample_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'These email addresses are also user\'s email addresses which is not allowed: %s' % sample_email
+
+    special_email = 'specialfoo@foomail.com'
+
+    # Test setting an email address + plan name combination for an app successfully
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s/incident_emails' % sample_application_name)
+    assert re.status_code == 200
+    assert re.json()[special_email] == sample_plan_name
+
+    # Block one application stealing another application's email
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name2, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'These email addresses are already in use by another app: %s' % special_email
+
+
+def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_email, sample_admin_user):
     if not sample_application_name or not sample_plan_name or not sample_email:
         pytest.skip('We do not have enough data in DB to do this test')
 
     special_email = 'irisfoobar@fakeemail.com'
 
     # Ensure this email is configured properly.
-    configure_email_incident_creation(sample_application_name, sample_plan_name, special_email)
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
 
     email_make_incident_payload = {
         'body': 'This is a new test incident with a test message to be delivered to people.',
@@ -1941,8 +1963,14 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
 
     # Try doing the same logic, but coming from a user's email address. Its sanity checks should prevent
     # incident creation, and give back the 4xx as it can't parse the response in terms of incident
-    # claiming/etc.
-    configure_email_incident_creation(sample_application_name, sample_plan_name, sample_email)
+    # claiming/etc. Need to set it using SQL as the api for setting these settings will reject using a
+    # user's email address.
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
+                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
+                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
+                       {'email': sample_email, 'application_name': sample_application_name, 'plan_name': sample_plan_name})
+        conn.commit()
 
     email_make_incident_payload = {
         'body': 'This string should not become an incident',
