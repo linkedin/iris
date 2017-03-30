@@ -861,7 +861,7 @@ class Plans(object):
 
         .. sourcecode:: http
 
-           GET /api/v0/plans?name__contains=foo&active=1
+           GET /v0/plans?name__contains=foo&active=1
 
         **Example response**:
 
@@ -1177,6 +1177,40 @@ class Message(object):
     allow_read_only = True
 
     def on_get(self, req, resp, message_id):
+        '''
+        Get information for an iris message by id
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/messages/{message_id}
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+              "body": "message body",
+              "incident_id": 2590447,
+              "target": "username",
+              "created": 1490825218,
+              "destination": "username@domain.com",
+              "batch": null,
+              "twilio_delivery_status": null,
+              "priority": "low",
+              "application": "app",
+              "mode": "email",
+              "active": 0,
+              "generic_message_sent_status": 1,
+              "id": 24807074,
+              "sent": 1490825221,
+              "subject": "message subject"
+           }
+        '''
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(single_message_query, int(message_id))
@@ -1194,6 +1228,33 @@ class MessageAuditLog(object):
     allow_read_only = True
 
     def on_get(self, req, resp, message_id):
+        '''
+        Get a message's log of changes
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/messages/{message_id}/auditlog
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           [
+             {
+               "old": "sms",
+               "description": "Changing mode due to original mode failure",
+               "date": 1489507284,
+               "new": "email",
+               "change_type": "mode-change",
+               "id": 438
+             },
+           ]
+        '''
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(message_audit_log_query, int(message_id))
@@ -1546,7 +1607,7 @@ class TargetRoles(object):
 
         .. sourcecode:: http
 
-           GET /api/v0/target_roles
+           GET /v0/target_roles
 
         **Example response**:
 
@@ -1952,6 +2013,24 @@ class Modes(object):
     allow_read_only = False
 
     def on_get(self, req, resp):
+        '''
+        List all iris modes
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/modes
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           ['sms', 'email', 'slack', 'call']
+        '''
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
         # Deliberately omit "drop" as it's a special case only supported in very limited circumstances and shouldn't
@@ -2465,6 +2544,24 @@ class ReprioritizationMode(object):
     enforce_user = True
 
     def on_delete(self, req, resp, username, src_mode_name):
+        '''
+        Delete a reprioritization mode for a user's mode setting
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           DELETE /v0/users/reprioritization/{username}/{src_mode_name}
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           []
+        '''
         session = db.Session()
         affected_rows = session.execute(delete_reprioritization_settings_query, {
             'target_name': username,
@@ -2487,6 +2584,24 @@ class Healthcheck(object):
         self.healthcheck_path = path
 
     def on_get(self, req, resp):
+        '''
+        Healthcheck endpoint. Returns contents of healthcheck file.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/healthcheck
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: text/plain
+
+           GOOD
+        '''
         try:
             with open(self.healthcheck_path) as f:
                 health = f.readline().strip()
