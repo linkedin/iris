@@ -1975,6 +1975,109 @@ class ApplicationKey(object):
         resp.body = ujson.dumps({'key': key})
 
 
+class ApplicationEmailIncidents(object):
+    allow_read_only = False
+
+    def on_get(self, req, resp, app_name):
+        '''
+        Get email addresses which will create incidents on behalf of this application
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/applications/{app_name}/incident_emails
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+             "irisfoobar@fakeemail.com": "sandbox_high_plan",
+             "racontreras@linkedin.com": "sandbox_high_plan"
+           }
+        '''
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute('''SELECT `incident_emails`.`email`, `incident_emails`.`plan_name`
+                          FROM `incident_emails`
+                          JOIN `application` on `application`.`id` = `incident_emails`.`application_id`
+                          WHERE `application`.`name` = %s''', app_name)
+
+        payload = dict(cursor)
+        cursor.close()
+        connection.close()
+        resp.body = ujson.dumps(payload)
+
+    def on_put(self, req, resp, app_name):
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to change this application\'s email incident settings', '')
+
+        session = db.Session()
+
+        if not req.context['is_admin']:
+            if not session.execute('''SELECT 1
+                                      FROM `application_owner`
+                                      JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                      JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                                      WHERE `target`.`name` = :username
+                                      AND `application`.`name` = :app_name''', {'app_name': app_name, 'username': req.context['username']}).scalar():
+                session.close()
+                raise HTTPForbidden('You don\'t have permissions to change this application\'s email incident settings.', '')
+
+        try:
+            email_to_plans = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body')
+
+        if email_to_plans:
+            email_addresses = tuple(email_to_plans.keys())
+
+            # If we're trying to configure email addresses which are members contacts, block this
+            check_users_emails = session.execute('''SELECT `target_contact`.`destination`
+                                                    FROM `target_contact`
+                                                    WHERE `target_contact`.`destination` IN :email_addresses
+                                                    ''', {'email_addresses': email_addresses}).fetchall()
+            if check_users_emails:
+                session.close()
+                raise HTTPBadRequest('These email addresses are also user\'s email addresses which is not allowed: %s' % ', '.join(row[0] for row in check_users_emails))
+
+            # If we're trying to configure email addresses currently in use by other apps, block this
+            check_other_apps_emails = session.execute('''SELECT `incident_emails`.`email`
+                                                         FROM `incident_emails`
+                                                         WHERE `incident_emails`.`application_id` != (SELECT `id` FROM `application` WHERE `name` = :app_name)
+                                                         AND `incident_emails`.`email` in :email_addresses''', {'app_name': app_name, 'email_addresses': email_addresses}).fetchall()
+            if check_other_apps_emails:
+                session.close()
+                raise HTTPBadRequest('These email addresses are already in use by another app: %s' % ', '.join(row[0] for row in check_other_apps_emails))
+
+            # Delete all email -> plan configurations which are not present in this, for this app
+            session.execute('''DELETE FROM `incident_emails`
+                               WHERE `incident_emails`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)
+                               AND `incident_emails`.`email` NOT IN :email_addresses''', {'app_name': app_name, 'email_addresses': email_addresses})
+
+            # Configure new/existing ones
+            for email_address, plan_name in email_to_plans.iteritems():
+                try:
+                    session.execute('''INSERT INTO `incident_emails` (`application_id`, `email`, `plan_name`)
+                                       VALUES ((SELECT `id` FROM `application` WHERE `name` = :app_name), :email_address, :plan_name)
+                                       ON DUPLICATE KEY UPDATE `plan_name` = :plan_name ''', {'app_name': app_name, 'email_address': email_address, 'plan_name': plan_name})
+                except IntegrityError:
+                    session.close()
+                    raise HTTPBadRequest('Failed adding %s -> %s combination. Is your plan name correct?' % (email_address, plan_name))
+        else:
+            session.execute('''DELETE FROM `incident_emails` WHERE `application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)''', {'app_name': app_name})
+
+        session.commit()
+        session.close()
+
+        resp.body = '[]'
+        resp.status = HTTP_200
+
+
 class Applications(object):
     allow_read_only = True
 
@@ -2889,6 +2992,7 @@ def get_api(config):
     app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     app.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
     app.add_route('/v0/applications/{app_name}/key', ApplicationKey())
+    app.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 
