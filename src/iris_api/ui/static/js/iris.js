@@ -1927,6 +1927,7 @@ iris = {
     },
     showApiKey: function() {
       var self = this;
+      $(self.data.showApiKeyButton).prop('disabled', true);
       $.get('/v0/applications/' + self.data.application + '/key').done(function(result) {
         self.data.model.apiKey = result.key;
         self.modelPersist();
