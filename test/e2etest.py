@@ -1984,6 +1984,20 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     assert re.status_code == 400
     assert 'X-IRIS-INCIDENT' not in re.headers
 
+    # Also try creating an incident with an an email that's a reply to the thread, which shouldn't work
+    email_make_incident_payload = {
+        'body': 'This string should not become an incident',
+        'headers': [
+            {'name': 'From', 'value': special_email},
+            {'name': 'Subject', 'value': 'fooject'},
+            {'name': 'In-Reply-To', 'value': 'messagereference'},
+        ]
+    }
+
+    re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
+    assert re.status_code == 204
+    assert re.headers['X-IRIS-INCIDENT'] == 'Not created'
+
 
 def test_ui_routes(sample_user, sample_admin_user):
     # When not logged in, various pages redirect to login page
