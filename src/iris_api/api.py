@@ -2377,16 +2377,10 @@ class ResponseMixin(object):
 
 class ResponseGmail(ResponseMixin):
     def on_post(self, req, resp):
-        source = None
-        subject = None
         gmail_params = ujson.loads(req.context['body'])
-        # TODO(khrichar): there has to be a better way
-        for h in gmail_params['headers']:
-            key = h.get('name')
-            if key == 'From':
-                source = h.get('value')
-            elif key == 'Subject':
-                subject = h.get('value')
+        email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
+        subject = email_headers.get('Subject')
+        source = email_headers.get('From')
         if not source:
             msg = 'No source found in headers: %s' % gmail_params['headers']
             raise HTTPBadRequest('Missing source', msg)
@@ -2403,6 +2397,13 @@ class ResponseGmail(ResponseMixin):
                                                 WHERE `email` = :email
                                                 AND `email` NOT IN (SELECT `destination` FROM `target_contact` WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email'))''', {'email': source}).fetchone()
         if email_check_result:
+
+            if 'In-Reply-To' in email_headers:
+                logger.warning('Not creating incident for email %s as this is an email reply, rather than a fresh email.', source)
+                resp.status = HTTP_204
+                resp.set_header('X-IRIS-INCIDENT', 'Not created')
+                return
+
             incident_info = {
                 'application_id': email_check_result['application_id'],
                 'created': datetime.datetime.utcnow(),
