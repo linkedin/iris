@@ -1779,7 +1779,8 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     assert re.status_code == 204
 
     re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
-    assert re.status_code == 404
+    assert re.status_code == 200
+    assert re.json() == {}
 
 
 def test_modify_application(sample_application_name, sample_admin_user, sample_user, sample_mode):

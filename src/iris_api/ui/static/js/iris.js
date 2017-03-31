@@ -1918,29 +1918,25 @@ iris = {
         return;
       }
       iris.changeTitle('Application ' + app.name);
-      $.getJSON(self.data.url + application + '/quota').done(function(response) {
-        app.quota = response;
+
+      $.when($.get(self.data.url + application + '/quota'),
+             $.get(self.data.url + application + '/incident_emails')
+      ).always(function(quota, incident_emails) {
+        app.quota = Object.keys(quota[0]).length ? quota[0] : null;
+        app.emailIncidents = incident_emails[0];
+        var owner = app.owners.indexOf(window.appData.user) !== -1;
+        app.viewMode = true;
+        app.editable = window.appData.user_admin || owner;
+        app.supportViewingKey = window.appData.user_admin || owner;
+        app.supportEditingEmailIncidents = window.appData.user_admin || owner;
+        app.showEditOwners = window.appData.user_admin;
+        app.showEditQuotas = false;
+        app.apiKey = false;
+        self.data.model = app;
+        self.render();
+        self.events();
       }).fail(function() {
-        // When quota does not exist, that endpoint 404s even though application is real
-        app.quota = null;
-      }).always(function() {
-        $.getJSON(self.data.url + application + '/incident_emails').done(function(response) {
-          app.emailIncidents = response;
-        }).fail(function() {
-          app.emailIncidents = {};
-        }).always(function() {
-          var owner = app.owners.indexOf(window.appData.user) !== -1;
-          app.viewMode = true;
-          app.editable = window.appData.user_admin || owner;
-          app.supportViewingKey = window.appData.user_admin || owner;
-          app.supportEditingEmailIncidents = window.appData.user_admin || owner;
-          app.showEditOwners = window.appData.user_admin;
-          app.showEditQuotas = false;
-          app.apiKey = false;
-          self.data.model = app;
-          self.render();
-          self.events();
-        });
+        iris.createAlert('Failed loading app settings');
       });
     },
     editApplication: function() {

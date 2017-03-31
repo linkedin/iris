@@ -1864,10 +1864,10 @@ class ApplicationQuota(object):
         quota = cursor.fetchone()
         cursor.close()
         connection.close()
-        if not quota:
+        if quota:
+            resp.body = ujson.dumps(quota)
+        else:
             resp.body = '{}'
-            raise HTTPNotFound()
-        resp.body = ujson.dumps(quota)
 
     def on_post(self, req, resp, app_name):
 
