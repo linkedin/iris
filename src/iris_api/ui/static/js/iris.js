@@ -1817,6 +1817,8 @@ iris = {
       showApiKeyButton: '#show-api-key-button',
       addVariableForm: '#add-variable-form',
       addOwnerForm: '#add-owner-form',
+      addEmailIncidentForm: '#add-email-incident-form',
+      removeEmailIncidentButton: '.delete-email-incident-button',
       application: null,
       model: {}
     },
@@ -1877,6 +1879,20 @@ iris = {
         self.modelPersist();
         self.render();
       });
+      data.$page.on('submit', data.addEmailIncidentForm, function() {
+          var $email = $('#add-email-incident-email');
+          var $plan = $('#add-email-incident-plan');
+          self.data.model.emailIncidents[$email.val()] = $plan.val();
+          $email.val('');
+          $plan.val('');
+          self.modelPersist();
+          self.render();
+      });
+      data.$page.on('click', data.removeEmailIncidentButton, function() {
+          delete self.data.model.emailIncidents[$(this).data('email')];
+          self.modelPersist();
+          self.render();
+      });
       window.onbeforeunload = iris.unloadDialog.bind(this);
     },
     modelPersist: function() {
@@ -1902,22 +1918,29 @@ iris = {
         return;
       }
       iris.changeTitle('Application ' + app.name);
-      $.getJSON(this.data.url + application + '/quota').done(function(response) {
+      $.getJSON(self.data.url + application + '/quota').done(function(response) {
         app.quota = response;
       }).fail(function() {
         // When quota does not exist, that endpoint 404s even though application is real
         app.quota = null;
       }).always(function() {
-        var owner = app.owners.indexOf(window.appData.user) !== -1;
-        app.viewMode = true;
-        app.editable = window.appData.user_admin || owner;
-        app.supportViewingKey = window.appData.user_admin || owner;
-        app.showEditOwners = window.appData.user_admin;
-        app.showEditQuotas = false;
-        app.apiKey = false;
-        self.data.model = app;
-        self.render();
-        self.events();
+        $.getJSON(self.data.url + application + '/incident_emails').done(function(response) {
+          app.emailIncidents = response;
+        }).fail(function() {
+          app.emailIncidents = {};
+        }).always(function() {
+          var owner = app.owners.indexOf(window.appData.user) !== -1;
+          app.viewMode = true;
+          app.editable = window.appData.user_admin || owner;
+          app.supportViewingKey = window.appData.user_admin || owner;
+          app.supportEditingEmailIncidents = window.appData.user_admin || owner;
+          app.showEditOwners = window.appData.user_admin;
+          app.showEditQuotas = false;
+          app.apiKey = false;
+          self.data.model = app;
+          self.render();
+          self.events();
+        });
       });
     },
     editApplication: function() {
@@ -2001,6 +2024,14 @@ iris = {
           }));
         }
       }
+      if (self.data.model.supportEditingEmailIncidents) {
+        ajaxCalls.push($.ajax({
+          url: self.data.url + self.data.application + '/incident_emails',
+          data: JSON.stringify(self.data.model.emailIncidents),
+          method: 'PUT',
+          contentType: 'application/json'
+        }));
+      }
       ajaxCalls.push($.ajax({
         url: self.data.url + self.data.application,
         data: JSON.stringify(self.data.model),
@@ -2010,6 +2041,7 @@ iris = {
       $.when.apply(undefined, ajaxCalls).done(function(){
         self.data.model.viewMode = true;
         self.data.model.showEditQuotas = false;
+        self.data.model.apiKey = false;
         self.render();
         iris.createAlert('Settings saved', 'success');
       }).fail(function(data) {
@@ -2298,6 +2330,12 @@ iris = {
   },
   registerHandlebarHelpers: function(){
     // Register handlebars helpers
+    Handlebars.registerHelper('ifNot', function(val, opts){
+      return val ? opts.inverse(this) : opts.fn(this);
+    });
+    Handlebars.registerHelper('hasKeys', function(val, opts){
+      return Object.keys(val).length ? opts.fn(this) : opts.inverse(this);
+    });
     Handlebars.registerHelper('isSelected', function(val, check){
       return val === check ? 'selected': '';
     });
