@@ -68,6 +68,51 @@
       {{/if}}
     {{/if}}
   </div>
+  <div class="module application-email-incidents user-settings">
+    <h4>Emails which create incidents</h4>
+    <p class="light">When you send an email with these addresses in the "from" header, a new incident will be created.</p>
+    {{#hasKeys @root.emailIncidents }}
+    <table id="application-email-incidents-table">
+      <thead>
+        <tr>
+          <td>Email Address</td>
+          <td>Plan To Fire</td>
+          {{# ifNot @root.viewMode }}
+            {{#if @root.supportEditingEmailIncidents }}
+              <td class="delete-column">Delete</td>
+            {{/if}}
+          {{/ifNot}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#each @root.emailIncidents}}
+        <tr>
+          <td>{{@key}}</td>
+          <td>{{this}}</td>
+          {{# ifNot @root.viewMode }}
+            {{#if @root.supportEditingEmailIncidents }}
+              <td><button class="btn btn-danger btn-sm delete-email-incident-button" data-email="{{@key}}" title="Delete this email->plan combo">Delete</button></td>
+            {{/if}}
+          {{/ifNot}}
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{else}}
+      {{#if @root.viewMode }}
+        <p class="light">None configured.</p>
+      {{/if}}
+    {{/hasKeys}}
+    {{#ifNot @root.viewMode }}
+      {{#if @root.supportEditingEmailIncidents }}
+        <form id="add-email-incident-form">
+          <input required type="email" id="add-email-incident-email" class="form-control border-bottom" placeholder="Email Address">
+          <input required type="text" id="add-email-incident-plan" class="form-control border-bottom typeahead" data-typeaheadtype="plan" placeholder="Plan name">
+          <input type="submit" value="Add" class="btn btn-primary btn-sm">
+        </form>
+      {{/if}}
+    {{/ifNot}}
+  </div>
 </script>
 {% endraw %}
 {% endblock %}

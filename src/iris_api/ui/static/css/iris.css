@@ -1289,6 +1289,25 @@ table.dataTable thead .sorting_asc {
   width: 100%;
 }
 
+#application-email-incidents-table {
+  width: auto;
+  margin: 10px 0px;
+}
+
+#add-email-incident-form input {
+  width: auto;
+}
+
+.application-email-incidents span.twitter-typeahead {
+  width: auto;
+}
+
+#add-email-incident-form {
+  /* Need this to make the email incidents text boxes line up, as the twitter typeahead
+     skews everything */
+  line-height: 33px;
+}
+
 /*
  * Stats page
  */
