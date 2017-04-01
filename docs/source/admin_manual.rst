@@ -17,8 +17,7 @@ Iris components
 More indepth documentation for each Iris components:
 
 .. toctree::
-   api
-   frontend
+   iris
    sender
    relay
 
