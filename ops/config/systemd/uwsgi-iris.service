@@ -1,0 +1,13 @@
+[Unit]
+Description=iris uWSGI app
+After=syslog.target
+
+[Service]
+ExecStart=bash -c 'cd /home/iris && source ./env/bin/activate && DOCKER_DB_BOOTSTRAP=1 python ./entrypoint.py'
+User=iris
+Group=iris
+Restart=on-failure
+KillSignal=SIGQUIT
+Type=notify
+StandardError=syslog
+NotifyAccess=all

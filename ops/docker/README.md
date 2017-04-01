@@ -1,6 +1,9 @@
 Iris-API (and iris-sender) under Docker
 ======================================
 
+**NOTE: Not mainatined anymore, please build latest docker image from provided packer setup.
+See: ../packer/README.md**
+
 ### Get started
 
 Build container. This installs all dependencies as well as copies all iris source code.

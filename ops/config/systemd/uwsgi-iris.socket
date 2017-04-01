@@ -1,0 +1,11 @@
+[Unit]
+Description=Socket for uWSGI app iris
+
+[Socket]
+ListenStream=/home/iris/var/run/uwsgi.sock
+SocketUser=iris
+SocketGroup=iris
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target
