@@ -7,11 +7,11 @@ RUN apt-get update && apt-get -y dist-upgrade \
 
 RUN useradd -m -s /bin/bash iris
 
-COPY setup.py /home/iris/setup.py
-COPY docker/entrypoint.py /home/iris/entrypoint.py
-ADD docker/daemons /home/iris/daemons
-ADD db /home/iris/db
-ADD src /home/iris/src
+COPY ../../setup.py /home/iris/setup.py
+COPY ../entrypoint.py /home/iris/entrypoint.py
+ADD ../daemons /home/iris/daemons
+ADD ../../db /home/iris/db
+ADD ../../src /home/iris/source/src
 
 RUN chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx \
     && sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run \

@@ -1,0 +1,58 @@
+variables:
+  app_name: "iris"
+  git_tag: "master"
+  aws_access_key: ""
+  aws_secret_key: ""
+  aws_ssh_keypair_name: ""
+  aws_ssh_private_key_file: ""
+
+
+builders:
+  - type: "amazon-ebs"
+    access_key: "{{ user `aws_access_key` }}"
+    secret_key: "{{ user `aws_secret_key` }}"
+    region: "us-west-2"
+    instance_type: "t2.micro"
+    ssh_username: "ubuntu"
+    ami_name: "{{ user `app_name` }} {{ timestamp }}"
+    ssh_keypair_name: "{{ user `aws_ssh_keypair_name` }}"
+    ssh_private_key_file: "{{ user `aws_ssh_private_key_file` }}"
+    # source_ami: "ami-fa27b39a"
+    # most recent Ubuntu 16.04 HVM EBS AMI from Canonical
+    source_ami_filter:
+      filters:
+        virtualization-type: "hvm"
+        name: "*ubuntu-xenial-16.04-amd64-server-*"
+        root-device-type: "ebs"
+      owners: ["099720109477"]
+      most_recent: True
+
+  - type: "docker"
+    image: "ubuntu:16.04"
+    commit: True
+
+
+provisioners:
+  - type: "shell"
+    inline:
+      - "sudo apt-get update && sudo apt-get -y dist-upgrade && sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python mysql-client && sudo rm -rf /var/cache/apt/archives/*"
+      - sudo useradd -m -s /bin/bash iris
+      - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
+      - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run
+      - "sudo -Hu iris curl -L https://github.com/linkedin/iris-api/archive/{{ user `git_tag` }}.zip -o /home/iris/source.zip"
+      - sudo -Hu iris unzip /home/iris/source.zip -d /home/iris
+      - "sudo -Hu iris mv /home/iris/iris-api-{{ user `git_tag` }} /home/iris/source"
+      - sudo -Hu iris ln -s /home/iris/source/docker/daemons /home/iris/daemons
+      - sudo -Hu iris ln -s /home/iris/source/docker/entrypoint.py /home/iris/entrypoint.py
+      - sudo -Hu iris ln -s /home/iris/source/db /home/iris/db
+      - sudo -Hu iris mkdir /home/iris/config
+      - sudo -Hu iris rm /home/iris/source.zip
+      - sudo -Hu iris virtualenv /home/iris/env
+      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && python setup.py install'
+
+
+post-processors:
+  - type: "docker-tag"
+    repository: "iris/iris"
+    tag: "0.0.1"
+    only: ["docker"]

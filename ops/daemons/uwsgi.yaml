@@ -1,11 +1,12 @@
 prod:
     plugins: python,logfile
-    chdir: /home/iris/src
+    chdir: /home/iris/source/src
     socket: /home/iris/var/run/uwsgi.sock
     chmod-socket: 666
     master: True
-    uid: 1000
-    gid: 1000
+    # set the following two settings if you are running under root
+    # uid: 1000
+    # gid: 1000
     workers: 12
     master-fifo: /home/iris/var/run/uwsgi_master_fifo
     touch-reload: /home/iris/var/run/uwsgi_touch_reload
