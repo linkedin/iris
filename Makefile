@@ -19,7 +19,7 @@ unit:
 	py.test test
 
 check:
-	flake8
+	flake8 src test setup.py
 	make test
 
 unit-cov:
