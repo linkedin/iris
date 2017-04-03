@@ -4,6 +4,9 @@
   <!-- template renders here -->
 </div>
 {% raw %}
+<script id="loader-template" type="text/x-handlebars-template">
+  <i class="loader"></i>
+</script>
 <script id="application-template" type="text/x-handlebars-template">
   <div class="module application-module {{# if @root.viewMode }}view{{else}}edit{{/if}}-application">
     <h3>
