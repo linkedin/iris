@@ -9,7 +9,7 @@ import pytest
 import json
 import requests
 import copy
-import iris_api.bin.iris_ctl as iris_ctl
+import iris.bin.iris_ctl as iris_ctl
 from click.testing import CliRunner
 import uuid
 

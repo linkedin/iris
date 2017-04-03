@@ -1,7 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from iris_api.constants import EMAIL_SUPPORT, IM_SUPPORT
+from iris.constants import EMAIL_SUPPORT, IM_SUPPORT
 from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText

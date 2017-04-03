@@ -10,7 +10,7 @@ import ujson
 import requests
 import importlib
 import logging
-from iris_api.ui import auth
+from iris.ui import auth
 from beaker.middleware import SessionMiddleware
 
 logger = logging.getLogger(__name__)
@@ -354,7 +354,7 @@ class JinjaValidate():
 
 def init(config, app):
     logger.info('Web asset root: "%s"', ui_root)
-    auth_module = config.get('auth', {'module': 'iris_api.ui.auth.noauth'})['module']
+    auth_module = config.get('auth', {'module': 'iris.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
 
@@ -379,7 +379,7 @@ def init(config, app):
     app.add_route('/validate/jinja', JinjaValidate())
 
     # Configuring the beaker middleware mutilates the app object, so do it
-    # at the end, after we've added all routes/sinks for the entire iris-api
+    # at the end, after we've added all routes/sinks for the entire iris
     # app.
     session_opts = {
         'session.type': 'cookie',

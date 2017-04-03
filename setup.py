@@ -4,7 +4,7 @@
 import setuptools
 
 setuptools.setup(
-    name='iris-api',
+    name='iris',
     version='0.14.0',
     package_dir={'': 'src'},
     packages=setuptools.find_packages('src'),
@@ -40,11 +40,12 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'iris-api = iris_api.bin.run_server:main',
-            'iris-sender = iris_api.bin.sender:main',
-            'iris-sync-targets = iris_api.bin.sync_targets:main',
-            'iris_ctl = iris_api.bin.iris_ctl:main',
-            'build_assets = iris_api.bin.ui_build_assets:main',
+            'iris-api = iris.bin.run_server:main',
+            'iris = iris.bin.run_server:main',
+            'iris-sender = iris.bin.sender:main',
+            'iris-sync-targets = iris.bin.sync_targets:main',
+            'iris_ctl = iris.bin.iris_ctl:main',
+            'build_assets = iris.bin.ui_build_assets:main',
         ]
     }
 )

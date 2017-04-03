@@ -29,9 +29,9 @@ from . import db
 from . import utils
 from . import cache
 from . import ui
-from iris_api.sender import auditlog
-from iris_api.sender.quota import (get_application_quotas_query, insert_application_quota_query,
-                                   required_quota_keys, quota_int_keys)
+from iris.sender import auditlog
+from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
+                               required_quota_keys, quota_int_keys)
 
 from gevent import spawn, sleep
 

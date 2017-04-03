@@ -1,10 +1,10 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-"""Tests for iris-api."""
+"""Tests for iris."""
 import falcon.testing
-import iris_api.cache
-from iris_api.api import ReqBodyMiddleware, AuthMiddleware, Healthcheck
+import iris.cache
+from iris.api import ReqBodyMiddleware, AuthMiddleware, Healthcheck
 import time
 import hmac
 import hashlib
@@ -14,8 +14,8 @@ from mock import patch, mock_open
 
 class TestCommand(falcon.testing.TestCase):
     def test_parse_response(self):
-        from iris_api.utils import parse_response
-        with patch('iris_api.utils.db'):
+        from iris.utils import parse_response
+        with patch('iris.utils.db'):
             msg_id, cmd = parse_response('123 Claim', 'sms', '123-456-7890')
             self.assertEqual(msg_id, '123')
             self.assertEqual(cmd, 'claim')
@@ -49,7 +49,7 @@ class TestAuth(falcon.testing.TestCase):
             resp.body = 'Hello world'
 
     def test_auth(self):
-        iris_api.cache.applications = {'app': {'key': 'key'}}
+        iris.cache.applications = {'app': {'key': 'key'}}
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)

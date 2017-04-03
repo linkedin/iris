@@ -10,7 +10,7 @@ import msgpack
 from ..utils import msgpack_unpack_msg_from_socket
 from . import cache
 from .shared import send_queue, add_mode_stat
-from iris_api import metrics
+from iris import metrics
 
 import logging
 logger = logging.getLogger(__name__)

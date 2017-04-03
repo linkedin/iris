@@ -1,7 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from iris_api.custom_import import import_custom_module
+from iris.custom_import import import_custom_module
 from collections import defaultdict
 import logging
 import itertools
@@ -19,12 +19,12 @@ class IrisVendorException(Exception):
 
 
 def init_vendors(vendors, application_vendors):
-    applications = {application_cls.name: application_cls for application_cls in (import_custom_module('iris_api.applications', application) for application in application_vendors)}
+    applications = {application_cls.name: application_cls for application_cls in (import_custom_module('iris.applications', application) for application in application_vendors)}
 
     vendor_instances = defaultdict(list)
     app_vendor_instances = defaultdict(lambda: defaultdict(list))
     for vendor_config in vendors:
-        vendor_cls = import_custom_module('iris_api.vendors', vendor_config['type'])
+        vendor_cls = import_custom_module('iris.vendors', vendor_config['type'])
         for mode in vendor_cls.supports:
             vendor_instances[mode].append(vendor_cls(copy.deepcopy(vendor_config)))
             for application_name, application_cls in applications.iteritems():

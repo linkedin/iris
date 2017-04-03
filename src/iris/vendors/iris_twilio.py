@@ -1,11 +1,11 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from iris_api.constants import SMS_SUPPORT, CALL_SUPPORT
-from iris_api.plugins import find_plugin
+from iris.constants import SMS_SUPPORT, CALL_SUPPORT
+from iris.plugins import find_plugin
 from twilio.rest import TwilioRestClient
 from twilio.rest.resources import Connection
-from iris_api import db
+from iris import db
 from sqlalchemy.exc import IntegrityError
 import time
 import urllib

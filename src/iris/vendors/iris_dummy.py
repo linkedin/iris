@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 import logging
-from iris_api.constants import EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT, SLACK_SUPPORT
+from iris.constants import EMAIL_SUPPORT, IM_SUPPORT, CALL_SUPPORT, SMS_SUPPORT, SLACK_SUPPORT
 
 logger = logging.getLogger(__name__)
 

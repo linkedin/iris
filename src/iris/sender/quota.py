@@ -5,9 +5,9 @@ from time import time
 from gevent import spawn, sleep
 from collections import deque
 from datetime import datetime
-from iris_api.sender.shared import send_queue
-from iris_api.cache import priorities, applications
-from iris_api import metrics
+from iris.sender.shared import send_queue
+from iris.cache import priorities, applications
+from iris import metrics
 import logging
 import ujson
 

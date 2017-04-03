@@ -52,7 +52,7 @@ sender:
   port: 2321
   is_master: True
 
-  # Sender that iris-api's notifications endpoint sends to
+  # Sender that iris's notifications endpoint sends to
   master_sender:
     host: 127.0.0.1
     port: 2321
