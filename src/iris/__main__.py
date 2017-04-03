@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 from gevent.pywsgi import WSGIServer
-from iris_api.api import API
+from iris.api import API
 import sys
 import logging
 import yaml

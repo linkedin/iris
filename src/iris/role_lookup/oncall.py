@@ -4,7 +4,7 @@
 import requests
 from requests.exceptions import RequestException
 import logging
-from iris_api.metrics import stats
+from iris.metrics import stats
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class oncall(object):
     def __init__(self, config):
         headers = requests.utils.default_headers()
-        headers['User-Agent'] = 'iris-api role lookup (%s)' % headers.get('User-Agent')
+        headers['User-Agent'] = 'iris role lookup (%s)' % headers.get('User-Agent')
         self.requests = requests.session()
         self.requests.headers = headers
         self.requests.verify = False

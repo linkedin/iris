@@ -1,4 +1,4 @@
-from iris_api.vendors import init_vendors, send_message
+from iris.vendors import init_vendors, send_message
 
 
 def test_send_through_dummy():

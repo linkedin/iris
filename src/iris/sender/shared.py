@@ -2,7 +2,7 @@
 # See LICENSE in the project root for license information.
 
 from gevent import queue
-from iris_api.metrics import stats
+from iris.metrics import stats
 import logging
 
 logger = logging.getLogger(__name__)

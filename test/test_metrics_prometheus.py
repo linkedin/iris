@@ -5,7 +5,7 @@ import pytest
 import socket
 import requests
 import re
-from iris_api.metrics import get_metrics_provider
+from iris.metrics import get_metrics_provider
 
 # We might not have the prometheus library installed.
 pytest.importorskip('prometheus_client')

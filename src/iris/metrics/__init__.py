@@ -1,7 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from iris_api.custom_import import import_custom_module
+from iris.custom_import import import_custom_module
 from gevent import sleep
 import logging
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ metrics_provider = None
 
 
 def get_metrics_provider(config, app_name):
-    return import_custom_module('iris_api.metrics', config['metrics'])(config, app_name)
+    return import_custom_module('iris.metrics', config['metrics'])(config, app_name)
 
 
 def emit():

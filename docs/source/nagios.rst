@@ -21,7 +21,7 @@ Code::
     from __future__ import absolute_import
     import logging
 
-    from iris_api.plugins.core import register_plugin, IrisPlugin
+    from iris.plugins.core import register_plugin, IrisPlugin
 
 
     logger = logging.getLogger(__name__)

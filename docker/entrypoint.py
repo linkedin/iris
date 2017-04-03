@@ -80,7 +80,7 @@ def main():
             print 'Confg file missing keys: %s' % e
             sys.exit(1)
 
-    # It often takes several seconds for MySQL to start up. iris-api dies upon start
+    # It often takes several seconds for MySQL to start up. iris dies upon start
     # if it can't immediately connect to MySQL, so we have to wait for it.
     wait_for_mysql(config)
 

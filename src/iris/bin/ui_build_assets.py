@@ -4,7 +4,7 @@
 from webassets import script
 import sys
 
-from iris_api.ui import assets_env
+from iris.ui import assets_env
 
 
 def main():

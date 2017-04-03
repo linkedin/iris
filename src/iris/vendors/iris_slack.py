@@ -5,7 +5,7 @@ import ujson
 import logging
 import requests
 import time
-from iris_api.constants import SLACK_SUPPORT
+from iris.constants import SLACK_SUPPORT
 
 logger = logging.getLogger(__name__)
 

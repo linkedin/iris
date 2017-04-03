@@ -60,7 +60,7 @@ def main():
 
     signal.signal(signal.SIGINT, sigint_handler)
 
-    from iris_api.api import get_api, load_config_file
+    from iris.api import get_api, load_config_file
 
     config = load_config_file(sys.argv[1])
     app = get_api(config)

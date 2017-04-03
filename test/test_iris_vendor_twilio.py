@@ -4,7 +4,7 @@
 
 def test_twilio_message_generate(mocker):
     mocker.patch('twilio.rest.resources.Connection')
-    from iris_api.vendors.iris_twilio import iris_twilio
+    from iris.vendors.iris_twilio import iris_twilio
     twilio = iris_twilio({})
     assert twilio.generate_message_text({}) == ''
     assert twilio.generate_message_text({'subject': '', 'body': ''}) == ''

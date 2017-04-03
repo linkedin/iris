@@ -10,22 +10,22 @@ import time
 import ujson
 
 from collections import defaultdict
-from iris_api.plugins import init_plugins
-from iris_api.vendors import init_vendors, send_message
-from iris_api.sender import auditlog
-from iris_api import metrics
+from iris.plugins import init_plugins
+from iris.vendors import init_vendors, send_message
+from iris.sender import auditlog
+from iris import metrics
 from uuid import uuid4
-from iris_api.gmail import Gmail
-from iris_api import db
-from iris_api.api import load_config_file
-from iris_api.sender import rpc, cache
-from iris_api.sender.message import update_message_mode
-from iris_api.sender.oneclick import oneclick_email_markup, generate_oneclick_url
-from iris_api import cache as api_cache
-from iris_api.sender.quota import ApplicationQuota
+from iris.gmail import Gmail
+from iris import db
+from iris.api import load_config_file
+from iris.sender import rpc, cache
+from iris.sender.message import update_message_mode
+from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
+from iris import cache as api_cache
+from iris.sender.quota import ApplicationQuota
 from pymysql import DataError, IntegrityError
 # queue for sending messages
-from iris_api.sender.shared import send_queue, add_mode_stat
+from iris.sender.shared import send_queue, add_mode_stat
 
 # sql
 

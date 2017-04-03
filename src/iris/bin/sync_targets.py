@@ -13,8 +13,8 @@ import requests
 from phonenumbers import format_number, parse, PhoneNumberFormat
 from phonenumbers.phonenumberutil import NumberParseException
 
-from iris_api.api import load_config_file
-from iris_api import metrics
+from iris.api import load_config_file
+from iris import metrics
 
 from requests.packages.urllib3.exceptions import (
     InsecureRequestWarning, SNIMissingWarning, InsecurePlatformWarning
