@@ -139,7 +139,6 @@ class Plan(object):
     def on_get(self, req, resp, plan):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('plan.html').render(request=req,
-                                                                modes=get_local(req, 'modes'),
                                                                 target_roles=get_local(req, 'target_roles'),
                                                                 priorities=get_local(req, 'priorities'),
                                                                 templates=get_local(req, 'templates'),
@@ -162,11 +161,7 @@ class Incident(object):
 
     def on_get(self, req, resp, incident):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('incident.html').render(request=req,
-                                                                    modes=get_local(req, 'modes'),
-                                                                    target_roles=get_local(req, 'target_roles'),
-                                                                    priorities=get_local(req, 'priorities'),
-                                                                    applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('incident.html').render(request=req)
 
 
 class Messages(object):
@@ -186,8 +181,7 @@ class Message(object):
 
     def on_get(self, req, resp, message):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('message.html').render(request=req,
-                                                                   applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('message.html').render(request=req)
 
 
 class Templates(object):
@@ -196,9 +190,7 @@ class Templates(object):
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('templates.html').render(request=req,
-                                                                     modes=get_local(req, 'modes'),
-                                                                     applications=get_local(req, 'applications'))
+        resp.body = jinja2_env.get_template('templates.html').render(request=req)
 
 
 class Template(object):
@@ -284,7 +276,6 @@ class User():
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('user.html').render(request=req,
                                                                 modes=get_local(req, 'modes'),
-                                                                target_roles=get_local(req, 'target_roles'),
                                                                 priorities=get_local(req, 'priorities'),
                                                                 applications=get_local(req, 'applications'))
 
