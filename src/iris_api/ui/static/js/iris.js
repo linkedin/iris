@@ -1810,6 +1810,7 @@ iris = {
       $page: $('.main'),
       $editButton: $('#application-edit-button'),
       applicationTemplate: $('#application-template').html(),
+      loaderTemplate: $('#loader-template').html(),
       applicationEditbutton: '#application-edit-button',
       applicationSavebutton: '#application-save-button',
       removeVariableButton: '.remove-variable',
@@ -1918,6 +1919,8 @@ iris = {
         return;
       }
       iris.changeTitle('Application ' + app.name);
+
+      self.showLoader();
 
       $.when($.get(self.data.url + application + '/quota'),
              $.get(self.data.url + application + '/incident_emails')
@@ -2043,6 +2046,10 @@ iris = {
       }).fail(function(data) {
         iris.createAlert('Settings failed to save: '+data.responseJSON.title);
       });
+    },
+    showLoader: function() {
+      var template = Handlebars.compile(this.data.loaderTemplate);
+      this.data.$page.html(template(this.data.model));
     },
     render: function() {
       var template = Handlebars.compile(this.data.applicationTemplate);
