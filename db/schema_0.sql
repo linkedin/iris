@@ -35,7 +35,8 @@ CREATE TABLE `application` (
   `auth_only` tinyint(1) DEFAULT '0',
   `allow_other_app_incidents` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `allow_authenticating_users` tinyint(1) unsigned NOT NULL DEFAULT '0',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name_idx` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

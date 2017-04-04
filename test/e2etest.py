@@ -1868,6 +1868,47 @@ def test_modify_application(sample_application_name, sample_admin_user, sample_u
     assert sample_mode in re.json()['supported_modes']
 
 
+def test_create_application(sample_admin_user, sample_application_name):
+    if not all([sample_admin_user, sample_application_name]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    re = requests.post(base_url + 'applications', json={'name': sample_application_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'This app already exists'
+
+    temp_app_name = 'e2e-temp-app'
+
+    # Ensure the app doesn't exist before we begin
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''DELETE FROM `application` WHERE `name` = %s''', temp_app_name)
+        conn.commit()
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Application %s not found' % temp_app_name
+
+    re = requests.post(base_url + 'applications', json={'name': temp_app_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+    assert re.json()['id']
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 200
+
+    # Ensure the random key got created correctly
+    re = requests.get(base_url + 'applications/%s/key' % temp_app_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    assert len(re.json()['key']) == 64
+
+    # Kill the temp app
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''DELETE FROM `application` WHERE `name` = %s''', temp_app_name)
+        conn.commit()
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Application %s not found' % temp_app_name
+
+
 def test_view_app_key(sample_application_name, sample_admin_user):
     re = requests.get(base_url + 'applications/%s/key' % sample_application_name)
     assert re.status_code == 401

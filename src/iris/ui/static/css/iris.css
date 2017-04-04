@@ -974,6 +974,10 @@ table.dataTable thead .sorting_asc {
   height: 22px;
 }
 
+#show-app-modal-button {
+  margin-top: -5px;
+}
+
 .template-notification textarea {
   height: 250px;
 }

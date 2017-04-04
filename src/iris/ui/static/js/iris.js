@@ -1785,8 +1785,13 @@ iris = {
     data: {
       $page: $('.main'),
       $table: $('#applications-table'),
+      $pageHeader: $('.main h3'),
+      $createAppModal: $('#create-app-modal'),
+      showAppModalButton: '#show-app-modal-button',
+      applicationSubmitButton: '#create-app-submit',
       tableRows: 'tbody tr',
       tableTemplate: $('#applications-table-template').html(),
+      headerTemplate: $('#applications-header-template').html(),
       DataTable: null,
       dataTableOpts: {
         orderClasses: false,
@@ -1795,12 +1800,55 @@ iris = {
     },
     init: function() {
       iris.changeTitle('Applications');
+
+      this.data.$pageHeader.html(Handlebars.compile(this.data.headerTemplate)({
+        showCreateButton: window.appData.user_admin
+      }));
+
       iris.tables.createTable.call(this, window.appData.applications);
       this.events();
     },
     events: function() {
       this.data.$page.on('click', this.data.tableRows, function() {
         window.location = '/applications/' + $(this).data('application');
+      });
+      this.data.$page.on('click', this.data.showAppModalButton, this.showCreateAppModal.bind(this));
+      this.data.$page.on('click', this.data.applicationSubmitButton, this.createApplication.bind(this));
+    },
+    showCreateAppModal: function() {
+      this.data.$createAppModal.modal();
+    },
+    createApplication: function() {
+      var self = this, $appNameBox = $('#create-app-name'), appName = $.trim($appNameBox.val()),
+          appNameLower = appName.toLowerCase();
+
+      if (appName == '') {
+          $appNameBox.val('');
+          $appNameBox.focus();
+          return;
+      }
+
+      // If this application already exists, just go to its page
+      for (i = 0; i < window.appData.applications.length; i++) {
+        if (window.appData.applications[i].name.toLowerCase() == appNameLower) {
+          window.location = '/applications/' + window.appData.applications[i].name;
+          return;
+        }
+      }
+
+      $.ajax({
+          url: '/v0/applications/',
+          data: JSON.stringify({
+            name: appName
+          }),
+          method: 'POST',
+          contentType: 'application/json'
+      }).done(function(r) {
+        window.location = '/applications/' + appName
+      }).fail(function(r) {
+        iris.createAlert('Failed creating application: ' + r.responseJSON['title'])
+      }).always(function() {
+        self.data.$createAppModal.modal('hide');
       });
     }
   }, // End iris.applications
@@ -1906,10 +1954,10 @@ iris = {
       });
     },
     getApplication: function(application) {
-      var app = null, self = this;
+      var app = null, self = this, applicationLower = application.toLowerCase();
       for (var i = 0, item; i < window.appData.applications.length; i++) {
           item = window.appData.applications[i];
-          if (item.name == application) {
+          if (item.name.toLowerCase() == applicationLower) {
               app = item;
               break;
           }
