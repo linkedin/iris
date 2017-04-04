@@ -1,7 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="main applications">
-  <h3>Applications</h3>
+  <!-- Modal for a new application -->
+  <div class="modal fade" id="create-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-app-modal-button">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">Create Application</h4>
+        </div>
+        <div class="modal-body">
+          This will create a new Iris application.
+          <div class="form-inline">
+            <label for="create-app-name">Application Name: </label>
+            <input type="text" class="form-control input-sm typeahead" data-targettype="user" placeholder="Application" id="create-app-name"></input>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="create-app-submit">Create App</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <h3><!-- h3 template with app create button gets rendered here --></h3>
   <div class="module">
     <table class="display" id="applications-table" width="100%">
       <!-- applications table renders here -->
@@ -25,6 +47,11 @@
     {{/each}}
   </tbody>
 </script>
+<script id="applications-header-template" type="text/x-handlebars-application">
+  Applications
+  {{# if @root.showCreateButton }}
+    <button id="show-app-modal-button" class="btn btn-primary btn-sm pull-right">Create Application</button>
+  {{/if}}
+</script>
 {% endraw %}
 {% endblock %}
-

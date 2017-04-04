@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import base64
 import re
+import os
 import datetime
 import logging
 import jinja2
@@ -1711,6 +1712,11 @@ class Application(object):
         app_query = get_applications_query + " AND `application`.`name` = %s"
         cursor.execute(app_query, app_name)
         app = cursor.fetchone()
+        if not app:
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Application %s not found' % app_name, '')
+
         cursor.execute(get_vars_query, app['id'])
         app['variables'] = []
         app['required_variables'] = []
@@ -2110,6 +2116,41 @@ class Applications(object):
         connection.close()
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
+
+    def on_post(self, req, resp):
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        app_name = data.get('name', '').strip()
+
+        if app_name == '':
+            raise HTTPBadRequest('Missing app name', '')
+
+        # Only iris super admins can create apps
+        if not req.context['is_admin']:
+            raise HTTPUnauthorized('Only admins can create apps', '')
+
+        new_app_data = {
+            'name': app_name,
+            'key': hashlib.sha256(os.urandom(32)).hexdigest()
+        }
+
+        session = db.Session()
+
+        try:
+            app_id = session.execute('''INSERT INTO `application` (`name`, `key`) VALUES (:name, :key)''', new_app_data).lastrowid
+            session.commit()
+        except IntegrityError:
+            raise HTTPBadRequest('This app already exists', '')
+        finally:
+            session.close()
+
+        logger.info('Created application "%s" with id %s', app_name, app_id)
+
+        resp.status = HTTP_201
+        resp.body = ujson.dumps({'id': app_id})
 
 
 class Modes(object):
