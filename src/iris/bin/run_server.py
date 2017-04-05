@@ -6,6 +6,8 @@
 # -*- coding:utf-8 -*-
 
 import gevent
+from gevent import monkey
+monkey.patch_all()  # noqa
 from gevent.pywsgi import WSGIServer
 from gevent.subprocess import call
 

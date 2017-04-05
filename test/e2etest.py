@@ -12,9 +12,11 @@ import copy
 import iris.bin.iris_ctl as iris_ctl
 from click.testing import CliRunner
 import uuid
+import socket
 
 
 server = 'http://localhost:16649/'
+sender_address = ('localhost', 2321)
 base_url = server + 'v0/'
 ui_url = server
 
@@ -1700,6 +1702,16 @@ def test_app_stats(sample_application_name):
 
 
 def test_post_notification(sample_user, sample_application_name):
+
+    # The iris-api in this case will send a request to iris-sender's
+    # rpc endpoint. Don't bother if sender isn't working.
+    try:
+        sock = socket.socket()
+        sock.connect(sender_address)
+        sock.close()
+    except socket.error:
+        pytest.skip('Skipping this test as sender is not running/reachable.')
+
     re = requests.post(base_url + 'notifications', json={})
     assert re.status_code == 400
     assert 'Missing required atrributes' in re.text
