@@ -23,9 +23,16 @@ check:
 	make test
 
 unit-cov:
-	py.test --cov-report term-missing --cov=iris test
+	COVERAGE_FILE=.coverage.unit py.test --cov-report term-missing --cov=iris test
 
 e2e-cov:
 	./test/e2etest_coverage.sh
+
+combined-cov:
+	rm -f .coverage*
+	make unit-cov
+	SUPPORT_COMBINED_COVERAGE=1 make e2e-cov
+	coverage combine
+	coverage report -m
 
 .PHONY: test
