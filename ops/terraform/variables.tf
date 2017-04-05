@@ -1,11 +1,10 @@
 variable "aws_access_key" {}
 variable "aws_secret_key" {}
+variable "aws_key_name" {}
+variable "aws_key_file" {}
+
 variable "aws_region" {
   default = "us-west-2"
-}
-
-variable "aws_key_name" {
-  default = "linkedin-mac"
 }
 
 variable "vpc_cidr" {
@@ -43,4 +42,12 @@ variable "mysql_db_pass" {
 
 variable "mysql_db_database_name" {
   default = "iris"
+}
+
+variable "use_aws_rds_cluster" {
+  default = false
+}
+
+variable "ssh_timeout" {
+  default = "20s"
 }

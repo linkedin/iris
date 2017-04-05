@@ -15,17 +15,34 @@ This sample terraform spins up a cluster consists of the following services:
 Usage
 -----
 
+Set the following variables in `terraform.tfvars` file:
+
+```
+aws_access_key = "AAAAAAAAAAAAAAAAAAAA"
+aws_secret_key = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+aws_key_name  = "aws-ssh"
+aws_key_file = "/Users/foo/.ssh/aws-ssh.pem"
+```
+
 Verify intended state:
 
 ```bash
-terraform plan -var 'aws_access_key=AAAAAAAAAAAAAAAAAAAA' -var 'aws_secret_key=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+terraform plan
 ```
 
 Deploy:
 
 ```bash
-terraform apply -var 'aws_access_key=AAAAAAAAAAAAAAAAAAAA' -var 'aws_secret_key=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+terraform apply
 ```
+
+Find out public DNS via terraform output, look for key `iris_public_dns`:
+
+```bash
+terraform output
+```
+
+Iris can be accessed at `${iris_public_dns}:16649`.
 
 Access to NAT server as bastion host:
 

@@ -57,4 +57,4 @@ vendors: []
 #    twilio_number: ''
 #    relay_base_url: ''
 
-healthcheck_path: /tmp/status
+healthcheck_path: /home/iris/var/healthcheck_control

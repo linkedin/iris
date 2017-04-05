@@ -1,9 +1,9 @@
 [Unit]
-Description=iris uWSGI app
+Description=nginx proxy for uwsgi-iris
 After=syslog.target
 
 [Service]
-ExecStart=/bin/bash -c 'cd /home/iris && source ./env/bin/activate && DOCKER_DB_BOOTSTRAP=1 python ./entrypoint.py'
+ExecStart=/usr/sbin/nginx -c /home/iris/daemons/nginx.conf
 User=iris
 Group=iris
 Restart=on-failure

@@ -1,0 +1,8 @@
+[Unit]
+Description=Socket for iris nginx proxy
+
+[Socket]
+ListenStream=0.0.0.0:16649
+
+[Install]
+WantedBy=sockets.target

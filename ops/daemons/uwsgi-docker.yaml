@@ -38,6 +38,7 @@ prod:
 
     # control nginx and iris sender
     attach-daemon2:
+      - cmd=/usr/sbin/nginx -c /home/iris/daemons/nginx.conf,pidfile=/home/iris/var/run/nginx.pid
       - cmd=/home/iris/env/bin/iris-sender /home/iris/config/config.yaml
 
 # vim:filetype=yaml
