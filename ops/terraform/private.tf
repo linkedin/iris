@@ -61,6 +61,8 @@ resource "aws_rds_cluster" "rds_iris" {
   preferred_backup_window = "07:00-09:00"
   vpc_security_group_ids = ["${aws_security_group.db.id}"]
   db_subnet_group_name = "${aws_db_subnet_group.db.id}"
+  snapshot_identifier = "iris-mysql"
+  skip_final_snapshot = true
 }
 
 resource "aws_rds_cluster_instance" "rds_cluster_instances" {
