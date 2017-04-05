@@ -31,7 +31,6 @@ def load_sqldump(config, sqlfile):
 
 def wait_for_mysql(config):
     db_address = (config['host'], 3306)
-
     tries = 0
     while True:
         try:

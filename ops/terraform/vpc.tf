@@ -122,7 +122,6 @@ data "aws_ami" "nat_ami" {
 }
 
 resource "aws_instance" "nat" {
-  # ami = "ami-30913f47"  # this is a special ami preconfigured to do NAT
   ami = "${data.aws_ami.nat_ami.id}"
   availability_zone = "us-west-2a"
   instance_type = "t2.micro"
