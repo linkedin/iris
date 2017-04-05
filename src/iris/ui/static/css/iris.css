@@ -580,7 +580,9 @@ table.dataTable thead .sorting_asc {
 
 #tracking-notification .glyphicon-triangle-bottom,
 #aggregation .glyphicon-triangle-bottom,
-#reprioritization .glyphicon-triangle-bottom {
+#reprioritization .glyphicon-triangle-bottom,
+.application-dangerous-actions .glyphicon-triangle-bottom
+{
   font-size: 12px;
   left: -2px;
   top: 1px;
@@ -591,7 +593,9 @@ table.dataTable thead .sorting_asc {
 
 #tracking-notification .glyphicon-triangle-bottom,
 #aggregation .glyphicon-triangle-bottom,
-#reprioritization .glyphicon-triangle-bottom {
+#reprioritization .glyphicon-triangle-bottom,
+.application-dangerous-actions .glyphicon-triangle-bottom
+{
   transform: rotate(-90deg);
   -webkit-transform: rotate(-90deg);
   -moz-transform: rotate(-90deg);
@@ -599,7 +603,9 @@ table.dataTable thead .sorting_asc {
 
 #tracking-notification.active .glyphicon-triangle-bottom,
 #aggregation.active .glyphicon-triangle-bottom,
-#reprioritization.active .glyphicon-triangle-bottom {
+#reprioritization.active .glyphicon-triangle-bottom,
+.application-dangerous-actions.active .glyphicon-triangle-bottom
+{
   transform: rotate(0deg);
   -webkit-transform: rotate(0deg);
   -moz-transform: rotate(0deg);
@@ -969,6 +975,20 @@ table.dataTable thead .sorting_asc {
 .application-module form {
   display: inline-block;
 }
+
+.application-dangerous-actions h4 {
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.application-dangerous-actions.active .inner {
+  display: block;
+}
+
+.application-dangerous-actions .inner {
+  display: none;
+}
+
 
 #api-key-box {
   height: 22px;
