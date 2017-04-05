@@ -1861,6 +1861,10 @@ iris = {
       loaderTemplate: $('#loader-template').html(),
       applicationEditbutton: '#application-edit-button',
       applicationSavebutton: '#application-save-button',
+      applicationRenameButton: '#application-rename-button',
+      applicationDeleteButton: '#application-delete-button',
+      showRenameModalButton: '#show-rename-modal-button',
+      showDeleteModalButton: '#show-delete-modal-button',
       removeVariableButton: '.remove-variable',
       removeOwnerButton: '.remove-owner',
       showApiKeyButton: '#show-api-key-button',
@@ -1868,6 +1872,7 @@ iris = {
       addOwnerForm: '#add-owner-form',
       addEmailIncidentForm: '#add-email-incident-form',
       removeEmailIncidentButton: '.delete-email-incident-button',
+      dangerousActionsToggle: '.application-dangerous-actions h4',
       application: null,
       model: {}
     },
@@ -1881,7 +1886,12 @@ iris = {
       var self = this, data = this.data;
       data.$page.on('click', data.applicationEditbutton, this.editApplication.bind(this));
       data.$page.on('click', data.applicationSavebutton, this.saveApplication.bind(this));
+      data.$page.on('click', data.showRenameModalButton, this.showRenameModal.bind(this));
+      data.$page.on('click', data.showDeleteModalButton, this.showDeleteModal.bind(this));
+      data.$page.on('click', data.applicationRenameButton, this.renameApplication.bind(this));
+      data.$page.on('click', data.applicationDeleteButton, this.deleteApplication.bind(this));
       data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
+      data.$page.on('click', data.dangerousActionsToggle, this.toggleDangerousActions.bind(this));
       data.$page.on('click', data.removeVariableButton, function() {
         var variable = $(this).data('variable');
         var pos = self.data.model.variables.indexOf(variable);
@@ -1981,6 +1991,7 @@ iris = {
         app.supportViewingKey = window.appData.user_admin || owner;
         app.supportEditingEmailIncidents = window.appData.user_admin || owner;
         app.showEditOwners = window.appData.user_admin;
+        app.supportDangerousActions = window.appData.user_admin;
         app.showEditQuotas = false;
         app.apiKey = false;
         self.data.model = app;
@@ -2093,6 +2104,57 @@ iris = {
         iris.createAlert('Settings saved', 'success');
       }).fail(function(data) {
         iris.createAlert('Settings failed to save: '+data.responseJSON.title);
+      });
+    },
+    toggleDangerousActions: function() {
+      $('.application-dangerous-actions').toggleClass('active')
+    },
+    showRenameModal: function() {
+      $('#app-new-name-box').val(this.data.application);
+      $('#rename-app-modal').modal();
+    },
+    showDeleteModal: function() {
+      $('#delete-app-modal').modal();
+    },
+    renameApplication: function() {
+      var self = this, $nameBox = $('#app-new-name-box'),
+          newName = $.trim($nameBox.val());
+      if (newName == '' || newName == this.data.application) {
+        $nameBox.focus();
+        return;
+      }
+      $('#application-rename-button').prop('disabled', true);
+      $.ajax({
+        url: '/v0/applications/' + this.data.application + '/rename',
+        data: JSON.stringify({
+          new_name: newName
+        }),
+        method: 'PUT',
+        contentType: 'application/json'
+      }).done(function(r) {
+        window.onbeforeunload = null;
+        window.location = '/applications/' + newName;
+      }).fail(function(r) {
+        iris.createAlert('Failed renaming application: ' + r.responseJSON['title'])
+        $('body').scrollTop(0);
+      }).always(function() {
+        $('#rename-app-modal').modal('hide');
+      });
+    },
+    deleteApplication: function() {
+      $('#application-delete-button').prop('disabled', true);
+      $.ajax({
+        url: '/v0/applications/' + this.data.application,
+        method: 'DELETE',
+        contentType: 'application/json'
+      }).done(function(r) {
+        window.onbeforeunload = null;
+        window.location = '/applications/';
+      }).fail(function(r) {
+        iris.createAlert('Failed deleting application: ' + r.responseJSON['title'])
+        $('body').scrollTop(0);
+      }).always(function() {
+        $('#delete-app-modal').modal('hide');
       });
     },
     showLoader: function() {

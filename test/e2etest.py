@@ -1909,6 +1909,79 @@ def test_create_application(sample_admin_user, sample_application_name):
     assert re.json()['title'] == 'Application %s not found' % temp_app_name
 
 
+def test_rename_application(sample_admin_user, sample_application_name, sample_application_name2):
+    if not all([sample_admin_user, sample_application_name, sample_application_name2]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    temp_app_name = 'e2e-rename-app'
+
+    # Test the sanity checks
+    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name, json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'New and old app name are identical'
+
+    re = requests.put(base_url + 'applications/fakeapp123/rename', json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'No rows changed; old app name incorrect'
+
+    # Rename our sample app to the new temp name
+    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name, json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 200
+
+    # Ensure the old version doesn't exist anymore
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Application %s not found' % sample_application_name
+
+    # Put it back now
+    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name, json={'new_name': sample_application_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+
+    # Ensure we can't rename over another app
+    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name, json={'new_name': sample_application_name2}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Destination app name likely already exists'
+
+
+def test_delete_application(sample_admin_user):
+    if not sample_admin_user:
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    temp_app_name = 'e2e-delete-app'
+
+    # Ensure we don't already have it
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''DELETE FROM `application` WHERE `name` = %s''', temp_app_name)
+        conn.commit()
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Application %s not found' % temp_app_name
+
+    # Create application
+    re = requests.post(base_url + 'applications', json={'name': temp_app_name}, headers=username_header(sample_admin_user))
+    assert re.status_code == 201
+    assert re.json()['id']
+
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 200
+
+    # Delete it
+    re = requests.delete(base_url + 'applications/%s' % temp_app_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Is it really gone?
+    re = requests.get(base_url + 'applications/%s' % temp_app_name)
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Application %s not found' % temp_app_name
+
+
 def test_view_app_key(sample_application_name, sample_admin_user):
     re = requests.get(base_url + 'applications/%s/key' % sample_application_name)
     assert re.status_code == 401

@@ -1858,6 +1858,25 @@ class Application(object):
 
         resp.body = '{}'
 
+    def on_delete(self, req, resp, app_name):
+        if not req.context['is_admin']:
+            raise HTTPUnauthorized('Only admins can remove apps', '')
+
+        session = db.Session()
+
+        try:
+            affected = session.execute('''DELETE FROM `application` WHERE `name` = :app_name''', {'app_name': app_name}).rowcount
+            session.commit()
+        except IntegrityError:
+            raise HTTPBadRequest('Cannot remove app. It has likely already in use.', '')
+        finally:
+            session.close()
+
+        if not affected:
+            raise HTTPBadRequest('No rows changed; app name probably already deleted', '')
+
+        resp.body = '[]'
+
 
 class ApplicationQuota(object):
     allow_read_only = True
@@ -2082,6 +2101,47 @@ class ApplicationEmailIncidents(object):
 
         resp.body = '[]'
         resp.status = HTTP_200
+
+
+class ApplicationRename(object):
+    allow_read_only = False
+
+    def on_put(self, req, resp, app_name):
+        if not req.context['is_admin']:
+            raise HTTPUnauthorized('Only admins can rename apps', '')
+
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body', '')
+
+        new_name = data.get('new_name', '').strip()
+
+        if new_name == '':
+            raise HTTPBadRequest('Missing new_name from post body', '')
+
+        if new_name == app_name:
+            raise HTTPBadRequest('New and old app name are identical', '')
+
+        session = db.Session()
+
+        data = {
+            'new_name': new_name,
+            'old_name': app_name
+        }
+
+        try:
+            affected = session.execute('''UPDATE `application` SET `name` = :new_name WHERE `name` = :old_name''', data).rowcount
+            session.commit()
+        except IntegrityError:
+            raise HTTPBadRequest('Destination app name likely already exists', '')
+        finally:
+            session.close()
+
+        if not affected:
+            raise HTTPBadRequest('No rows changed; old app name incorrect', '')
+
+        resp.body = '[]'
 
 
 class Applications(object):
@@ -3035,6 +3095,7 @@ def get_api(config):
     app.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
     app.add_route('/v0/applications/{app_name}/key', ApplicationKey())
     app.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
+    app.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
     app.add_route('/v0/applications/{app_name}', Application())
     app.add_route('/v0/applications', Applications())
 

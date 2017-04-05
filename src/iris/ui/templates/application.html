@@ -8,6 +8,52 @@
   <i class="loader"></i>
 </script>
 <script id="application-template" type="text/x-handlebars-template">
+  <!-- Modal for deleting this application -->
+  <div class="modal fade" id="delete-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-rename-modal-button">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">Delete application {{name}}</h4>
+        </div>
+        <div class="modal-body">
+          <p>
+            Are you sure you want to delete the application {{name}}? Its API key will no longer work and anything using
+            it will promptly break. The delete will not be successful if incidents or messages were created using this app.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="application-delete-button">Yes, please delete {{name}}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Modal for renaming this application -->
+  <div class="modal fade" id="rename-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-delete-modal-button">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">rename application {{name}}</h4>
+        </div>
+        <div class="modal-body">
+          <p>
+            Renaming this app will cause anything using its API key to promptly break until they have been changed to use the new app
+            name.
+          </p>
+          <div class="form-inline">
+            <label for="app-new-name-box">New Name: </label>
+            <input type="text" class="form-control input-sm typeahead" data-targettype="user" id="app-new-name-box"></input>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-warning btn-sm" id="application-rename-button">Rename {{name}}</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="module application-module {{# if @root.viewMode }}view{{else}}edit{{/if}}-application">
     <h3>
       {{name}}
@@ -116,6 +162,18 @@
       {{/if}}
     {{/ifNot}}
   </div>
+  {{# ifNot @root.viewMode }}
+    {{# if @root.supportDangerousActions }}
+      <div class="module application-dangerous-actions">
+        <h4>Destructive Actions <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+        <div class="inner">
+          <p class="light">Here be dragons!</p>
+          <button id="show-rename-modal-button" class="btn btn-warning btn-sm">Rename Application</button>
+          <button id="show-delete-modal-button" class="btn btn-danger btn-sm">Delete Application</button>
+        </div>
+      </div>
+    {{/if}}
+  {{/ifNot}}
 </script>
 {% endraw %}
 {% endblock %}
