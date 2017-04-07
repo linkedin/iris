@@ -5,6 +5,7 @@ from gevent import monkey, sleep, spawn
 monkey.patch_all()  # NOQA
 
 import logging
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -35,9 +36,14 @@ stats_reset = {
     'user_contacts_updated': 0,
 }
 
+# logging
 logger = logging.getLogger()
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
-ch = logging.StreamHandler()
+log_file = os.environ.get('SYNC_TARGETS_LOG_FILE')
+if log_file:
+    ch = logging.handlers.RotatingFileHandler(log_file, mode='a', maxBytes=10485760, backupCount=10)
+else:
+    ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
