@@ -7,6 +7,7 @@ monkey.patch_all()  # NOQA
 import logging
 import time
 import ujson
+import os
 
 from collections import defaultdict
 from iris.plugins import init_plugins
@@ -167,10 +168,13 @@ WHERE `id`=%s'''
 PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'''
 
 # logging
-
 logger = logging.getLogger()
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
-ch = logging.StreamHandler()
+log_file = os.environ.get('SENDER_LOG_FILE')
+if log_file:
+    ch = logging.handlers.RotatingFileHandler(log_file, mode='a', maxBytes=10485760, backupCount=10)
+else:
+    ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
