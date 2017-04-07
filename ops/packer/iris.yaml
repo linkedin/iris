@@ -84,7 +84,7 @@ provisioners:
   - type: "shell"
     only: ["docker"]
     inline:
-      - "sudo -Hu iris mv /home/iris/daemons/uwsgi-docker.yaml /home/iris/daemon/uwsgi.yaml"
+      - "sudo -Hu iris mv -f /home/iris/daemons/uwsgi-docker.yaml /home/iris/daemons/uwsgi.yaml"
 
 
 
