@@ -111,6 +111,7 @@ class StaticResource(object):
         except IOError:
             raise HTTPNotFound()
 
+
 class Index(object):
     allow_read_only = False
     frontend_route = True
