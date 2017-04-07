@@ -5,7 +5,6 @@ from gevent import monkey, sleep, spawn, queue
 monkey.patch_all()  # NOQA
 
 import logging
-import sys
 import time
 import ujson
 
@@ -17,7 +16,7 @@ from iris import metrics
 from uuid import uuid4
 from iris.gmail import Gmail
 from iris import db
-from iris.api import load_config_file
+from iris.api import load_config
 from iris.sender import rpc, cache
 from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
@@ -1003,13 +1002,9 @@ def init_sender(config):
 
 
 def main():
-    if len(sys.argv) <= 1:
-        print 'ERROR: missing config file.'
-        print 'usage: %s API_CONFIG_FILE' % sys.argv[0]
-        sys.exit(1)
 
     global config
-    config = load_config_file(sys.argv[1])
+    config = load_config()
 
     is_master = config['sender'].get('is_master', False)
     logger.info('[-] bootstraping sender (master: %s)...', is_master)
