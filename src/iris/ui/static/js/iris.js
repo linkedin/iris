@@ -2123,7 +2123,8 @@ iris = {
         $nameBox.focus();
         return;
       }
-      $('#application-rename-button').prop('disabled', true);
+      var $renameBtn = $('#application-rename-button');
+      $renameBtn.prop('disabled', true);
       $.ajax({
         url: '/v0/applications/' + this.data.application + '/rename',
         data: JSON.stringify({
@@ -2137,12 +2138,14 @@ iris = {
       }).fail(function(r) {
         iris.createAlert('Failed renaming application: ' + r.responseJSON['title'])
         $('body').scrollTop(0);
+        $renameBtn.prop('disabled', false);
       }).always(function() {
         $('#rename-app-modal').modal('hide');
       });
     },
     deleteApplication: function() {
-      $('#application-delete-button').prop('disabled', true);
+      var $deleteBtn = $('#application-delete-button');
+      $deleteBtn.prop('disabled', true);
       $.ajax({
         url: '/v0/applications/' + this.data.application,
         method: 'DELETE',
@@ -2153,6 +2156,7 @@ iris = {
       }).fail(function(r) {
         iris.createAlert('Failed deleting application: ' + r.responseJSON['title'])
         $('body').scrollTop(0);
+        $deleteBtn.prop('disabled', false);
       }).always(function() {
         $('#delete-app-modal').modal('hide');
       });
