@@ -41,6 +41,14 @@ jinja2_env.loader = FileSystemLoader(os.path.join(ui_root, 'templates'))
 jinja2_env.assets_environment = assets_env
 jinja2_env.filters['tojson'] = ujson.dumps
 
+mimes = {'.css': 'text/css',
+         '.jpg': 'image/jpg',
+         '.js': 'text/javascript',
+         '.png': 'image/png',
+         '.svg': 'image/svg+xml',
+         '.ttf': 'application/octet-stream',
+         '.woff': 'application/font-woff'}
+
 
 def hms(seconds):
     m, s = divmod(seconds, 60)
@@ -83,27 +91,16 @@ def secure_filename(filename):
 
 
 class StaticResource(object):
-    allow_read_only = False
-    frontend_route = True
+    allow_read_only = True
+    frontend_route = False
 
     def __init__(self, path):
         self.path = path.lstrip('/')
 
     def on_get(self, req, resp, filename):
-        if req.path.endswith('.js'):
-            resp.content_type = 'text/javascript'
-        elif req.path.endswith('.css'):
-            resp.content_type = 'text/css'
-        elif req.path.endswith('.png'):
-            resp.content_type = 'image/png'
-        elif req.path.endswith('.jpg'):
-            resp.content_type = 'image/jpg'
-        elif req.path.endswith('.svg'):
-            resp.content_type = 'image/svg+xml'
-        elif req.path.endswith('.woff'):
-            resp.content_type = 'application/font-woff'
-        elif req.path.endswith('.ttf'):
-            resp.content_type = 'application/octet-stream'
+        suffix = os.path.splitext(req.path)[1]
+        resp.content_type = mimes.get(suffix, 'application/octet-stream')
+
         filepath = os.path.join(ui_root, self.path, secure_filename(filename))
         try:
             resp.stream = open(filepath, 'rb')
