@@ -10,10 +10,13 @@ import ujson
 import requests
 import importlib
 import logging
+import re
 from iris.ui import auth
 from beaker.middleware import SessionMiddleware
 
 logger = logging.getLogger(__name__)
+
+_filename_ascii_strip_re = re.compile(r'[^A-Za-z0-9_.-]')
 
 ui_root = os.environ.get('STATIC_ROOT', os.path.abspath(os.path.dirname(__file__)))
 
@@ -69,42 +72,44 @@ def get_local(req, path):
     return requests.get('http://127.0.0.1:16649/v0/%s' % path, cookies=req.cookies).json()
 
 
-def send_file(req, resp):
-    if not req.path.startswith('/static'):
-        raise HTTPNotFound()
-    filepath = os.path.join(ui_root, req.path[1:])
-    try:
-        resp.stream = open(filepath, 'rb')
-        resp.stream_len = os.path.getsize(filepath)
-    except IOError:
-        raise HTTPNotFound()
+# Credit to Werkzeug for implementation
+def secure_filename(filename):
+    for sep in os.path.sep, os.path.altsep:
+        if sep:
+            filename = filename.replace(sep, ' ')
+    filename = str(_filename_ascii_strip_re.sub('', '_'.join(
+        filename.split()))).strip('._')
+    return filename
 
 
-def static_assets(req, resp):
-    if req.path.endswith('.js'):
-        resp.content_type = 'text/javascript'
-    elif req.path.endswith('.css'):
-        resp.content_type = 'text/css'
-    send_file(req, resp)
+class StaticResource(object):
+    allow_read_only = False
+    frontend_route = True
 
+    def __init__(self, path):
+        self.path = path.lstrip('/')
 
-def static_imgs(req, resp):
-    if req.path.endswith('.png'):
-        resp.content_type = 'image/png'
-    elif req.path.endswith('.jpg'):
-        resp.content_type = 'image/jpg'
-    elif req.path.endswith('.svg'):
-        resp.content_type = 'image/svg+xml'
-    send_file(req, resp)
-
-
-def static_fonts(req, resp):
-    if req.path.endswith('.woff'):
-        resp.content_type = 'application/font-woff'
-    elif req.path.endswith('.ttf'):
-        resp.content_type = 'application/octet-stream'
-    send_file(req, resp)
-
+    def on_get(self, req, resp, filename):
+        if req.path.endswith('.js'):
+            resp.content_type = 'text/javascript'
+        elif req.path.endswith('.css'):
+            resp.content_type = 'text/css'
+        elif req.path.endswith('.png'):
+            resp.content_type = 'image/png'
+        elif req.path.endswith('.jpg'):
+            resp.content_type = 'image/jpg'
+        elif req.path.endswith('.svg'):
+            resp.content_type = 'image/svg+xml'
+        elif req.path.endswith('.woff'):
+            resp.content_type = 'application/font-woff'
+        elif req.path.endswith('.ttf'):
+            resp.content_type = 'application/octet-stream'
+        filepath = os.path.join(ui_root, self.path, secure_filename(filename))
+        try:
+            resp.stream = open(filepath, 'rb')
+            resp.stream_len = os.path.getsize(filepath)
+        except IOError:
+            raise HTTPNotFound()
 
 class Index(object):
     allow_read_only = False
@@ -349,9 +354,9 @@ def init(config, app):
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
 
-    app.add_sink(static_assets, '/static/bundles/')
-    app.add_sink(static_imgs, '/static/images/')
-    app.add_sink(static_fonts, '/static/fonts/')
+    app.add_route('/static/bundles/{filename}', StaticResource('/static/bundles'))
+    app.add_route('/static/images/{filename}', StaticResource('/static/images'))
+    app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
     app.add_route('/', Index())
     app.add_route('/stats', Stats())
     app.add_route('/plans/', Plans())
