@@ -56,15 +56,11 @@ def sigint_handler(sig, frame):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print 'Usage: %s CONFIG_FILE' % sys.argv[0]
-        sys.exit(1)
-
     signal.signal(signal.SIGINT, sigint_handler)
 
-    from iris.api import get_api, load_config_file
+    from iris.api import get_api, load_config
 
-    config = load_config_file(sys.argv[1])
+    config = load_config()
     app = get_api(config)
 
     server = config['server']

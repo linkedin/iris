@@ -4,7 +4,6 @@
 from gevent import monkey, sleep, spawn
 monkey.patch_all()  # NOQA
 
-import sys
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,7 +12,7 @@ import requests
 from phonenumbers import format_number, parse, PhoneNumberFormat
 from phonenumbers.phonenumberutil import NumberParseException
 
-from iris.api import load_config_file
+from iris.api import load_config
 from iris import metrics
 
 from requests.packages.urllib3.exceptions import (
@@ -262,7 +261,7 @@ def sync(config, engine, purge_old_users=True):
 
 
 def main():
-    config = load_config_file(sys.argv[1])
+    config = load_config()
     metrics.init(config, 'iris-sync-targets', stats_reset)
 
     default_nap_time = 3600

@@ -501,10 +501,8 @@ get_application_owners_query = '''SELECT `target`.`name`
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
-def load_config_file(config_path):
-    with open(config_path) as h:
-        config = yaml.safe_load(h)
-
+def process_config_hook(config):
+    ''' Examine config dict for hooks and run them if present '''
     if 'init_config_hook' in config:
         try:
             module = config['init_config_hook']
@@ -514,6 +512,25 @@ def load_config_file(config_path):
             logger.exception('Failed loading config hook %s', module)
 
     return config
+
+
+def load_config_file(path=None):
+    ''' Get config from path to file, defaulting to cli arg. This can easily be monkey patched. '''
+    if not path:
+        import sys
+        if len(sys.argv) <= 1:
+            print 'ERROR: missing config file.'
+            print 'usage: %s API_CONFIG_FILE' % sys.argv[0]
+            sys.exit(1)
+        path = sys.argv[1]
+
+    with open(path) as h:
+        return yaml.safe_load(h)
+
+
+def load_config(path=None):
+    ''' Process both config file (which might be monkey patched) as well as any config hooks '''
+    return process_config_hook(load_config_file(path))
 
 
 def stream_incidents_with_context(cursor):
@@ -3024,9 +3041,7 @@ class ApplicationStats(object):
 
 
 def get_api_app():
-    import sys
-    config = load_config_file(sys.argv[1])
-    return get_api(config)
+    return get_api(load_config())
 
 
 def update_cache_worker():
