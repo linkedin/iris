@@ -2203,6 +2203,24 @@ def test_ui_routes(sample_user, sample_admin_user):
     assert 'iris-auth' not in session.cookies
 
 
+def test_ui_assets():
+    re = requests.get(ui_url + 'static/images/iris.png', allow_redirects=False)
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'image/png'
+
+    re = requests.get(ui_url + 'static/bundles/iris.css', allow_redirects=False)
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'text/css'
+
+    re = requests.get(ui_url + 'static/bundles/iris.js', allow_redirects=False)
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'text/javascript'
+
+    re = requests.get(ui_url + 'static/fonts/glyphicons-halflings-regular.woff', allow_redirects=False)
+    assert re.status_code == 200
+    assert re.headers['content-type'] == 'application/font-woff'
+
+
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):
