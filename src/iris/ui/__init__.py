@@ -42,7 +42,7 @@ jinja2_env.assets_environment = assets_env
 jinja2_env.filters['tojson'] = ujson.dumps
 
 mimes = {'.css': 'text/css',
-         '.jpg': 'image/jpg',
+         '.jpg': 'image/jpeg',
          '.js': 'text/javascript',
          '.png': 'image/png',
          '.svg': 'image/svg+xml',
