@@ -529,7 +529,15 @@ def load_config_file(path=None):
 
 
 def load_config(path=None):
-    ''' Process both config file (which might be monkey patched) as well as any config hooks '''
+    '''
+      Generate configs for iris. This first calls load_config_file, which
+      will read configs from a yaml file. It will then pass that through
+      process_config_hook() which looks for a key called init_config_hook
+      which is the name of a module to call which can tweak the config further.
+
+      load_config_file() can be monkey patched, in which case this config
+      loading functionality can be customized further.
+    '''
     return process_config_hook(load_config_file(path))
 
 
