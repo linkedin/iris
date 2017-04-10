@@ -2510,41 +2510,44 @@ class ResponseGmail(ResponseMixin):
         if not source:
             msg = 'No source found in headers: %s' % gmail_params['headers']
             raise HTTPBadRequest('Missing source', msg)
+        to = email_headers.get('To')
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
         source = source.split(' ')[-1].strip('<>')
         content = gmail_params['body'].strip()
 
         # Some people want to use emails to create iris incidents. Facilitate this.
-        session = db.Session()
-        email_check_result = session.execute('''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
-                                                FROM `incident_emails`
-                                                JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                                                WHERE `email` = :email
-                                                AND `email` NOT IN (SELECT `destination` FROM `target_contact` WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email'))''', {'email': source}).fetchone()
-        if email_check_result:
+        if to:
+            to = to.split(' ')[-1].strip('<>')
+            session = db.Session()
+            email_check_result = session.execute('''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                                                    FROM `incident_emails`
+                                                    JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
+                                                    WHERE `email` = :email
+                                                    AND `email` NOT IN (SELECT `destination` FROM `target_contact` WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email'))''', {'email': to}).fetchone()
+            if email_check_result:
 
-            if 'In-Reply-To' in email_headers:
-                logger.warning('Not creating incident for email %s as this is an email reply, rather than a fresh email.', source)
+                if 'In-Reply-To' in email_headers:
+                    logger.warning('Not creating incident for email %s as this is an email reply, rather than a fresh email.', to)
+                    resp.status = HTTP_204
+                    resp.set_header('X-IRIS-INCIDENT', 'Not created')
+                    return
+
+                incident_info = {
+                    'application_id': email_check_result['application_id'],
+                    'created': datetime.datetime.utcnow(),
+                    'plan_id': email_check_result['plan_id'],
+                    'context': ujson.dumps({'body': content, 'email': to})
+                }
+                incident_id = session.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+                                                 VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''', incident_info).lastrowid
+                session.commit()
+                session.close()
                 resp.status = HTTP_204
-                resp.set_header('X-IRIS-INCIDENT', 'Not created')
+                resp.set_header('X-IRIS-INCIDENT', incident_id)  # Pass the new incident id back through a header so we can test this
                 return
 
-            incident_info = {
-                'application_id': email_check_result['application_id'],
-                'created': datetime.datetime.utcnow(),
-                'plan_id': email_check_result['plan_id'],
-                'context': ujson.dumps({'body': content, 'email': source})
-            }
-            incident_id = session.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
-                                             VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''', incident_info).lastrowid
-            session.commit()
             session.close()
-            resp.status = HTTP_204
-            resp.set_header('X-IRIS-INCIDENT', incident_id)  # Pass the new incident id back through a header so we can test this
-            return
-
-        session.close()
 
         # only parse first line of email content for now
         first_line = content.split('\n', 1)[0].strip()

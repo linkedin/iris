@@ -2058,7 +2058,7 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
     assert re.json()['title'] == 'These email addresses are already in use by another app: %s' % special_email
 
 
-def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_email, sample_admin_user):
+def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_admin_user):
     if not sample_application_name or not sample_plan_name or not sample_email:
         pytest.skip('We do not have enough data in DB to do this test')
 
@@ -2071,14 +2071,15 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     email_make_incident_payload = {
         'body': 'This is a new test incident with a test message to be delivered to people.',
         'headers': [
-            {'name': 'From', 'value': special_email},
+            {'name': 'From', 'value': 'foo@bar.com'},
+            {'name': 'To', 'value': special_email},
             {'name': 'Subject', 'value': 'fooject'},
         ]
     }
 
     re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
     assert re.status_code == 204
-    assert re.headers['X-IRIS-INCIDENT']
+    assert re.headers['X-IRIS-INCIDENT'].isdigit()
 
     re = requests.get(base_url + 'incidents/%s' % re.headers['X-IRIS-INCIDENT'])
     assert re.status_code == 200
@@ -2088,34 +2089,26 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     assert data['application'] == sample_application_name
     assert data['plan'] == sample_plan_name
 
-    # Try doing the same logic, but coming from a user's email address. Its sanity checks should prevent
-    # incident creation, and give back the 4xx as it can't parse the response in terms of incident
-    # claiming/etc. Need to set it using SQL as the api for setting these settings will reject using a
-    # user's email address.
-    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('''INSERT INTO `incident_emails` (`email`, `application_id`, `plan_name`)
-                          VALUES (%(email)s, (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), %(plan_name)s)
-                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application_name)s LIMIT 1), `plan_name` = %(plan_name)s''',
-                       {'email': sample_email, 'application_name': sample_application_name, 'plan_name': sample_plan_name})
-        conn.commit()
-
+    # Try it again with a customized fancy To header
     email_make_incident_payload = {
-        'body': 'This string should not become an incident',
+        'body': 'This is a new test incident with a test message to be delivered to people.',
         'headers': [
-            {'name': 'From', 'value': sample_email},
+            {'name': 'From', 'value': 'foo@bar.com'},
+            {'name': 'To', 'value': 'Email Mailing List Of Doom <%s>' % special_email},
             {'name': 'Subject', 'value': 'fooject'},
         ]
     }
 
     re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
-    assert re.status_code == 400
-    assert 'X-IRIS-INCIDENT' not in re.headers
+    assert re.status_code == 204
+    assert re.headers['X-IRIS-INCIDENT'].isdigit()
 
     # Also try creating an incident with an an email that's a reply to the thread, which shouldn't work
     email_make_incident_payload = {
         'body': 'This string should not become an incident',
         'headers': [
-            {'name': 'From', 'value': special_email},
+            {'name': 'From', 'value': 'foo@bar.com'},
+            {'name': 'To', 'value': special_email},
             {'name': 'Subject', 'value': 'fooject'},
             {'name': 'In-Reply-To', 'value': 'messagereference'},
         ]
