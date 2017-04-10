@@ -137,7 +137,7 @@
         {{#each @root.emailIncidents}}
         <tr>
           <td>{{@key}}</td>
-          <td>{{this}}</td>
+          <td><a href="/plans/{{this}}">{{this}}</a></td>
           {{# ifNot @root.viewMode }}
             {{#if @root.supportEditingEmailIncidents }}
               <td><button class="btn btn-danger btn-sm delete-email-incident-button" data-email="{{@key}}" title="Delete this email->plan combo">Delete</button></td>
