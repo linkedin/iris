@@ -1870,6 +1870,41 @@ class Application(object):
                                    WHERE `application_id` = :application_id
                                    AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
                                                      WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
+            session.commit()
+
+        # Also support changing the default modes per priority per app, adhering to ones that are allowed for said app.
+        default_modes = data.get('default_modes')
+        if isinstance(default_modes, dict):
+            existing_priorities = {row[0] for row in session.execute('''SELECT `priority`.`name`
+                                                                        FROM `default_application_mode`
+                                                                        JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
+                                                                        WHERE `default_application_mode`.`application_id` = :application_id''', {'application_id': app['id']})}
+            kill_priorities = existing_priorities - default_modes.viewkeys()
+            for priority, mode in default_modes.iteritems():
+
+                # If we disabled this mode for this app in the code block above, avoid the expected integrity error here by bailing early
+                if new_modes is not None and mode not in new_modes:
+                    logger.warn('Not setting default priority %s to mode %s for app %s as this mode was disabled as part of this app update', priority, mode, app_name)
+                    continue
+
+                try:
+                    session.execute('''INSERT INTO `default_application_mode` (`application_id`, `priority_id`, `mode_id`)
+                                       VALUES (:application_id, (SELECT `id` FROM `priority` WHERE `name` = :priority),
+                                               (SELECT `id` FROM `mode`
+                                                JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
+                                                AND `application_mode`.`mode_id` = `mode`.`id`
+                                                WHERE `mode`.`name` = :mode))
+                                       ON DUPLICATE KEY UPDATE `mode_id` = (SELECT `id` FROM `mode`
+                                                JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
+                                                AND `application_mode`.`mode_id` = `mode`.`id`
+                                                WHERE `mode`.`name` = :mode)''', {'application_id': app['id'], 'priority': priority, 'mode': mode})
+                    session.commit()
+                except IntegrityError:
+                    logger.exception('Integrity error whilst setting default priority %s to mod %s for app %s', priority, mode, app_name)
+
+            if kill_priorities:
+                session.execute('''DELETE FROM `default_application_mode` WHERE `application_id` = :application_id
+                                   AND `priority_id` IN ( SELECT `id` FROM `priority`  WHERE `name` in :priorities) ''', {'application_id': app['id'], 'priorities': tuple(kill_priorities)})
 
         data['application_id'] = app['id']
 

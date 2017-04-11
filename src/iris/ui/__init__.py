@@ -224,7 +224,8 @@ class Application(object):
     def on_get(self, req, resp, application):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('application.html').render(request=req,
-                                                                       applications=get_local(req, 'applications'))
+                                                                       applications=get_local(req, 'applications'),
+                                                                       priorities=get_local(req, 'priorities'))
 
 
 class Login():
