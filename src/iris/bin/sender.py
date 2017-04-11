@@ -775,8 +775,10 @@ def mark_message_as_sent(message):
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
     if len(message['subject']) > 255:
         message['subject'] = message['subject'][:255]
-    if len(message['body']) > 1048576:
-        message['body'] = message['body'][:1048576]
+    if len(message['body']) > 65000:
+        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
+                    message.get('message_id', '?'), len(message['body']))
+        message['body'] = message['body'][:65000]
     try:
         cursor.execute(sql, params)
         connection.commit()
