@@ -29,12 +29,16 @@ iris = {
     }
     path = path.substr(start, end);
     var segments = path.split('/');
+    var base_route = segments[0];
+    if (!(base_route in this)) {
+      return;
+    }
     switch (segments.length) {
       case 1:
-          this[segments[0]].init();
+          this[base_route].init();
         break;
       case 2:
-          this[segments[0].slice(0, -1)].init();
+          this[base_route.slice(0, -1)].init();
         break;
     }
   },
