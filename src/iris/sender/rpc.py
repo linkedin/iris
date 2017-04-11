@@ -108,6 +108,11 @@ def handle_api_notification_request(socket, address, req):
         reject_api_request(socket, address, 'INVALID role:target')
         return
 
+    # If we're rendering this using templates+context instead of body, fill in the
+    # needed iris key.
+    if notification.get('template') and notification.get('context'):
+        notification['context']['iris'] = notification['context'].get('iris', {})
+
     logger.info('-> %s OK, to %s:%s (%s)',
                 address, role, target, notification.get('priority', notification.get('mode', '?')))
 
