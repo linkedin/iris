@@ -318,7 +318,7 @@ CREATE TABLE `default_application_mode` (
   `application_id` int(11) NOT NULL,
   `priority_id` int(11) NOT NULL,
   `mode_id` int(11) NOT NULL,
-  PRIMARY KEY (`mode_id`,`application_id`,`priority_id`),
+  PRIMARY KEY (`application_id`,`priority_id`),
   KEY `default_application_mode_ibfk_1` (`application_id`),
   KEY `default_application_mode_ibfk_2` (`priority_id`),
   KEY `default_application_mode_ibfk_3` (`mode_id`),
