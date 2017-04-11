@@ -1898,7 +1898,7 @@ iris = {
         var variable = $(this).data('variable');
         var pos = self.data.model.variables.indexOf(variable);
         if (pos !== -1) {
-            self.data.model.variables.splice(pos, 1)
+          self.data.model.variables.splice(pos, 1)
         }
         $(this).parent().remove();
       });
@@ -1906,7 +1906,7 @@ iris = {
         var owner = $(this).data('owner');
         var pos = self.data.model.owners.indexOf(owner);
         if (pos !== -1) {
-            self.data.model.owners.splice(pos, 1)
+          self.data.model.owners.splice(pos, 1)
         }
         $(this).parent().remove();
       });
@@ -1914,12 +1914,12 @@ iris = {
         e.preventDefault();
         var variable = $('#add-variable-box').val();
         if (variable == '') {
-            iris.createAlert('Cannot add empty variable');
-            return;
+          iris.createAlert('Cannot add empty variable');
+          return;
         }
         if (self.data.model.variables.indexOf(variable) !== -1) {
-            iris.createAlert('That variable "'+variable+'" already exists');
-            return;
+          iris.createAlert('That variable "'+variable+'" already exists');
+          return;
         }
         $('#add-variable-box').val('');
         self.data.model.variables.push(variable);
@@ -1930,12 +1930,12 @@ iris = {
         e.preventDefault();
         var owner = $('#add-owner-box').val();
         if (owner == '') {
-            iris.createAlert('Cannot add empty owner');
-            return;
+          iris.createAlert('Cannot add empty owner');
+          return;
         }
         if (self.data.model.owners.indexOf(owner) !== -1) {
-            iris.createAlert('That owner "'+owner+'" already exists');
-            return;
+          iris.createAlert('That owner "'+owner+'" already exists');
+          return;
         }
         $('#add-owner-box').val('');
         self.data.model.owners.push(owner);
@@ -1943,56 +1943,56 @@ iris = {
         self.render();
       });
       data.$page.on('submit', data.addEmailIncidentForm, function(e) {
-          e.preventDefault();
-          var $email = $('#add-email-incident-email');
-          var $plan = $('#add-email-incident-plan');
-          self.data.model.emailIncidents[$email.val()] = $plan.val();
-          $email.val('');
-          $plan.val('');
-          self.modelPersist();
-          self.render();
+        e.preventDefault();
+        var $email = $('#add-email-incident-email');
+        var $plan = $('#add-email-incident-plan');
+        self.data.model.emailIncidents[$email.val()] = $plan.val();
+        $email.val('');
+        $plan.val('');
+        self.modelPersist();
+        self.render();
       });
       data.$page.on('click', data.removeEmailIncidentButton, function() {
-          delete self.data.model.emailIncidents[$(this).data('email')];
-          self.modelPersist();
-          self.render();
+        delete self.data.model.emailIncidents[$(this).data('email')];
+        self.modelPersist();
+        self.render();
       });
       data.$page.on('submit', data.addDefaultModeForm, function(e) {
-          e.preventDefault();
-          var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
-          var $mode = $('#default-mode-form-mode'), mode_val = $mode.val();
-          if (priority_val == '') {
-              $priority.addClass('invalid-input');
-              return;
-          } else {
-              $priority.removeClass('invalid-input');
-          }
-          if (mode_val == '') {
-              $mode.addClass('invalid-input');
-              return;
-          } else {
-              $mode.removeClass('invalid-input');
-          }
-          self.data.model.default_modes[priority_val] = mode_val;
-          $priority.val('');
-          $mode.val('');
-          self.modelPersist();
-          self.render();
+        e.preventDefault();
+        var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
+        var $mode = $('#default-mode-form-mode'), mode_val = $mode.val();
+        if (priority_val == '') {
+          $priority.addClass('invalid-input');
+          return;
+        } else {
+          $priority.removeClass('invalid-input');
+        }
+        if (mode_val == '') {
+          $mode.addClass('invalid-input');
+          return;
+        } else {
+          $mode.removeClass('invalid-input');
+        }
+        self.data.model.default_modes[priority_val] = mode_val;
+        $priority.val('');
+        $mode.val('');
+        self.modelPersist();
+        self.render();
       });
       data.$page.on('click', data.removeDefaultModeButton, function() {
-          delete self.data.model.default_modes[$(this).data('priority')];
-          self.modelPersist();
-          self.render();
+        delete self.data.model.default_modes[$(this).data('priority')];
+        self.modelPersist();
+        self.render();
       });
       window.onbeforeunload = iris.unloadDialog.bind(this);
     },
     modelPersist: function() {
       var self = this;
       self.data.$page.find('textarea').each(function(elem) {
-          var key = $(this).data('field');
-          if (key && key in self.data.model) {
-            self.data.model[key] = $(this).val();
-          }
+        var key = $(this).data('field');
+        if (key && key in self.data.model) {
+          self.data.model[key] = $(this).val();
+        }
       });
     },
     getApplication: function(application) {
