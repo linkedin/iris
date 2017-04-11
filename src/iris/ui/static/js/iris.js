@@ -1914,7 +1914,8 @@ iris = {
         }
         $(this).parent().remove();
       });
-      data.$page.on('submit', data.addVariableForm, function() {
+      data.$page.on('submit', data.addVariableForm, function(e) {
+        e.preventDefault();
         var variable = $('#add-variable-box').val();
         if (variable == '') {
             iris.createAlert('Cannot add empty variable');
@@ -1929,7 +1930,8 @@ iris = {
         self.modelPersist();
         self.render();
       });
-      data.$page.on('submit', data.addOwnerForm, function() {
+      data.$page.on('submit', data.addOwnerForm, function(e) {
+        e.preventDefault();
         var owner = $('#add-owner-box').val();
         if (owner == '') {
             iris.createAlert('Cannot add empty owner');
@@ -1944,7 +1946,8 @@ iris = {
         self.modelPersist();
         self.render();
       });
-      data.$page.on('submit', data.addEmailIncidentForm, function() {
+      data.$page.on('submit', data.addEmailIncidentForm, function(e) {
+          e.preventDefault();
           var $email = $('#add-email-incident-email');
           var $plan = $('#add-email-incident-plan');
           self.data.model.emailIncidents[$email.val()] = $plan.val();
@@ -1958,18 +1961,19 @@ iris = {
           self.modelPersist();
           self.render();
       });
-      data.$page.on('submit', data.addDefaultModeForm, function() {
+      data.$page.on('submit', data.addDefaultModeForm, function(e) {
+          e.preventDefault();
           var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
           var $mode = $('#default-mode-form-mode'), mode_val = $mode.val();
           if (priority_val == '') {
               $priority.addClass('invalid-input');
-              return false;
+              return;
           } else {
               $priority.removeClass('invalid-input');
           }
           if (mode_val == '') {
               $mode.addClass('invalid-input');
-              return false;
+              return;
           } else {
               $mode.removeClass('invalid-input');
           }
