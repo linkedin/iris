@@ -739,7 +739,6 @@ def render(message):
             message['body'] = 'Failed rendering message.\n\nContext: %s\n\nError: %s' % (repr(message), error % message)
             message['template_id'] = None
         else:
-
             if config.get('enable_gmail_oneclick') and message['mode'] == 'email' and 'incident_id' in message:
                 oneclick_url = generate_oneclick_url(config, {
                     'msg_id': message['message_id'],
@@ -799,8 +798,8 @@ def update_message_sent_status(message, status):
     if not mode:
         return
 
-    # Don't track this for twilio as those are kept track of separately. Make use of this for email,
-    # and, as a side effect of that for slack
+    # Don't track this for twilio as those are kept track of separately. Make
+    # use of this for email, and, as a side effect of that for slack
     if mode in ('sms', 'call'):
         return
 
