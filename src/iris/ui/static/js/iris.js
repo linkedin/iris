@@ -1875,7 +1875,9 @@ iris = {
       addVariableForm: '#add-variable-form',
       addOwnerForm: '#add-owner-form',
       addEmailIncidentForm: '#add-email-incident-form',
+      addDefaultModeForm: '#add-default-mode-form',
       removeEmailIncidentButton: '.delete-email-incident-button',
+      removeDefaultModeButton: '.delete-default-mode-button',
       dangerousActionsToggle: '.application-dangerous-actions h4',
       application: null,
       model: {}
@@ -1956,6 +1958,32 @@ iris = {
           self.modelPersist();
           self.render();
       });
+      data.$page.on('submit', data.addDefaultModeForm, function() {
+          var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
+          var $mode = $('#default-mode-form-mode'), mode_val = $mode.val();
+          if (priority_val == '') {
+              $priority.addClass('invalid-input');
+              return false;
+          } else {
+              $priority.removeClass('invalid-input');
+          }
+          if (mode_val == '') {
+              $mode.addClass('invalid-input');
+              return false;
+          } else {
+              $mode.removeClass('invalid-input');
+          }
+          self.data.model.default_modes[priority_val] = mode_val;
+          $priority.val('');
+          $mode.val('');
+          self.modelPersist();
+          self.render();
+      });
+      data.$page.on('click', data.removeDefaultModeButton, function() {
+          delete self.data.model.default_modes[$(this).data('priority')];
+          self.modelPersist();
+          self.render();
+      });
       window.onbeforeunload = iris.unloadDialog.bind(this);
     },
     modelPersist: function() {
@@ -1998,6 +2026,9 @@ iris = {
         app.supportDangerousActions = window.appData.user_admin;
         app.showEditQuotas = false;
         app.apiKey = false;
+        app.priorities = window.appData.priorities.map(function(priority) {
+          return priority.name;
+        });
         self.data.model = app;
         self.render();
         self.events();

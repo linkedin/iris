@@ -117,6 +117,52 @@
       {{/if}}
     {{/if}}
   </div>
+  <div class="module application-default-modes user-settings">
+    <h4>Default contact modes per priority for this app</h4>
+    <p class="light">These defaults can be overridden on a per-user basis in the user settings page.</p>
+    {{#hasKeys @root.default_modes }}
+    <table id="application-email-incidents-table">
+      <thead>
+        <tr>
+          <td>Priority</td>
+          <td>Mode</td>
+          {{# ifNot @root.viewMode }}
+            <td class="delete-column">Delete</td>
+          {{/ifNot}}
+      <thead>
+      <tbody>
+        {{#each @root.default_modes}}
+        <tr>
+          <td>{{@key}}</td>
+          <td>{{this}}</td>
+          {{# ifNot @root.viewMode }}
+            <td><button class="btn btn-danger btn-sm delete-default-mode-button" data-priority="{{@key}}" title="Delete this custom priority">Delete</button></td>
+          {{/ifNot}}
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="light">None configured.</p>
+    {{/hasKeys}}
+    {{# ifNot @root.viewMode }}
+      <form id="add-default-mode-form">
+        <select id="default-mode-form-priority" class="form-control border-bottom">
+            <option value="">Priority</option>
+            {{#each @root.priorities}}
+              <option>{{this}}</option>
+            {{/each}}
+        </select>
+        <select id="default-mode-form-mode" class="form-control border-bottom">
+            <option value="">Mode</option>
+            {{#each @root.supported_modes}}
+              <option>{{this}}</option>
+            {{/each}}
+        </select>
+        <input type="submit" value="Set" class="btn btn-primary btn-sm">
+      </form>
+    {{/ifNot}}
+  </div>
   <div class="module application-email-incidents user-settings">
     <h4>Emails which create incidents</h4>
     <p class="light">When you send an email with one of these addresses in the "to" header, a new incident will be created.</p>

@@ -224,6 +224,14 @@ def sample_mode():
         return modes[0]
 
 
+@pytest.fixture(scope='module')
+def sample_priority():
+    ''' A sample priority '''
+    priorities = requests.get(base_url + 'priorities').json()
+    if priorities:
+        return priorities[0]['name']
+
+
 def create_incident_with_message(application, plan, target, mode):
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
@@ -1795,7 +1803,7 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     assert re.json() == {}
 
 
-def test_modify_application(sample_application_name, sample_admin_user, sample_user, sample_mode):
+def test_modify_application(sample_application_name, sample_admin_user, sample_user, sample_mode, sample_priority):
     if not all([sample_application_name, sample_admin_user, sample_user, sample_mode]):
         pytest.skip('We do not have enough data in DB to do this test')
 
@@ -1878,6 +1886,27 @@ def test_modify_application(sample_application_name, sample_admin_user, sample_u
     # Verify that mode is there
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
     assert sample_mode in re.json()['supported_modes']
+
+    # Same for default mode per priority per this app
+
+    # Wipe the default modes
+    current_settings['default_modes'] = {}
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify none are set
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.json()['default_modes'] == {}
+
+    # Set one
+    current_settings['default_modes'] = {sample_priority: sample_mode}
+    re = requests.put(base_url + 'applications/%s' % sample_application_name, json=current_settings, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Verify its set
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.json()['default_modes'] == {sample_priority: sample_mode}
+    assert re.status_code == 200
 
 
 def test_create_application(sample_admin_user, sample_application_name):

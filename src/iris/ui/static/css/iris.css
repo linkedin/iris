@@ -1332,6 +1332,10 @@ table.dataTable thead .sorting_asc {
   line-height: 33px;
 }
 
+#add-default-mode-form select {
+  width: 100px;
+}
+
 /*
  * Stats page
  */
