@@ -1885,6 +1885,13 @@ iris = {
     init: function() {
       var location = window.location.pathname.split('/'),
           application = decodeURIComponent(location[location.length - 1]);
+
+      // Register this only for this page because it isn't used anywhere else. Only admins and users
+      // can delete owners, but users who are not admins cannot delete themselves.
+      Handlebars.registerHelper('ifCanShowDeleteUserButton', function(username, opts) {
+        return window.appData.user_admin || username != window.appData.user ? opts.fn(this) : opts.inverse(this);
+      });
+
       this.data.application = application;
       this.getApplication(application);
     },
@@ -2026,7 +2033,7 @@ iris = {
         app.editable = window.appData.user_admin || owner;
         app.supportViewingKey = window.appData.user_admin || owner;
         app.supportEditingEmailIncidents = window.appData.user_admin || owner;
-        app.showEditOwners = window.appData.user_admin;
+        app.showEditOwners = window.appData.user_admin || owner;
         app.supportDangerousActions = window.appData.user_admin;
         app.showEditQuotas = false;
         app.apiKey = false;
