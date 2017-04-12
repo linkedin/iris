@@ -1865,8 +1865,9 @@ class Application(object):
                                                                    JOIN `application_mode` ON `application_mode`.`mode_id` = `mode`.`id`
                                                                    WHERE `application_mode`.`application_id` = :application_id''', {'application_id': app['id']})}
             kill_modes = existing_modes - new_modes
+            add_modes = new_modes - existing_modes
 
-            for mode in new_modes - existing_modes:
+            for mode in add_modes:
                 try:
                     session.execute('''INSERT INTO `application_mode` (`application_id`, `mode_id`)
                                        VALUES (:application_id, (SELECT `mode`.`id` FROM `mode`
@@ -1879,7 +1880,15 @@ class Application(object):
                                    WHERE `application_id` = :application_id
                                    AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
                                                      WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
+
+                session.execute('''DELETE FROM `default_application_mode`
+                                   WHERE `application_id` = :application_id
+                                   AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
+                                                     WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
             session.commit()
+
+            if kill_modes or add_modes:
+                logger.info('User %s has changed supported_modes for app %s to: %s', req.context['username'], app_name, ', '.join(new_modes))
 
         # Also support changing the default modes per priority per app, adhering to ones that are allowed for said app.
         default_modes = data.get('default_modes')
@@ -2272,7 +2281,16 @@ class Applications(object):
             app_id = session.execute('''INSERT INTO `application` (`name`, `key`) VALUES (:name, :key)''', new_app_data).lastrowid
             session.commit()
         except IntegrityError:
+            session.close()
             raise HTTPBadRequest('This app already exists', '')
+
+        # Enable all modes for this app except for "drop" by default
+        try:
+            session.execute('''INSERT INTO `application_mode` (`application_id`, `mode_id`)
+                               SELECT :app_id, `mode`.`id` FROM `mode` WHERE `mode`.`name` != 'drop' ''', {'app_id': app_id})
+            session.commit()
+        except IntegrityError:
+            logger.error('Failed configuring supported modes for newly created app %s', app_name)
         finally:
             session.close()
 

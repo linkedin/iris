@@ -989,6 +989,13 @@ table.dataTable thead .sorting_asc {
   display: none;
 }
 
+#supported-modes-checkboxes input {
+  width: auto;
+}
+
+#supported-modes-checkboxes {
+  height: 30px;
+}
 
 #api-key-box {
   height: 22px;
