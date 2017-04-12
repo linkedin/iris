@@ -2035,11 +2035,13 @@ iris = {
         app.supportEditingEmailIncidents = window.appData.user_admin || owner;
         app.showEditOwners = window.appData.user_admin || owner;
         app.supportDangerousActions = window.appData.user_admin;
+        app.supportEditingSupportedModes = window.appData.user_admin;
         app.showEditQuotas = false;
         app.apiKey = false;
         app.priorities = window.appData.priorities.map(function(priority) {
           return priority.name;
         });
+        app.modes = window.appData.modes;
         self.data.model = app;
         self.render();
         self.events();
@@ -2135,6 +2137,21 @@ iris = {
           method: 'PUT',
           contentType: 'application/json'
         }));
+      }
+      if (self.data.model.supportEditingSupportedModes) {
+        self.data.model.supported_modes = [];
+        $('input[name=supported_modes]').each(function(k, elem) {
+          var $elem = $(elem);
+          if ($elem.prop('checked')) {
+            self.data.model.supported_modes.push($elem.val());
+          }
+        });
+        // Remove any default modes using modes we no longer support
+        for (priority in self.data.model.default_modes) {
+          if (self.data.model.supported_modes.indexOf(self.data.model.default_modes[priority]) == -1) {
+            delete self.data.model.default_modes[priority];
+          }
+        }
       }
       ajaxCalls.push($.ajax({
         url: self.data.url + self.data.application,
@@ -2434,7 +2451,7 @@ iris = {
     }
   },
   unloadDialog: function(){
-    if ( this.data.$page.find('input, textarea').not('[data-default]').filter(function () { return !!this.value }).length > 0 ) {
+    if ( this.data.$page.find('input, textarea').not('[data-default]').not('[disabled]').filter(function () { return !!this.value }).length > 0 ) {
       return 'You have unsaved changes';
     }
   },
@@ -2495,6 +2512,13 @@ iris = {
     // Register handlebars helpers
     Handlebars.registerHelper('ifNot', function(val, opts){
       return val ? opts.inverse(this) : opts.fn(this);
+    });
+    Handlebars.registerHelper('ifIn', function(needle, haystack, opts){
+      if (Array.isArray(haystack)) {
+        return haystack.indexOf(needle) != -1 ? opts.fn(this) : opts.inverse(this);
+      } else {
+        return needle in haystack;
+      }
     });
     Handlebars.registerHelper('hasKeys', function(val, opts){
       return Object.keys(val).length ? opts.fn(this) : opts.inverse(this);
