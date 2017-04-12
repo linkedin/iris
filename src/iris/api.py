@@ -1781,10 +1781,10 @@ class Application(object):
             raise HTTPBadRequest('Application %s not found' % app_name, '')
 
         # Only admins and application owners can change app settings
-        if not req.context['is_admin']:
-            if not session.execute(check_application_ownership_query, {'application_id': app['id'], 'username': req.context['username']}).scalar():
-                session.close()
-                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
+        is_owner = bool(session.execute(check_application_ownership_query, {'application_id': app['id'], 'username': req.context['username']}).scalar())
+        if not is_owner and not req.context['is_admin']:
+            session.close()
+            raise HTTPUnauthorized('Only admins and app owners can change this app\'s settings.', '')
 
         try:
             ujson.loads(data['sample_context'])
@@ -1815,20 +1815,26 @@ class Application(object):
             session.execute('DELETE FROM `template_variable` WHERE `application_id` = :application_id AND `name` IN :variables',
                             {'application_id': app['id'], 'variables': tuple(kill_variables)})
 
-        # Only admins can (optionally) change owners
+        # Only owners can (optionally) change owners
         new_owners = data.get('owners')
-        if req.context['is_admin'] and new_owners is not None:
+        if new_owners is not None:
             if not isinstance(new_owners, list):
                 raise HTTPBadRequest('To change owners, you must pass a list of strings', '')
 
             new_owners = set(new_owners)
+
+            # Make it impossible for the current user to remove themselves as an owner, unless they're an admin
+            if is_owner and not req.context['is_admin']:
+                new_owners.add(req.context['username'])
+
             existing_owners = {row[0] for row in session.execute('''SELECT `target`.`name`
                                                                     FROM `target`
                                                                     JOIN `application_owner` ON `target`.`id` = `application_owner`.`user_id`
                                                                     WHERE `application_owner`.`application_id` = :application_id''', {'application_id': app['id']})}
             kill_owners = existing_owners - new_owners
+            add_owners = new_owners - existing_owners
 
-            for owner in new_owners - existing_owners:
+            for owner in add_owners:
                 try:
                     session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
                                        VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
@@ -1843,6 +1849,9 @@ class Application(object):
                                    AND `user_id` IN (SELECT `user`.`target_id` FROM `user`
                                                      JOIN `target` on `target`.`id` = `user`.`target_id`
                                                      WHERE `target`.`name` IN :owners)''', {'application_id': app['id'], 'owners': tuple(kill_owners)})
+
+            if kill_owners or add_owners:
+                logger.info('User %s has changed owners for app %s to: %s', req.context['username'], app_name, ', '.join(new_owners))
 
         # Only admins can (optionally) change supported modes
         new_modes = data.get('supported_modes')
