@@ -3019,70 +3019,6 @@ class ApplicationStats(object):
                                                                   ORDER BY time_to_claim) as time_to_claim
                                                             WHERE (SELECT @row_id := @row_id + 1)
                                                             BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
-            'pct_successful_twilio_sms_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
-                                                                     JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                     JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                     WHERE `twilio_delivery_status`.`status` IN ('delivered', 'sent')
-                                                                           AND `mode`.`name` = 'sms'
-                                                                           AND `message`.`application_id` = %(application_id)s
-                                                                           AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                           AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
-                                                                    (SELECT count(*) FROM `message`
-                                                                     JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                     JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                     WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
-                                                                           AND `mode`.`name` = 'sms'
-                                                                           AND `message`.`application_id` = %(application_id)s
-                                                                           AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                           AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
-            'pct_successful_twilio_call_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
-                                                                      JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                      JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                      WHERE `twilio_delivery_status`.`status` = 'completed'
-                                                                            AND `mode`.`name` = 'call'
-                                                                            AND `message`.`application_id` = %(application_id)s
-                                                                            AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                            AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
-                                                                     (SELECT count(*) FROM `message`
-                                                                      JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                      JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                      WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
-                                                                            AND `mode`.`name` = 'call'
-                                                                            AND `message`.`application_id` = %(application_id)s
-                                                                            AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                            AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
-            'pct_failed_twilio_call_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
-                                                                  JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                  JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                  WHERE `twilio_delivery_status`.`status` = 'failed'
-                                                                        AND `mode`.`name` = 'call'
-                                                                        AND `message`.`application_id` = %(application_id)s
-                                                                        AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                        AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
-                                                                 (SELECT count(*) FROM `message`
-                                                                  JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
-                                                                  JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                  WHERE NOT ISNULL(`twilio_delivery_status`.`status`)
-                                                                        AND `mode`.`name` = 'call'
-                                                                        AND `message`.`application_id` = %(application_id)s
-                                                                        AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                        AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100''',
-            'pct_successful_email_last_month': '''SELECT ROUND((SELECT count(*) FROM `message`
-                                                                JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
-                                                                JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                WHERE `generic_message_sent_status`.`status` = TRUE
-                                                                      AND `mode`.`name` = 'email'
-                                                                      AND `message`.`application_id` = %(application_id)s
-                                                                      AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                      AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)) /
-                                                               (SELECT count(*) FROM `message`
-                                                                JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
-                                                                JOIN `mode` on `mode`.`id` = `message`.`mode_id`
-                                                                WHERE NOT ISNULL(`generic_message_sent_status`.`status`)
-                                                                      AND `mode`.`name` = 'email'
-                                                                      AND `message`.`application_id` = %(application_id)s
-                                                                      AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                      AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)), 2) * 100'''
         }
 
         query_data = {'application_id': app['id']}
@@ -3106,11 +3042,60 @@ class ApplicationStats(object):
                 result = None
             logger.info('App Stats (%s) query %s took %s seconds', app['name'], key, round(time.time() - start, 2))
             stats[key] = result
+
+        mode_status = defaultdict(lambda: defaultdict(int))
+
+        mode_stats_types = {
+            'sms': {
+                'fail': ['undelivered'],
+                'success': ['sent', 'delivered']
+            },
+            'call': {
+                'success': ['completed'],
+                'fail': ['failed']
+            },
+            'email': {
+                'success': [1],
+                'fail': [0],
+            }
+        }
+
+        start = time.time()
+        cursor.execute('''SELECT `mode`.`name`, COALESCE(`generic_message_sent_status`.`status`, `twilio_delivery_status`.`status`) as thisStatus,
+                                  COUNT(*) FROM `message`
+                          LEFT JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
+                          LEFT JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
+                          JOIN `mode` ON `mode`.`id` = `message`.`mode_id`
+                          WHERE ((NOT ISNULL(`twilio_delivery_status`.`status`) AND `mode`.`name` != 'email') OR (NOT ISNULL(`generic_message_sent_status`.`status`) AND `mode`.`name` = 'email'))
+                                AND `message`.`application_id` = %(application_id)s
+                                AND `message`.`created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                AND `message`.`created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                          GROUP BY thisStatus, `mode`.`name`''', query_data)
+        logger.info('App Stats (%s) mode status query took %s seconds', app['name'], round(time.time() - start, 2))
+
+        for mode, status, count in cursor:
+            if isinstance(status, basestring) and status.isdigit():
+                status = int(status)
+            mode_status[mode][status] = count
+
+        for mode in mode_stats_types:
+            status_counts = mode_status[mode]
+            overall = float(sum(status_counts.values()))
+            if overall > 0:
+                fail_pct = round((sum(status_counts.pop(key, 0) for key in mode_stats_types[mode]['fail']) / overall) * 100, 2)
+                success_pct = round((sum(status_counts.pop(key, 0) for key in mode_stats_types[mode]['success']) / overall) * 100, 2)
+                other_pct = round((sum(status_counts.values()) if status_counts else 0 / overall) * 100, 2)
+            else:
+                fail_pct = success_pct = other_pct = None
+            stats['pct_%s_success_last_month' % mode] = success_pct
+            stats['pct_%s_fail_last_month' % mode] = fail_pct
+            stats['pct_%s_other_last_month' % mode] = other_pct
+
         cursor.close()
         connection.close()
 
         resp.status = HTTP_200
-        resp.body = ujson.dumps(stats)
+        resp.body = ujson.dumps(stats, sort_keys=True)
 
 
 def get_api_app():
