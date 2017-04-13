@@ -54,33 +54,33 @@
       </div>
     </div>
   </div>
-  <div class="module application-module {{# if @root.viewMode }}view{{else}}edit{{/if}}-application">
+  <div class="module application-module {{#if @root.isInViewMode}}view{{else}}edit{{/if}}-application">
     <h3>
       {{name}}
-      {{# if @root.editable }}
-        {{# if @root.viewMode }}
+      {{#if @root.isEditable}}
+        {{#if @root.isInViewMode}}
         <button id="application-edit-button" class="btn btn-default blue btn-sm pull-right">Edit Application</button>
         {{else}}
         <button id="application-save-button" class="btn btn-primary btn-sm pull-right">Save Application</button>
         {{/if}}
       {{/if}}
     </h3>
-    <span class="light">Owners: {{#if owners}}{{#each owners}}<span class="label label-info">{{this}} {{# if @root.showEditOwners }}{{# ifCanShowDeleteUserButton this }}<i class="glyphicon glyphicon-remove remove-owner" data-owner="{{this}}"></i>{{/ifCanShowDeleteUserButton}}{{/if}}</span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
-    {{# if @root.showEditOwners }}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br>
+    <span class="light">Owners: {{#if owners}}{{#each owners}}<span class="label label-info">{{this}} {{#if @root.showEditOwners}}{{#ifCanShowDeleteUserButton this}}<i class="glyphicon glyphicon-remove remove-owner" data-owner="{{this}}"></i>{{/ifCanShowDeleteUserButton}}{{/if}}</span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
+    {{#if @root.showEditOwners}}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br>
     <span class="light">Variables: {{#if variables}}{{#each variables}}<span class="label label-info">{{this}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{this}}"></i></span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
     <form id="add-variable-form"><input type="text" class="form-control border-bottom input-sm" placeholder="Add variable" id="add-variable-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form><br>
     <div class="light" id="supported-modes-checkboxes">Supported modes:
       {{#each @root.modes}}
-        <label><input type="checkbox" name="supported_modes" value="{{this}}" {{# ifIn this @root.supported_modes}}checked{{/ifIn}} {{# if @root.viewMode }}disabled{{else}}{{# ifNot @root.supportEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>
+        <label><input type="checkbox" name="supported_modes" value="{{this}}" {{#ifIn this @root.supported_modes}}checked{{/ifIn}} {{#if @root.isInViewMode}}disabled{{else}}{{#ifNot @root.allowEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>
       {{/each}}
     </div>
-    {{# if @root.supportViewingKey }}
-    <div id="api-key-box" class="light">API key: {{# if @root.apiKey }}<code>{{ @root.apiKey }}</code>{{else}}<button id="show-api-key-button" class="btn btn-default blue btn-xs">Show</button>{{/if}}</div>
+    {{#if @root.allowViewingKey}}
+    <div id="api-key-box" class="light">API key: {{#if @root.apiKey}}<code>{{ @root.apiKey }}</code>{{else}}<button id="show-api-key-button" class="btn btn-default blue btn-xs">Show</button>{{/if}}</div>
     {{/if}}
   </div>
   <div class="module application-settings">
     <h4>Context Template</h4>
-    {{# if @root.viewMode }}
+    {{#if @root.isInViewMode}}
     <div class="application-setting">
       <pre>{{context_template}}</pre>
     </div>
@@ -108,7 +108,7 @@
   </div>
   <div class="module application-quota">
     <h4>Message Volume Quotas</h4>
-    {{#if @root.showEditQuotas }}
+    {{#if @root.showEditQuotas}}
       Soft quota will be breached when <input type="number" name="soft_quota_threshold" class="form-control border-bottom" value="{{ quota.soft_quota_threshold }}"> messages occur within <input type="number" name="soft_quota_duration" class="form-control border-bottom" value="{{secondsToMinutes quota.soft_quota_duration }}"> minutes,
       and will then notify <input type="text" name="target_name" class="form-control border-bottom quota-text typeahead" value="{{ quota.target_name }}"> via email.<br>
       Hard quota (message drop) will be breached when <input type="number" name="hard_quota_threshold" class="form-control border-bottom" value="{{ quota.hard_quota_threshold }}"> messages occur within <input type="number" name="hard_quota_duration" class="form-control border-bottom" value="{{secondsToMinutes quota.hard_quota_duration }}"> minutes,
@@ -125,13 +125,13 @@
   <div class="module application-default-modes user-settings">
     <h4>Default contact modes per priority for this app</h4>
     <p class="light">These defaults can be overridden on a per-user basis in the user settings page.</p>
-    {{#hasKeys @root.default_modes }}
+    {{#hasKeys @root.default_modes}}
     <table id="application-email-incidents-table">
       <thead>
         <tr>
           <td>Priority</td>
           <td>Mode</td>
-          {{# ifNot @root.viewMode }}
+          {{#ifNot @root.isInViewMode}}
             <td class="delete-column">Delete</td>
           {{/ifNot}}
       <thead>
@@ -140,7 +140,7 @@
         <tr>
           <td>{{@key}}</td>
           <td>{{this}}</td>
-          {{# ifNot @root.viewMode }}
+          {{#ifNot @root.isInViewMode}}
             <td><button class="btn btn-danger btn-sm delete-default-mode-button" data-priority="{{@key}}" title="Delete this custom priority">Delete</button></td>
           {{/ifNot}}
         </tr>
@@ -150,7 +150,7 @@
     {{else}}
     <p class="light">None configured.</p>
     {{/hasKeys}}
-    {{# ifNot @root.viewMode }}
+    {{#ifNot @root.isInViewMode}}
       <form id="add-default-mode-form">
         <select id="default-mode-form-priority" class="form-control border-bottom">
             <option value="">Priority</option>
@@ -171,14 +171,14 @@
   <div class="module application-email-incidents user-settings">
     <h4>Emails which create incidents</h4>
     <p class="light">When you send an email with one of these addresses in the "to" header, a new incident will be created.</p>
-    {{#hasKeys @root.emailIncidents }}
+    {{#hasKeys @root.emailIncidents}}
     <table id="application-email-incidents-table">
       <thead>
         <tr>
           <td>Email Address</td>
           <td>Plan To Fire</td>
-          {{# ifNot @root.viewMode }}
-            {{#if @root.supportEditingEmailIncidents }}
+          {{#ifNot @root.isInViewMode}}
+            {{#if @root.allowEditingEmailIncidents}}
               <td class="delete-column">Delete</td>
             {{/if}}
           {{/ifNot}}
@@ -189,8 +189,8 @@
         <tr>
           <td>{{@key}}</td>
           <td><a href="/plans/{{this}}">{{this}}</a></td>
-          {{# ifNot @root.viewMode }}
-            {{#if @root.supportEditingEmailIncidents }}
+          {{#ifNot @root.isInViewMode}}
+            {{#if @root.allowEditingEmailIncidents}}
               <td><button class="btn btn-danger btn-sm delete-email-incident-button" data-email="{{@key}}" title="Delete this email->plan combo">Delete</button></td>
             {{/if}}
           {{/ifNot}}
@@ -199,12 +199,12 @@
       </tbody>
     </table>
     {{else}}
-      {{#if @root.viewMode }}
+      {{#if @root.isInViewMode}}
         <p class="light">None configured.</p>
       {{/if}}
     {{/hasKeys}}
-    {{#ifNot @root.viewMode }}
-      {{#if @root.supportEditingEmailIncidents }}
+    {{#ifNot @root.isInViewMode}}
+      {{#if @root.allowEditingEmailIncidents}}
         <form id="add-email-incident-form">
           <input required type="email" id="add-email-incident-email" class="form-control border-bottom" placeholder="Email Address">
           <input required type="text" id="add-email-incident-plan" class="form-control border-bottom typeahead" data-typeaheadtype="plan" placeholder="Plan name">
@@ -213,8 +213,8 @@
       {{/if}}
     {{/ifNot}}
   </div>
-  {{# ifNot @root.viewMode }}
-    {{# if @root.supportDangerousActions }}
+  {{#ifNot @root.isInViewMode}}
+    {{#if @root.allowDangerousActions}}
       <div class="module application-dangerous-actions">
         <h4>Destructive Actions <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
         <div class="inner">

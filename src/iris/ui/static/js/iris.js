@@ -2028,15 +2028,27 @@ iris = {
       ).always(function(quota, incident_emails) {
         app.quota = Object.keys(quota[0]).length ? quota[0] : null;
         app.emailIncidents = incident_emails[0];
-        var owner = app.owners.indexOf(window.appData.user) !== -1;
-        app.viewMode = true;
-        app.editable = window.appData.user_admin || owner;
-        app.supportViewingKey = window.appData.user_admin || owner;
-        app.supportEditingEmailIncidents = window.appData.user_admin || owner;
-        app.showEditOwners = window.appData.user_admin || owner;
-        app.supportDangerousActions = window.appData.user_admin;
-        app.supportEditingSupportedModes = window.appData.user_admin;
+
+        // For convenience in setting the below boolean flags, localize
+        // whether the user is an owner of this app or is an admin here.
+        var isOwner = app.owners.indexOf(window.appData.user) !== -1;
+        var isAdmin = window.appData.user_admin;
+
+        // Bunch of boolean flags passed to the template which control what is
+        // seen and how the UI behaves. The entire template is scattered with if
+        // blocks based on these variables.
+        app.isInViewMode = true;
+        app.isEditable = isAdmin || isOwner;
+        app.allowViewingKey = isAdmin || isOwner;
+        app.allowEditingEmailIncidents = isAdmin || isOwner;
+        app.showEditOwners = isAdmin || isOwner;
+        app.allowDangerousActions = isAdmin;
+        app.allowEditingSupportedModes = isAdmin;
+
+        // This gets turned to true when the edit button is clicked if the user
+        // is an admin
         app.showEditQuotas = false;
+
         app.apiKey = false;
         app.priorities = window.appData.priorities.map(function(priority) {
           return priority.name;
@@ -2050,7 +2062,7 @@ iris = {
       });
     },
     editApplication: function() {
-      this.data.model.viewMode = false;
+      this.data.model.isInViewMode = false;
       this.data.model.showEditQuotas = window.appData.user_admin;
       this.render();
     },
@@ -2130,7 +2142,7 @@ iris = {
           }));
         }
       }
-      if (self.data.model.supportEditingEmailIncidents) {
+      if (self.data.model.allowEditingEmailIncidents) {
         ajaxCalls.push($.ajax({
           url: self.data.url + self.data.application + '/incident_emails',
           data: JSON.stringify(self.data.model.emailIncidents),
@@ -2138,7 +2150,7 @@ iris = {
           contentType: 'application/json'
         }));
       }
-      if (self.data.model.supportEditingSupportedModes) {
+      if (self.data.model.allowEditingSupportedModes) {
         self.data.model.supported_modes = [];
         $('input[name=supported_modes]').each(function(k, elem) {
           var $elem = $(elem);
@@ -2160,7 +2172,7 @@ iris = {
         contentType: 'application/json'
       }));
       $.when.apply(undefined, ajaxCalls).done(function(){
-        self.data.model.viewMode = true;
+        self.data.model.isInViewMode = true;
         self.data.model.showEditQuotas = false;
         self.data.model.apiKey = false;
         self.render();
