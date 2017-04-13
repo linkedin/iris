@@ -1695,18 +1695,11 @@ def test_app_stats(sample_application_name):
     data = re.json()
     for key in ('total_incidents_today', 'total_messages_sent_today',
                 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
-                'pct_successful_twilio_sms_last_month', 'pct_successful_twilio_call_last_month',
                 'total_incidents_last_month', 'total_messages_sent_last_month',
-                'pct_failed_twilio_call_last_month', 'pct_successful_email_last_month'):
+                'pct_call_fail_last_month', 'pct_call_success_last_month', 'pct_call_other_last_month',
+                'pct_sms_fail_last_month', 'pct_sms_success_last_month', 'pct_sms_other_last_month',
+                'pct_email_fail_last_month', 'pct_email_success_last_month', 'pct_email_other_last_month'):
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
-
-    re = requests.get(base_url + 'applications/%s/stats?fields=total_messages_sent_today&fields=total_incidents_today' % sample_application_name)
-    assert re.status_code == 200
-    assert re.json().viewkeys() == {'total_messages_sent_today', 'total_incidents_today'}
-
-    re = requests.get(base_url + 'applications/%s/stats?fields=fakefield' % sample_application_name)
-    assert re.status_code == 200
-    assert re.json() == {}
 
 
 def test_post_notification(sample_user, sample_application_name):
