@@ -887,7 +887,7 @@ class Plans(object):
 
         .. sourcecode:: http
 
-           GET /v0/plans?name__contains=foo&active=1
+           GET /v0/plans?name__contains=foo&active=1 HTTP/1.1
 
         **Example response**:
 
@@ -1080,6 +1080,35 @@ class Incidents(object):
         resp.body = payload
 
     def on_post(self, req, resp):
+        '''
+        Create incidents. Id for the new incident will be returned.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/incidents HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "plan": "test-plan",
+               "context": {"number": 1, "str": "hello"}
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 201 Created
+           Content-Type: application/json
+
+           1
+
+        :statuscode 201: incident created
+        :statuscode 400: invalid request
+        :statuscode 404: plan not found
+        :statuscode 401: application is not allowed to create incident for other application
+        '''
         session = db.Session()
         incident_params = ujson.loads(req.context['body'])
         if 'plan' not in incident_params:
@@ -1156,6 +1185,48 @@ class Incident(object):
     allow_read_only = True
 
     def on_get(self, req, resp, incident_id):
+        '''
+        Get incident by ID.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/incident/1 HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+               "updated": 1492057026,
+               "plan_id": 48271,
+               "created": 1492055912,
+               "application": "Alert manager",
+               "steps": [
+                    {
+                        "name": "alice",
+                        "created": 1492055953,
+                        "target_changed": 0,
+                        "mode_changed": 0,
+                        "priority": "urgent",
+                        "step": 1,
+                        "mode": "sms",
+                        "id": 25443689,
+                        "sent": 1492055957
+                    }
+               ],
+               "plan": "test-plan",
+               "context": {"number": 1, "str": "hello"},
+               "owner": "alice",
+               "active": 0,
+               "id": 1,
+               "current_step": 1
+           }
+        '''
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         try:
@@ -1210,7 +1281,7 @@ class Message(object):
 
         .. sourcecode:: http
 
-           GET /v0/messages/{message_id}
+           GET /v0/messages/{message_id} HTTP/1.1
 
         **Example response**:
 
@@ -1261,7 +1332,7 @@ class MessageAuditLog(object):
 
         .. sourcecode:: http
 
-           GET /v0/messages/{message_id}/auditlog
+           GET /v0/messages/{message_id}/auditlog HTTP/1.1
 
         **Example response**:
 
@@ -1331,9 +1402,8 @@ class Notifications(object):
     allow_read_only = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, config):
-        master_sender = config['sender'].get('master_sender', config['sender'])
-        self.sender_addr = (master_sender['host'], master_sender['port'])
+    def __init__(self, sender_addr):
+        self.sender_addr = sender_addr
         logger.info('Sender used for notifications: %s:%s', *self.sender_addr)
 
     def on_post(self, req, resp):
@@ -1633,7 +1703,7 @@ class TargetRoles(object):
 
         .. sourcecode:: http
 
-           GET /v0/target_roles
+           GET /v0/target_roles HTTP/1.1
 
         **Example response**:
 
@@ -2089,7 +2159,7 @@ class ApplicationEmailIncidents(object):
 
         .. sourcecode:: http
 
-           GET /v0/applications/{app_name}/incident_emails
+           GET /v0/applications/{app_name}/incident_emails HTTP/1.1
 
         **Example response**:
 
@@ -2311,7 +2381,7 @@ class Modes(object):
 
         .. sourcecode:: http
 
-           GET /v0/modes
+           GET /v0/modes HTTP/1.1
 
         **Example response**:
 
@@ -2320,7 +2390,7 @@ class Modes(object):
            HTTP/1.1 200 OK
            Content-Type: application/json
 
-           ['sms', 'email', 'slack', 'call']
+           ["sms", "email", "slack", "call"]
         '''
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
@@ -2846,7 +2916,7 @@ class ReprioritizationMode(object):
 
         .. sourcecode:: http
 
-           DELETE /v0/users/reprioritization/{username}/{src_mode_name}
+           DELETE /v0/users/reprioritization/{username}/{src_mode_name} HTTP/1.1
 
         **Example response**:
 
@@ -2886,7 +2956,7 @@ class Healthcheck(object):
 
         .. sourcecode:: http
 
-           GET /v0/healthcheck
+           GET /v0/healthcheck HTTP/1.1
 
         **Example response**:
 
@@ -3113,10 +3183,6 @@ class ApplicationStats(object):
         resp.body = ujson.dumps(stats)
 
 
-def get_api_app():
-    return get_api(load_config())
-
-
 def update_cache_worker():
     while True:
         logger.info('Reinitializing cache')
@@ -3127,6 +3193,66 @@ def update_cache_worker():
 def json_error_serializer(req, resp, exception):
     resp.body = exception.to_json()
     resp.content_type = 'application/json'
+
+
+def construct_falcon_api(debug, healthcheck_path, iris_sender_app, sender_addr):
+    api = API(middleware=[
+        ReqBodyMiddleware(),
+        AuthMiddleware(debug=debug),
+        ACLMiddleware(debug=debug),
+        HeaderMiddleware()
+    ])
+
+    api.set_error_serializer(json_error_serializer)
+
+    api.add_route('/v0/plans/{plan_id}', Plan())
+    api.add_route('/v0/plans', Plans())
+
+    api.add_route('/v0/incidents/{incident_id}', Incident())
+    api.add_route('/v0/incidents', Incidents())
+
+    api.add_route('/v0/messages/{message_id}', Message())
+    api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
+    api.add_route('/v0/messages', Messages())
+
+    api.add_route('/v0/notifications', Notifications(sender_addr))
+
+    api.add_route('/v0/targets/{target_type}', Target())
+    api.add_route('/v0/targets', Targets())
+
+    api.add_route('/v0/target_roles', TargetRoles())
+
+    api.add_route('/v0/templates/{template_id}', Template())
+    api.add_route('/v0/templates', Templates())
+
+    api.add_route('/v0/users/{username}', User())
+    api.add_route('/v0/users/modes/{username}', UserModes())
+    api.add_route('/v0/users/reprioritization/{username}', Reprioritization())
+    api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
+
+    api.add_route('/v0/modes', Modes())
+
+    api.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
+    api.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
+    api.add_route('/v0/applications/{app_name}/key', ApplicationKey())
+    api.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
+    api.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
+    api.add_route('/v0/applications/{app_name}', Application())
+    api.add_route('/v0/applications', Applications())
+
+    api.add_route('/v0/priorities', Priorities())
+
+    api.add_route('/v0/response/gmail', ResponseGmail(iris_sender_app))
+    api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
+    api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
+    api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
+    api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
+    api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
+
+    api.add_route('/v0/stats', Stats())
+
+    api.add_route('/healthcheck', Healthcheck(healthcheck_path))
+    return api
 
 
 def get_api(config):
@@ -3142,65 +3268,16 @@ def get_api(config):
     debug = False
     if config['server'].get('disable_auth'):
         debug = True
-    req = ReqBodyMiddleware()
-    header = HeaderMiddleware()
-    auth = AuthMiddleware(debug=debug)
-    acl = ACLMiddleware(debug=debug)
-    middleware = [req, auth, acl, header]
-
-    app = API(middleware=middleware)
-
-    app.set_error_serializer(json_error_serializer)
-
-    app.add_route('/v0/plans/{plan_id}', Plan())
-    app.add_route('/v0/plans', Plans())
-
-    app.add_route('/v0/incidents/{incident_id}', Incident())
-    app.add_route('/v0/incidents', Incidents())
-
-    app.add_route('/v0/messages/{message_id}', Message())
-    app.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
-    app.add_route('/v0/messages', Messages())
-
-    app.add_route('/v0/notifications', Notifications(config))
-
-    app.add_route('/v0/targets/{target_type}', Target())
-    app.add_route('/v0/targets', Targets())
-
-    app.add_route('/v0/target_roles', TargetRoles())
-
-    app.add_route('/v0/templates/{template_id}', Template())
-    app.add_route('/v0/templates', Templates())
-
-    app.add_route('/v0/users/{username}', User())
-    app.add_route('/v0/users/modes/{username}', UserModes())
-    app.add_route('/v0/users/reprioritization/{username}', Reprioritization())
-    app.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
-
-    app.add_route('/v0/modes', Modes())
-
-    app.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
-    app.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
-    app.add_route('/v0/applications/{app_name}/key', ApplicationKey())
-    app.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
-    app.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
-    app.add_route('/v0/applications/{app_name}', Application())
-    app.add_route('/v0/applications', Applications())
-
-    app.add_route('/v0/priorities', Priorities())
-
-    app.add_route('/v0/response/gmail', ResponseGmail(iris_sender_app))
-    app.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
-    app.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
-    app.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
-    app.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
-    app.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
-
-    app.add_route('/v0/stats', Stats())
-
-    app.add_route('/healthcheck', Healthcheck(healthcheck_path))
+    master_sender = config['sender'].get('master_sender', config['sender'])
+    master_sender_addr = (master_sender['host'], master_sender['port'])
+    # all notifications go through master sender for now
+    app = construct_falcon_api(
+        debug, healthcheck_path, iris_sender_app, master_sender_addr)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)
-
     return app
+
+
+def get_api_app():
+    return get_api(load_config())

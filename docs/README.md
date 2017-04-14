@@ -5,7 +5,7 @@ Dependencies
 ------------
 
 ```
-pip install Sphinx
+pip install Sphinx sphinxcontrib.httpdomain
 ```
 
 Build
