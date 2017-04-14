@@ -8,3 +8,5 @@ pytest-cov
 ordereddict
 flake8
 tox
+Sphinx
+sphinxcontrib-httpdomain
