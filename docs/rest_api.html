@@ -45,6 +45,297 @@
             
   <div class="section" id="rest-api">
 <h1>REST API<a class="headerlink" href="#rest-api" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="v0-plans">
+<h2>/v0/plans<a class="headerlink" href="#v0-plans" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--v0-plans">
+<code class="descname">GET </code><code class="descname">/v0/plans</code><a class="headerlink" href="#get--v0-plans" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plan search endpoint.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/plans?name__contains=foo&amp;active=1</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;This is plan foo&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;threshold_count&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="nt">&quot;creator&quot;</span><span class="p">:</span> <span class="s2">&quot;user1&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;created&quot;</span><span class="p">:</span> <span class="mi">1478154275</span><span class="p">,</span>
+        <span class="nt">&quot;aggregation_reset&quot;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+        <span class="nt">&quot;aggregation_window&quot;</span><span class="p">:</span> <span class="mi">300</span><span class="p">,</span>
+        <span class="nt">&quot;threshold_window&quot;</span><span class="p">:</span> <span class="mi">900</span><span class="p">,</span>
+        <span class="nt">&quot;tracking_type&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+        <span class="nt">&quot;tracking_template&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+        <span class="nt">&quot;tracking_key&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+        <span class="nt">&quot;active&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">123456</span><span class="p">,</span>
+        <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;foo-sla0&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-incidents">
+<h2>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h2>
+<dl class="post">
+<dt id="post--v0-incidents">
+<code class="descname">POST </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#post--v0-incidents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create incidents. Id for the new incident will be returned.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/incidents</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;plan&quot;</span><span class="p">:</span> <span class="s2">&quot;test-plan&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;context&quot;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&quot;number&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="nt">&quot;str&quot;</span><span class="p">:</span> <span class="s2">&quot;hello&quot;</span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">201</span> <span class="ne">Created</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="mi">1</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Status Codes:</th><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.2">201 Created</a> &#8211; incident created</li>
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.1">400 Bad Request</a> &#8211; invalid request</li>
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">404 Not Found</a> &#8211; plan not found</li>
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.2">401 Unauthorized</a> &#8211; application is not allowed to create incident for other application</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-incidents-incident_id">
+<code class="descname">GET </code><code class="descname">/v0/incidents/{incident_id}</code><a class="headerlink" href="#get--v0-incidents-incident_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get incident by ID.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/incident/1</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;updated&quot;</span><span class="p">:</span> <span class="mi">1492057026</span><span class="p">,</span>
+    <span class="nt">&quot;plan_id&quot;</span><span class="p">:</span> <span class="mi">48271</span><span class="p">,</span>
+    <span class="nt">&quot;created&quot;</span><span class="p">:</span> <span class="mi">1492055912</span><span class="p">,</span>
+    <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;Alert manager&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;steps&quot;</span><span class="p">:</span> <span class="p">[</span>
+         <span class="p">{</span>
+             <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;created&quot;</span><span class="p">:</span> <span class="mi">1492055953</span><span class="p">,</span>
+             <span class="nt">&quot;target_changed&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+             <span class="nt">&quot;mode_changed&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+             <span class="nt">&quot;priority&quot;</span><span class="p">:</span> <span class="s2">&quot;urgent&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;step&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+             <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;sms&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">25443689</span><span class="p">,</span>
+             <span class="nt">&quot;sent&quot;</span><span class="p">:</span> <span class="mi">1492055957</span>
+         <span class="p">}</span>
+    <span class="p">],</span>
+    <span class="nt">&quot;plan&quot;</span><span class="p">:</span> <span class="s2">&quot;test-plan&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;context&quot;</span><span class="p">:</span> <span class="p">{</span><span class="nt">&quot;number&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="nt">&quot;str&quot;</span><span class="p">:</span> <span class="s2">&quot;hello&quot;</span><span class="p">},</span>
+    <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;alice&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;active&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="nt">&quot;current_step&quot;</span><span class="p">:</span> <span class="mi">1</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-messages">
+<h2>/v0/messages<a class="headerlink" href="#v0-messages" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--v0-messages-message_id">
+<code class="descname">GET </code><code class="descname">/v0/messages/{message_id}</code><a class="headerlink" href="#get--v0-messages-message_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get information for an iris message by id</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/messages/{message_id}</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+   <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;message body&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;incident_id&quot;</span><span class="p">:</span> <span class="mi">2590447</span><span class="p">,</span>
+   <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;username&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;created&quot;</span><span class="p">:</span> <span class="mi">1490825218</span><span class="p">,</span>
+   <span class="nt">&quot;destination&quot;</span><span class="p">:</span> <span class="s2">&quot;username@domain.com&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;batch&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+   <span class="nt">&quot;twilio_delivery_status&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+   <span class="nt">&quot;priority&quot;</span><span class="p">:</span> <span class="s2">&quot;low&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;app&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span>
+   <span class="nt">&quot;active&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+   <span class="nt">&quot;generic_message_sent_status&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+   <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">24807074</span><span class="p">,</span>
+   <span class="nt">&quot;sent&quot;</span><span class="p">:</span> <span class="mi">1490825221</span><span class="p">,</span>
+   <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;message subject&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-messages-message_id-auditlog">
+<code class="descname">GET </code><code class="descname">/v0/messages/{message_id}/auditlog</code><a class="headerlink" href="#get--v0-messages-message_id-auditlog" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a message&#8217;s log of changes</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/messages/{message_id}/auditlog</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+  <span class="p">{</span>
+    <span class="nt">&quot;old&quot;</span><span class="p">:</span> <span class="s2">&quot;sms&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Changing mode due to original mode failure&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;date&quot;</span><span class="p">:</span> <span class="mi">1489507284</span><span class="p">,</span>
+    <span class="nt">&quot;new&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;change_type&quot;</span><span class="p">:</span> <span class="s2">&quot;mode-change&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">438</span>
+  <span class="p">},</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-target-roles">
+<h2>/v0/target_roles<a class="headerlink" href="#v0-target-roles" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--v0-target_roles">
+<code class="descname">GET </code><code class="descname">/v0/target_roles</code><a class="headerlink" href="#get--v0-target_roles" title="Permalink to this definition">¶</a></dt>
+<dd><p>Target role fetch endpoint.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/target_roles</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;oncall&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;team&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-users">
+<h2>/v0/users<a class="headerlink" href="#v0-users" title="Permalink to this headline">¶</a></h2>
+<dl class="delete">
+<dt id="delete--v0-users-reprioritization-username-src_mode_name">
+<code class="descname">DELETE </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#delete--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete a reprioritization mode for a user&#8217;s mode setting</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">DELETE</span> <span class="nn">/v0/users/reprioritization/{username}/{src_mode_name}</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-modes">
+<h2>/v0/modes<a class="headerlink" href="#v0-modes" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--v0-modes">
+<code class="descname">GET </code><code class="descname">/v0/modes</code><a class="headerlink" href="#get--v0-modes" title="Permalink to this definition">¶</a></dt>
+<dd><p>List all iris modes</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/modes</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span><span class="s2">&quot;sms&quot;</span><span class="p">,</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span> <span class="s2">&quot;call&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-applications">
+<h2>/v0/applications<a class="headerlink" href="#v0-applications" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--v0-applications-app_name-incident_emails">
+<code class="descname">GET </code><code class="descname">/v0/applications/{app_name}/incident_emails</code><a class="headerlink" href="#get--v0-applications-app_name-incident_emails" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get email addresses which will create incidents on behalf of this application</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/applications/{app_name}/incident_emails</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+  <span class="nt">&quot;irisfoobar@fakeemail.com&quot;</span><span class="p">:</span> <span class="s2">&quot;sandbox_high_plan&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;racontreras@linkedin.com&quot;</span><span class="p">:</span> <span class="s2">&quot;sandbox_high_plan&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
+<div class="section" id="healthcheck">
+<h2>/healthcheck<a class="headerlink" href="#healthcheck" title="Permalink to this headline">¶</a></h2>
+<dl class="get">
+<dt id="get--healthcheck">
+<code class="descname">GET </code><code class="descname">/healthcheck</code><a class="headerlink" href="#get--healthcheck" title="Permalink to this definition">¶</a></dt>
+<dd><p>Healthcheck endpoint. Returns contents of healthcheck file.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/healthcheck</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">text/plain</span>
+
+GOOD
+</pre></div>
+</div>
+</dd></dl>
+
+</div>
 </div>
 
 
@@ -52,7 +343,22 @@
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
-        <div class="sphinxsidebarwrapper"><div class="relations">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">REST API</a><ul>
+<li><a class="reference internal" href="#v0-plans">/v0/plans</a></li>
+<li><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
+<li><a class="reference internal" href="#v0-messages">/v0/messages</a></li>
+<li><a class="reference internal" href="#v0-target-roles">/v0/target_roles</a></li>
+<li><a class="reference internal" href="#v0-users">/v0/users</a></li>
+<li><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
+<li><a class="reference internal" href="#v0-applications">/v0/applications</a></li>
+<li><a class="reference internal" href="#healthcheck">/healthcheck</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
