@@ -1,0 +1,227 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Nagios Integration &#8212; Iris 0.0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API" href="api.html" />
+    <link rel="prev" title="Iris relay" href="relay.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="nagios-integration">
+<h1>Nagios Integration<a class="headerlink" href="#nagios-integration" title="Permalink to this headline">¶</a></h1>
+<p>Iris can easily be integrated into an existing Nagios implementation.</p>
+<div class="section" id="iris-configuration">
+<h2>Iris Configuration<a class="headerlink" href="#iris-configuration" title="Permalink to this headline">¶</a></h2>
+<p>To support communication from Nagios, an Iris application plugin needs to
+be created. The example plugin defines a basic application named Nagios
+to handle requests. This plugin can be extended further to handle sending
+acknowledgements back to Nagios.</p>
+<div class="section" id="example-nagios-plugin">
+<h3>Example Nagios Plugin<a class="headerlink" href="#example-nagios-plugin" title="Permalink to this headline">¶</a></h3>
+<p>Code:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">from</span> <span class="nn">iris.plugins.core</span> <span class="k">import</span> <span class="n">register_plugin</span><span class="p">,</span> <span class="n">IrisPlugin</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="nd">@register_plugin</span><span class="p">()</span>
+<span class="k">class</span> <span class="nc">Nagios</span><span class="p">(</span><span class="n">IrisPlugin</span><span class="p">):</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Nagios&#39;</span>
+    <span class="n">phone_response_menu</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;2&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;title&#39;</span><span class="p">:</span> <span class="s1">&#39;Press 2 to claim.&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;cmd&#39;</span><span class="p">:</span> <span class="s1">&#39;claim&#39;</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">process_command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_id</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">cmd</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s1">&#39;claim&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_iris_claim</span><span class="p">(</span><span class="n">msg_id</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">cmd</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s1">&#39;batch_claim&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_iris_batch_claim</span><span class="p">(</span><span class="n">msg_id</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">cmd</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s1">&#39;claim_all&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_claim_all</span><span class="p">(</span><span class="n">msg_id</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;Unknown command.&#39;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="application-variables">
+<h3>Application Variables<a class="headerlink" href="#application-variables" title="Permalink to this headline">¶</a></h3>
+<p>Nagios has a concept of &#8220;host&#8221; and &#8220;service&#8221; alerts, defined by the type
+of check that is being performed. While Iris can receive any type of
+notification, carrying the context of &#8220;host&#8221; and &#8220;service&#8221; from Nagios
+into the Nagios application can be useful when building robust templates.</p>
+<p>Suggested Variables:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">hostname</span>
+<span class="n">hostnotes</span>
+<span class="n">hostnotesurl</span>
+<span class="n">hostoutput</span>
+<span class="n">hoststate</span>
+<span class="n">notificationtype</span>
+<span class="n">servicedescription</span>
+<span class="n">servicename</span>
+<span class="n">servicenotes</span>
+<span class="n">servicenotesurl</span>
+<span class="n">serviceoutput</span>
+<span class="n">servicestate</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="nagios-configuration">
+<h2>Nagios Configuration<a class="headerlink" href="#nagios-configuration" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="sending-messages-from-nagios">
+<h3>Sending Messages from Nagios<a class="headerlink" href="#sending-messages-from-nagios" title="Permalink to this headline">¶</a></h3>
+<p>Nagios requires a custom script for sending notifications to Iris. Nagios
+supports custom notification logic through the &#8220;commands&#8221; configuration,
+where by default it sends notifications via e-mails. Creating additional
+command definitions allows for the separate notification for host and
+service checks, where the same or different plan may be applied to both checks.</p>
+<p>Command definitions should be setup for both host and service checks, only
+to provide context between host-level checks and service-level checks.</p>
+</div>
+<div class="section" id="nagios-contact-definition">
+<h3>Nagios Contact Definition<a class="headerlink" href="#nagios-contact-definition" title="Permalink to this headline">¶</a></h3>
+<p>Iris can be used for some or all notifications by Nagios. Regardless of how
+messages are sent, a contact definition will need to be setup in the contacts.cfg
+configuration in Nagios.</p>
+<p>Example Contact Definition:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="c1">#</span>
+<span class="c1"># Iris contact definition</span>
+<span class="c1">#</span>
+
+<span class="n">define</span> <span class="n">contact</span><span class="p">{</span>
+            <span class="n">contact_name</span>                    <span class="n">iris</span>
+            <span class="n">alias</span>                           <span class="n">Contact</span> <span class="k">for</span> <span class="n">Iris</span>
+            <span class="n">service_notification_period</span>     <span class="mi">24</span><span class="n">x7</span>
+            <span class="n">host_notification_period</span>        <span class="mi">24</span><span class="n">x7</span>
+            <span class="n">service_notification_options</span>    <span class="n">w</span><span class="p">,</span><span class="n">u</span><span class="p">,</span><span class="n">c</span>
+            <span class="n">host_notification_options</span>       <span class="n">d</span><span class="p">,</span><span class="n">u</span><span class="p">,</span><span class="n">f</span>
+            <span class="n">service_notification_commands</span>   <span class="n">notify</span><span class="o">-</span><span class="n">service</span><span class="o">-</span><span class="n">by</span><span class="o">-</span><span class="n">iris</span>
+            <span class="n">host_notification_commands</span>      <span class="n">notify</span><span class="o">-</span><span class="n">host</span><span class="o">-</span><span class="n">by</span><span class="o">-</span><span class="n">iris</span>
+        <span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="nagios-service-defininition">
+<h3>Nagios Service Defininition<a class="headerlink" href="#nagios-service-defininition" title="Permalink to this headline">¶</a></h3>
+<p>If the example Nagios application plugin is being used, it will be
+required to remove notification intervals (set to 0) so multiple
+Iris events are not generated.</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Nagios Integration</a><ul>
+<li><a class="reference internal" href="#iris-configuration">Iris Configuration</a><ul>
+<li><a class="reference internal" href="#example-nagios-plugin">Example Nagios Plugin</a></li>
+<li><a class="reference internal" href="#application-variables">Application Variables</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#nagios-configuration">Nagios Configuration</a><ul>
+<li><a class="reference internal" href="#sending-messages-from-nagios">Sending Messages from Nagios</a></li>
+<li><a class="reference internal" href="#nagios-contact-definition">Nagios Contact Definition</a></li>
+<li><a class="reference internal" href="#nagios-service-defininition">Nagios Service Defininition</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="admin_manual.html">Iris admin manual</a><ul>
+      <li>Previous: <a href="relay.html" title="previous chapter">Iris relay</a></li>
+      <li>Next: <a href="api.html" title="next chapter">API</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/nagios.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, The Iris team.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.5.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/nagios.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
