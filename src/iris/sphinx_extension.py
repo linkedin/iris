@@ -41,6 +41,9 @@ def get_routes(app):
 
 
 class AutofalconDirective(Directive):
+    has_content = True
+    required_arguments = 1
+
     def make_rst(self, section_title_set):
         # print('importing falcon app %s...' % self.arguments[0])
         app = autohttp_import_object(self.arguments[0])
