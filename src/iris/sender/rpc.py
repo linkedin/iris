@@ -113,8 +113,8 @@ def handle_api_notification_request(socket, address, req):
     if notification.get('template') and notification.get('context'):
         notification['context']['iris'] = notification['context'].get('iris', {})
 
-    logger.info('-> %s OK, to %s:%s (%s)',
-                address, role, target, notification.get('priority', notification.get('mode', '?')))
+    logger.info('-> %s OK, to %s:%s (%s:%s)',
+                address, role, target, notification.get('application', '?'), notification.get('priority', notification.get('mode', '?')))
 
     for _target in expanded_targets:
         temp_notification = notification.copy()
@@ -163,6 +163,10 @@ def handle_api_request(socket, address):
     timeout = Timeout.start_new(rpc_timeout)
     try:
         req = msgpack_unpack_msg_from_socket(socket)
+        if not req:
+            logger.warning('Couldn\'t get msgpack data from %s', address)
+            socket.close()
+            return
         logger.info('%s %s', address, req['endpoint'])
         handler = api_request_handlers.get(req['endpoint'])
         if handler is not None:

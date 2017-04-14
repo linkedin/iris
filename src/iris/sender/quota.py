@@ -168,11 +168,11 @@ class ApplicationQuota(object):
 
     def notify_incident(self, application, limit, duration, plan_name, wait_time):
         if not self.iris_application:
-            logger.warning('Application %s breached hard quota. Cannot notify owners as application is not set')
+            logger.warning('Application %s breached hard quota. Cannot notify owners as application is not set', application)
             return
 
         if not plan_name:
-            logger.error('Application %s breached hard quota. Cannot create iris incident as plan is not set (may have been deleted).')
+            logger.error('Application %s breached hard quota. Cannot create iris incident as plan is not set (may have been deleted).', application)
             return
 
         logger.warning('Application %s breached hard quota. Will create incident using plan %s', application, plan_name)
