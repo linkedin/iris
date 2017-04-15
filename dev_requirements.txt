@@ -10,3 +10,4 @@ flake8
 tox
 Sphinx
 sphinxcontrib-httpdomain
+sphinx_rtd_theme

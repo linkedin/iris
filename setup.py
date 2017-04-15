@@ -2,10 +2,14 @@
 # See LICENSE in the project root for license information.
 
 import setuptools
+import re
+
+with open('src/iris/__init__.py', 'r') as fd:
+    version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', fd.read(), re.MULTILINE).group(1)
 
 setuptools.setup(
     name='iris',
-    version='0.14.0',
+    version=version,
     package_dir={'': 'src'},
     packages=setuptools.find_packages('src'),
     include_package_data=True,
