@@ -168,6 +168,9 @@ UPDATE_MESSAGE_BODY_SQL = '''UPDATE `message`
 
 PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'''
 
+# When a rendered message body is longer than this number of characters, drop it.
+MAX_MESSAGE_BODY_LENGTH = 10000
+
 # logging
 logger = logging.getLogger()
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -785,10 +788,10 @@ def mark_message_as_sent(message):
     if len(message['subject']) > 255:
         message['subject'] = message['subject'][:255]
 
-    if len(message['body']) > 10000:
+    if len(message['body']) > MAX_MESSAGE_BODY_LENGTH:
         logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
                     message.get('message_id', '?'), len(message['body']))
-        message['body'] = message['body'][:10000]
+        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
     if 'aggregated_ids' in message:
         update_ids = tuple(message['aggregated_ids'])
@@ -883,11 +886,12 @@ def fetch_and_send_message():
     if 'message_id' not in message:
         message['message_id'] = None
 
+    drop_mode_id = api_cache.modes.get('drop')
+
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
     if not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
-            drop_mode_id = api_cache.modes.get('drop')
             spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to hard quota violation.')
 
@@ -918,6 +922,27 @@ def fetch_and_send_message():
         return
 
     render(message)
+
+    # Drop this message, and mark it as dropped, rather than sending it, if its body is too long and we were normally
+    # going to send it anyway.
+    body_length = len(message['body'])
+    if body_length > MAX_MESSAGE_BODY_LENGTH:
+        logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                    message['message_id'], body_length)
+        spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+              'Dropping due to excessive body length (%s > %s chars)' % (body_length, MAX_MESSAGE_BODY_LENGTH))
+
+        # Truncate this here to avoid a duplicate log message in mark_message_as_sent(), as we still need to call
+        # that to update the body/subject
+        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
+
+        if drop_mode_id:
+            message['mode'] = 'drop'
+            message['mode_id'] = drop_mode_id
+
+        mark_message_as_sent(message)
+        return
+
     success = None
     try:
         success = distributed_send_message(message)
