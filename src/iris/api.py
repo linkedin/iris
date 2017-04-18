@@ -18,6 +18,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
 from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, API
+from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 from importlib import import_module
 import yaml
@@ -3180,12 +3181,14 @@ def json_error_serializer(req, resp, exception):
     resp.content_type = 'application/json'
 
 
-def construct_falcon_api(debug, healthcheck_path, iris_sender_app, sender_addr):
+def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, sender_addr):
+    cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
         AuthMiddleware(debug=debug),
         ACLMiddleware(debug=debug),
-        HeaderMiddleware()
+        HeaderMiddleware(),
+        cors.middleware
     ])
 
     api.set_error_serializer(json_error_serializer)
@@ -3248,6 +3251,7 @@ def get_api(config):
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
     healthcheck_path = config['healthcheck_path']
+    allowed_origins = config.get('allowed_origins', [])
     iris_sender_app = config['sender'].get('sender_app')
 
     debug = False
@@ -3257,7 +3261,7 @@ def get_api(config):
     master_sender_addr = (master_sender['host'], master_sender['port'])
     # all notifications go through master sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, iris_sender_app, master_sender_addr)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, master_sender_addr)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)

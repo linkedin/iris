@@ -24,6 +24,7 @@ setuptools.setup(
         'PyYAML==3.11',
         'gevent==1.1.2',
         'falcon==1.1.0',
+        'falcon-cors==1.1.2',
         'ujson==1.35',
         'requests==2.9.1',
         'PyMySQL==0.7.2',
