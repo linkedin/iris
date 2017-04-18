@@ -148,8 +148,6 @@ SENT_MESSAGE_BATCH_SQL = '''UPDATE `message`
 SET `destination`=%%s,
     `mode_id`=%%s,
     `template_id`=%%s,
-    `subject`=%%s,
-    `body`=%%s,
     `batch`=%%s,
     `active`=FALSE,
     `sent`=NOW()
@@ -159,11 +157,14 @@ SENT_MESSAGE_SQL = '''UPDATE `message`
 SET `destination`=%s,
     `mode_id`=%s,
     `template_id`=%s,
-    `subject`=%s,
-    `body`=%s,
     `active`=FALSE,
     `sent`=NOW()
 WHERE `id`=%s'''
+
+UPDATE_MESSAGE_BODY_SQL = '''UPDATE `message`
+                             SET `body`=%s,
+                                 `subject`=%s
+                             WHERE `id` IN %s'''
 
 PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'''
 
@@ -755,37 +756,53 @@ def render(message):
 
 def mark_message_as_sent(message):
     connection = db.engine.raw_connection()
+
     params = [
         message['destination'],
         message['mode_id'],
         message.get('template_id'),
-        message['subject'],
-        message['body'],
     ]
+
     if 'aggregated_ids' in message:
         sql = SENT_MESSAGE_BATCH_SQL % connection.escape(message['aggregated_ids'])
         params.append(message['batch_id'])
     else:
         sql = SENT_MESSAGE_SQL
         params.append(message['message_id'])
+
     cursor = connection.cursor()
     if not message['subject']:
         message['subject'] = ''
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
-    if len(message['subject']) > 255:
-        message['subject'] = message['subject'][:255]
-    if len(message['body']) > 65000:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
-                    message.get('message_id', '?'), len(message['body']))
-        message['body'] = message['body'][:65000]
+
     try:
         cursor.execute(sql, params)
         connection.commit()
     except DataError:
-        logger.exception('Failed updating message status (message ID %s)', message.get('message_id', '?'))
-    finally:
-        cursor.close()
-        connection.close()
+        logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+
+    # Update subject and body separately, as they may fail and we don't necessarily care if they do
+    if len(message['subject']) > 255:
+        message['subject'] = message['subject'][:255]
+
+    if len(message['body']) > 10000:
+        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
+                    message.get('message_id', '?'), len(message['body']))
+        message['body'] = message['body'][:10000]
+
+    if 'aggregated_ids' in message:
+        update_ids = tuple(message['aggregated_ids'])
+    else:
+        update_ids = tuple([message['message_id']])
+
+    try:
+        cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
+        connection.commit()
+    except DataError:
+        logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+
+    cursor.close()
+    connection.close()
 
 
 def update_message_sent_status(message, status):
