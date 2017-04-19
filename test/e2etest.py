@@ -1721,6 +1721,7 @@ def test_post_notification(sample_user, sample_application_name):
         'role': 'user',
         'target': sample_user,
         'subject': 'test',
+        'body': 'foo'
     })
     assert re.status_code == 400
     assert 'Both priority and mode are missing' in re.text
@@ -1729,7 +1730,8 @@ def test_post_notification(sample_user, sample_application_name):
         'role': 'user',
         'target': sample_user,
         'subject': 'test',
-        'priority': 'fakepriority'
+        'priority': 'fakepriority',
+        'body': 'foo'
     })
     assert re.status_code == 400
     assert 'Invalid priority' in re.text
@@ -1738,7 +1740,8 @@ def test_post_notification(sample_user, sample_application_name):
         'role': 'user',
         'target': sample_user,
         'subject': 'test',
-        'mode': 'fakemode'
+        'mode': 'fakemode',
+        'body': 'foo'
     })
     assert re.status_code == 400
     assert 'Invalid mode' in re.text
@@ -1747,10 +1750,40 @@ def test_post_notification(sample_user, sample_application_name):
         'role': 'user',
         'target': sample_user,
         'subject': 'test',
-        'priority': 'low'
+        'priority': 'low',
+        'body': 'foo'
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Both body and template are missing'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'fakerole123',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID role:target'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': 'fakeuser1324234',
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID role:target'
 
 
 def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):

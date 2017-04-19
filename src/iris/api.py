@@ -1429,6 +1429,11 @@ class Notifications(object):
             raise HTTPBadRequest(
                 'Both priority and mode are missing, at least one of it is required', '')
 
+        # Avoid problems down the line if we have no way of creating the message
+        # body, which happens if both body and template are not specified.
+        if not message.get('body') and not message.get('template'):
+            raise HTTPBadRequest('Both body and template are missing', '')
+
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))
@@ -1438,6 +1443,7 @@ class Notifications(object):
             resp.status = HTTP_200
             resp.body = '[]'
         else:
+            logger.warning('OOB message (%s) rejected by sender because %s', message, sender_resp)
             raise HTTPBadRequest('Request rejected by sender', sender_resp)
 
 
