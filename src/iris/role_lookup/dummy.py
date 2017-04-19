@@ -10,7 +10,7 @@ class dummy(object):
         pass
 
     def get(self, role, target):
-        if role not in ('team', 'manager') and not role.startswith('oncall'):
-            logger.warning('Deliberately returning 0 results for %s:%s as %s is a nonsensical role', role, target, role)
+        if role == '_invalid_role' or target == '_invalid_user':
+            logger.warning('Deliberately returning 0 results for %s:%s', role, target)
             return []
         return ['foo']
