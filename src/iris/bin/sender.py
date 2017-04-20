@@ -188,7 +188,7 @@ logger.addHandler(ch)
 # rate limiting data structure message key -> minute -> count
 # used to calcuate if a new message exceeds the rate limit
 # and needs to be queued
-windows = {}
+plan_aggregate_windows = {}
 
 # all messages waiting to be queue across all keys
 messages = {}
@@ -535,7 +535,7 @@ def fetch_and_prepare_message():
         messages[message_id] = m
     else:
         # does this message trigger aggregation?
-        window = windows.setdefault(key, defaultdict(int))
+        window = plan_aggregate_windows.setdefault(key, defaultdict(int))
 
         for bucket in window.keys():
             if now - bucket > plan['threshold_window']:
