@@ -5,6 +5,7 @@
 
 # -*- coding:utf-8 -*-
 
+import time
 from iris.bin.sender import init_sender
 import msgpack
 
@@ -89,6 +90,14 @@ fake_plan = {
 }
 
 
+def init_queue_with_item(queue, item=None):
+    # drain out queue
+    while queue.qsize() > 0:
+        queue.get()
+    if item:
+        queue.put(item)
+
+
 def test_fetch_and_prepare_message(mocker):
     mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
     mock_iris_client.get.return_value.json.return_value = fake_plan
@@ -96,12 +105,8 @@ def test_fetch_and_prepare_message(mocker):
         fetch_and_prepare_message, message_queue, send_queue
     )
 
-    # dry out message/send queue
-    while message_queue.qsize() > 0:
-        message_queue.get()
-    while send_queue.qsize() > 0:
-        send_queue.get()
-    message_queue.put(fake_message)
+    init_queue_with_item(message_queue, fake_message)
+    init_queue_with_item(send_queue)
 
     fetch_and_prepare_message()
 
@@ -255,7 +260,11 @@ def test_quotas(mocker):
     from iris.sender.quota import ApplicationQuota
     from iris.metrics import stats
     from gevent import sleep
-    mocker.patch('iris.sender.quota.ApplicationQuota.get_new_rules', return_value=[(u'testapp', 5, 2, 120, 120, u'testuser', u'user', u'iris-plan', 10)])
+    mocker.patch('iris.sender.quota.ApplicationQuota.get_new_rules',
+                 return_value=[(
+                     u'testapp', 5, 2, 120, 120, u'testuser',
+                     u'user', u'iris-plan', 10
+                 )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
     quotas = ApplicationQuota(None, None, None)
@@ -275,3 +284,45 @@ def test_quotas(mocker):
 
     for _ in xrange(10):
         assert quotas.allow_send({'application': 'app_without_quota'})
+
+
+def test_aggregate_audit_msg(mocker):
+    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
+    mock_iris_client.get.return_value.json.return_value = fake_plan
+    from iris.bin.sender import (
+        fetch_and_prepare_message, message_queue, send_queue,
+        plan_aggregate_windows
+    )
+
+    init_queue_with_item(message_queue, fake_message)
+    init_queue_with_item(send_queue)
+
+    now = time.time()
+    msg_aggregate_key = (
+        fake_message['plan_id'],
+        fake_message['application'],
+        fake_message['priority'],
+        fake_message['target'])
+    from collections import defaultdict
+    plan_aggregate_windows[msg_aggregate_key] = defaultdict(int)
+    plan_aggregate_windows[msg_aggregate_key][now] = 10
+    plan_aggregate_windows[msg_aggregate_key][now - 60] = 10
+
+    mocker.patch('iris.bin.sender.cache').plans = {fake_plan['id']: fake_plan}
+
+    mocker.patch('iris.bin.sender.spawn')
+    from iris.bin.sender import spawn as mock_spawn
+
+    # run code to test
+    fetch_and_prepare_message()
+
+    # examine results
+    assert send_queue.qsize() == 0
+    from iris.sender import auditlog
+    mock_spawn.assert_called_with(
+        auditlog.message_change,
+        fake_message['message_id'],
+        auditlog.SENT_CHANGE,
+        '',
+        '',
+        "Aggregated with key (19546, 'test-app', 'high', 'test-user')")

@@ -555,7 +555,7 @@ def fetch_and_prepare_message():
             # initialize aggregation indicator
             aggregation[key] = now
             # TODO: also render message content here?
-            audit_msg = 'Aggregated with key %s' % (key,)
+            audit_msg = 'Aggregated with key (%r, %r, %r, %r)' % key
             spawn(auditlog.message_change, m['message_id'], auditlog.SENT_CHANGE, '', '', audit_msg)
         else:
             # cleared for immediate sending
