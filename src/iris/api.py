@@ -3064,17 +3064,11 @@ class ApplicationStats(object):
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_incidents_last_month': 'SELECT COUNT(*) FROM `incident` WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY) AND `created` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
             'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
-            'pct_incidents_claimed_last_month': '''SELECT ROUND(
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                    AND `active` = FALSE
-                                                    AND NOT isnull(`owner_id`)
-                                                    AND `application_id` = %(application_id)s) /
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                    AND `application_id` = %(application_id)s) * 100, 2)''',
+            'pct_incidents_claimed_last_month': '''SELECT ROUND(COUNT(`owner_id`) / COUNT(*) * 100, 2)
+                                                   FROM `incident`
+                                                   WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                   AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                   AND `application_id` = %(application_id)s''',
             'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
                                                                                 FROM `incident`
                                                                                 WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
@@ -3161,7 +3155,7 @@ class ApplicationStats(object):
             if overall > 0:
                 fail_pct = round((sum(status_counts.pop(key, 0) for key in mode_stats_types[mode]['fail']) / overall) * 100, 2)
                 success_pct = round((sum(status_counts.pop(key, 0) for key in mode_stats_types[mode]['success']) / overall) * 100, 2)
-                other_pct = round((sum(status_counts.values()) if status_counts else 0 / overall) * 100, 2)
+                other_pct = round(sum(status_counts.values()) / overall * 100, 2)
             else:
                 fail_pct = success_pct = other_pct = None
             stats['pct_%s_success_last_month' % mode] = success_pct
