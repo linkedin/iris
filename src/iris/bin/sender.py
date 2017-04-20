@@ -169,7 +169,7 @@ UPDATE_MESSAGE_BODY_SQL = '''UPDATE `message`
 PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'''
 
 # When a rendered message body is longer than this number of characters, drop it.
-MAX_MESSAGE_BODY_LENGTH = 10000
+MAX_MESSAGE_BODY_LENGTH = 40000
 
 # logging
 logger = logging.getLogger()
@@ -224,6 +224,7 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
+    'msg_drop_length_cnt': 0
 }
 
 # TODO: make this configurable
@@ -931,6 +932,8 @@ def fetch_and_send_message():
                     message['message_id'], body_length)
         spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
               'Dropping due to excessive body length (%s > %s chars)' % (body_length, MAX_MESSAGE_BODY_LENGTH))
+
+        metrics.incr('msg_drop_length_cnt')
 
         # Truncate this here to avoid a duplicate log message in mark_message_as_sent(), as we still need to call
         # that to update the body/subject
