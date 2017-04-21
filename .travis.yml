@@ -17,7 +17,6 @@ addons:
       - mysql-client-5.5
       - python-pip
 
-before_install: .ci/before_install.sh
 install: .ci/install.sh
 script: .ci/script.sh
 after_success: .ci/after_success.sh
