@@ -13,10 +13,10 @@ test:
 	make e2e
 
 e2e:
-	py.test ./test/e2etest.py
+	py.test -vv ./test/e2etest.py
 
 unit:
-	py.test test
+	py.test -vv test
 
 check:
 	flake8 src test setup.py
