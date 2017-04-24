@@ -357,6 +357,13 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid response'
 
+    data = base_body.copy()
+    data['Body'] = 'f'
+
+    re = requests.post(base_url + 'response/twilio/messages', data=data)
+    assert re.status_code == 200
+    assert re.json()['app_response'] == 'Sincerest apologies'
+
 
 def test_api_response_batch_sms(fake_batch_id):
     if not fake_batch_id:
