@@ -1764,7 +1764,17 @@ iris = {
       self.data.$addAppSelect.empty();
       self.data.$addAppSelect.append($('<option value="">').text('Add Application'));
       var myApps = Object.keys(self.data.settings.per_app_modes);
-      this.data.settings.applications.forEach(function(app) {
+      this.data.settings.applications.sort(function(app1, app2) {
+        var app1_name = app1.name.toLowerCase(),
+            app2_name = app2.name.toLowerCase();
+        if (app1_name > app2_name) {
+          return 1;
+        } else if (app2_name > app1_name) {
+          return -1;
+        } else {
+          return 0;
+        }
+      }).forEach(function(app) {
         if (myApps.indexOf(app.name) == -1) {
           self.data.$addAppSelect.append($('<option>').text(app.name));
         }
