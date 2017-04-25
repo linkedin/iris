@@ -1986,6 +1986,52 @@ def test_create_application(sample_admin_user, sample_application_name):
     assert re.json()['title'] == 'Application %s not found' % temp_app_name
 
 
+def test_application_plans(sample_user, sample_template_name, sample_application_name, sample_application_name2):
+    if not all([sample_admin_user, sample_application_name, sample_application_name2]):
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    plan_name = sample_user + '-test-foo'
+    data = {
+        "creator": sample_user,
+        "name": plan_name,
+        "description": "Test plan for e2e test",
+        "threshold_window": 900,
+        "threshold_count": 10,
+        "aggregation_window": 300,
+        "aggregation_reset": 300,
+        "steps": [
+            [
+                {
+                    "role": "user",
+                    "target": sample_user,
+                    "priority": "low",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name
+                }
+            ]
+        ],
+        "isValid": True
+    }
+    # Create plan
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 201
+
+    # Check that plan appears for sample app 1
+    re = requests.get(base_url + 'applications/%s/plans' % sample_application_name)
+    assert re.status_code == 200
+    resp_data = re.json()
+    plan_names = {plan['name'] for plan in resp_data}
+    assert plan_name in plan_names
+
+    # Check that plan does not appear for sample app 2
+    re = requests.get(base_url + 'applications/%s/plans' % sample_application_name2)
+    assert re.status_code == 200
+    resp_data = re.json()
+    plan_names = {plan['name'] for plan in resp_data}
+    assert plan_name not in plan_names
+
+
 def test_rename_application(sample_admin_user, sample_application_name, sample_application_name2):
     if not all([sample_admin_user, sample_application_name, sample_application_name2]):
         pytest.skip('We do not have enough data in DB to do this test')
