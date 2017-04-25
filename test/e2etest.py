@@ -794,6 +794,11 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.status_code == 200
     assert len(re.json()) == 1
 
+    # Test get plan endpoint with invalid fields
+    re = requests.get(base_url + 'plans?active=1&name__contains=%s-test-foo&foo=bar' % sample_user)
+    assert re.status_code == 200
+    assert len(re.json()) == 1
+
     # Test limit clause
     re = requests.get(base_url + 'plans?active=0&limit=1')
     assert re.status_code == 200
@@ -2021,6 +2026,13 @@ def test_application_plans(sample_user, sample_template_name, sample_application
 
     # Check that plan appears for sample app 1
     re = requests.get(base_url + 'applications/%s/plans' % sample_application_name)
+    assert re.status_code == 200
+    resp_data = re.json()
+    plan_names = {plan['name'] for plan in resp_data}
+    assert plan_name in plan_names
+
+    # Check that plan appears with name filter
+    re = requests.get(base_url + 'applications/%s/plans?name__startswith=%s' % (sample_application_name, plan_name))
     assert re.status_code == 200
     resp_data = re.json()
     plan_names = {plan['name'] for plan in resp_data}
