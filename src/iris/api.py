@@ -547,7 +547,8 @@ def is_valid_tracking_settings(t, k, tpl):
 def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     '''
     How each where clauses are generated:
-        1. find out column part through filters[col]
+        1. find out column part through filters[col], skipping nonexistent columns that
+           might exist from invalid 'fields' parameters
         2. find out operator part through operators[op]
         3. escape value through connection.escape(filter_types.get(col, str)(value))
         4. (optional) transform escaped value through filter_escaped_value_transforms[col](value)
@@ -555,6 +556,9 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     where = []
     for key, values in kwargs.iteritems():
         col, _, op = key.partition('__')
+        # Skip columns that don't exist
+        if col not in filters:
+            continue
         col_type = filter_types.get(col, str)
         # Format strings because Falcon splits on ',' but not on '%2C'
         # TODO: Get rid of this by setting request options on Falcon 1.1
@@ -2249,10 +2253,52 @@ class ApplicationPlans(object):
     allow_read_only = True
 
     def on_get(self, req, resp, app_name):
+        '''
+        Search endpoint for active plans that support a given app.
+        A plan supports an app if one of its steps uses a template
+        that defines content for that application.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/applications/app-foo/plans?name__contains=bar& HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           [
+               {
+                   "description": "This is plan bar",
+                   "threshold_count": 10,
+                   "creator": "user1",
+                   "created": 1478154275,
+                   "aggregation_reset": 300,
+                   "aggregation_window": 300,
+                   "threshold_window": 900,
+                   "tracking_type": null,
+                   "tracking_template": null,
+                   "tracking_key": null,
+                   "active": 1,
+                   "id": 123456,
+                   "name": "bar-sla0"
+               }
+           ]
+        '''
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
         if fields is None:
             fields = plan_columns.keys()
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        where = ['`application`.`name` = %s']
+        where += gen_where_filter_clause(
+            connection, plan_filters, plan_filter_types, req.params)
 
         query = '''SELECT %s
                    FROM `plan_active` JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
@@ -2262,11 +2308,10 @@ class ApplicationPlans(object):
                    JOIN `template_content` ON `template`.`id` = `template_content`.`template_id`
                    JOIN `application` ON `template_content`.`application_id` = `application`.`id`
                    JOIN `target` ON `target`.`id` = `plan`.`user_id`
-                   WHERE `application`.`name` = %%s
-                   GROUP BY `plan`.`id`''' % ','.join(plan_columns[f] for f in fields)
+                   WHERE %s
+                   GROUP BY `plan`.`id`''' % (','.join(plan_columns[f] for f in fields if f in plan_columns),
+                                              ' AND '.join(where))
 
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
         cursor.execute(query, app_name)
         resp.body = ujson.dumps(cursor)
         cursor.close()
