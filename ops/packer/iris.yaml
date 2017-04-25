@@ -97,7 +97,7 @@ provisioners:
       - sudo -Hu iris ln -s /home/iris/source/db /home/iris/db
       - sudo -Hu iris mkdir /home/iris/config
       - sudo -Hu iris virtualenv /home/iris/env
-      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && python setup.py install'
+      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[ldap,prometheus]"'
 
   - type: "shell"
     only: ["docker"]

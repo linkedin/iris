@@ -24,9 +24,17 @@ Setup dev environment
 ---------------------
 
 1. create & source your virtualenv
-1. run `python setup.py develop`
+1. run `pip install -e .`
 1. run `pip install -r dev_requirements.txt`
 1. edit ./configs/config.dev.yaml to setup database credential and other settings
+
+To install iris with extra features, you can pass in feature flag with pip:
+
+```bash
+pip install -e '.[ldap,prometheus]'
+```
+
+For list of extra features, please see `extras_require` setting in `setup.py`.
 
 
 Run API server
