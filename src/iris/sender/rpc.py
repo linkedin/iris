@@ -97,15 +97,18 @@ def handle_api_notification_request(socket, address, req):
     role = notification.get('role')
     if not role:
         reject_api_request(socket, address, 'INVALID role')
+        logger.warn('Dropping OOB message with invalid role "%s" from app %s', role, notification.get('application'))
         return
     target = notification.get('target')
     if not target:
         reject_api_request(socket, address, 'INVALID target')
+        logger.warn('Dropping OOB message with invalid target "%s" from app %s', target, notification.get('application'))
         return
 
     expanded_targets = cache.targets_for_role(role, target)
     if not expanded_targets:
         reject_api_request(socket, address, 'INVALID role:target')
+        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s', role, target, notification.get('application'))
         return
 
     # If we're rendering this using templates+context instead of body, fill in the

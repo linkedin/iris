@@ -29,6 +29,9 @@ def validate_msg_id(msg_id):
 
 
 def parse_response(response, mode, source):
+    if response.lower().startswith('f'):
+        return None, 'Sincerest apologies'
+
     halves = response.split(None, 1)
 
     # $id cmd (args..)

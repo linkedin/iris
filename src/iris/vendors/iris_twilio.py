@@ -93,29 +93,35 @@ class iris_twilio(object):
         client = self.get_twilio_client()
         sender = client.calls.create
         from_ = self.config['twilio_number']
-        calls_gather_url = self.config['relay_base_url'] + '/api/v0/twilio/calls/gather?'
         status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
         content = self.generate_message_text(message)
 
         payload = {
             'content': content[:480],
-            'instruction': plugin.get_phone_menu_text(),
             'loop': 3,
             'source': message['application'],
         }
 
-        # If message_id is None or 0, don't send it as it's likely OOB
+        # If message_id is None or 0, go through says as iris can't handle
+        # phone call response without the id
         message_id = message.get('message_id')
         if message_id:
             payload['message_id'] = message_id
+            payload['instruction'] = plugin.get_phone_menu_text()
+            relay_cb_url = '%s/api/v0/twilio/calls/gather?%s' % (
+                self.config['relay_base_url'], urllib.urlencode(payload)
+            )
+        else:
+            relay_cb_url = '%s/api/v0/twilio/calls/say?%s' % (
+                self.config['relay_base_url'], urllib.urlencode(payload)
+            )
 
         start = time.time()
-        qs = urllib.urlencode(payload)
 
         result = sender(to=message['destination'],
                         from_=from_,
                         if_machine='Continue',
-                        url=calls_gather_url + qs,
+                        url=relay_cb_url,
                         status_callback=status_callback_url)
 
         send_time = time.time() - start

@@ -220,11 +220,11 @@ class ApplicationQuota(object):
 
     def notify_target(self, application, limit, duration, target_name, target_role):
         if not self.iris_application:
-            logger.warning('Application %s breached soft quota. Cannot notify owners as application is not set')
+            logger.warning('Application %s breached soft quota. Cannot notify owners as application is not set', application)
             return
 
         if not target_name or not target_role:
-            logger.error('Application %s breached soft quota. Cannot notify owner as they aren\'t set (may have been deleted).')
+            logger.error('Application %s breached soft quota. Cannot notify owner as they aren\'t set (may have been deleted).', application)
             return
 
         logger.warning('Application %s breached soft quota. Will notify %s:%s', application, target_role, target_name)

@@ -148,8 +148,6 @@ SENT_MESSAGE_BATCH_SQL = '''UPDATE `message`
 SET `destination`=%%s,
     `mode_id`=%%s,
     `template_id`=%%s,
-    `subject`=%%s,
-    `body`=%%s,
     `batch`=%%s,
     `active`=FALSE,
     `sent`=NOW()
@@ -159,13 +157,19 @@ SENT_MESSAGE_SQL = '''UPDATE `message`
 SET `destination`=%s,
     `mode_id`=%s,
     `template_id`=%s,
-    `subject`=%s,
-    `body`=%s,
     `active`=FALSE,
     `sent`=NOW()
 WHERE `id`=%s'''
 
+UPDATE_MESSAGE_BODY_SQL = '''UPDATE `message`
+                             SET `body`=%s,
+                                 `subject`=%s
+                             WHERE `id` IN %s'''
+
 PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'''
+
+# When a rendered message body is longer than this number of characters, drop it.
+MAX_MESSAGE_BODY_LENGTH = 40000
 
 # logging
 logger = logging.getLogger()
@@ -184,7 +188,7 @@ logger.addHandler(ch)
 # rate limiting data structure message key -> minute -> count
 # used to calcuate if a new message exceeds the rate limit
 # and needs to be queued
-windows = {}
+plan_aggregate_windows = {}
 
 # all messages waiting to be queue across all keys
 messages = {}
@@ -220,6 +224,7 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
+    'msg_drop_length_cnt': 0
 }
 
 # TODO: make this configurable
@@ -530,7 +535,7 @@ def fetch_and_prepare_message():
         messages[message_id] = m
     else:
         # does this message trigger aggregation?
-        window = windows.setdefault(key, defaultdict(int))
+        window = plan_aggregate_windows.setdefault(key, defaultdict(int))
 
         for bucket in window.keys():
             if now - bucket > plan['threshold_window']:
@@ -550,7 +555,7 @@ def fetch_and_prepare_message():
             # initialize aggregation indicator
             aggregation[key] = now
             # TODO: also render message content here?
-            audit_msg = 'Aggregated with key %s' % (key,)
+            audit_msg = 'Aggregated with key (%r, %r, %r, %r)' % key
             spawn(auditlog.message_change, m['message_id'], auditlog.SENT_CHANGE, '', '', audit_msg)
         else:
             # cleared for immediate sending
@@ -755,37 +760,53 @@ def render(message):
 
 def mark_message_as_sent(message):
     connection = db.engine.raw_connection()
+
     params = [
         message['destination'],
         message['mode_id'],
         message.get('template_id'),
-        message['subject'],
-        message['body'],
     ]
+
     if 'aggregated_ids' in message:
         sql = SENT_MESSAGE_BATCH_SQL % connection.escape(message['aggregated_ids'])
         params.append(message['batch_id'])
     else:
         sql = SENT_MESSAGE_SQL
         params.append(message['message_id'])
+
     cursor = connection.cursor()
     if not message['subject']:
         message['subject'] = ''
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
-    if len(message['subject']) > 255:
-        message['subject'] = message['subject'][:255]
-    if len(message['body']) > 65000:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
-                    message.get('message_id', '?'), len(message['body']))
-        message['body'] = message['body'][:65000]
+
     try:
         cursor.execute(sql, params)
         connection.commit()
     except DataError:
-        logger.exception('Failed updating message status (message ID %s)', message.get('message_id', '?'))
-    finally:
-        cursor.close()
-        connection.close()
+        logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+
+    # Update subject and body separately, as they may fail and we don't necessarily care if they do
+    if len(message['subject']) > 255:
+        message['subject'] = message['subject'][:255]
+
+    if len(message['body']) > MAX_MESSAGE_BODY_LENGTH:
+        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
+                    message.get('message_id', '?'), len(message['body']))
+        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
+
+    if 'aggregated_ids' in message:
+        update_ids = tuple(message['aggregated_ids'])
+    else:
+        update_ids = tuple([message['message_id']])
+
+    try:
+        cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
+        connection.commit()
+    except DataError:
+        logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+
+    cursor.close()
+    connection.close()
 
 
 def update_message_sent_status(message, status):
@@ -866,11 +887,12 @@ def fetch_and_send_message():
     if 'message_id' not in message:
         message['message_id'] = None
 
+    drop_mode_id = api_cache.modes.get('drop')
+
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
     if not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
-            drop_mode_id = api_cache.modes.get('drop')
             spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to hard quota violation.')
 
@@ -901,6 +923,29 @@ def fetch_and_send_message():
         return
 
     render(message)
+
+    # Drop this message, and mark it as dropped, rather than sending it, if its body is too long and we were normally
+    # going to send it anyway.
+    body_length = len(message['body'])
+    if body_length > MAX_MESSAGE_BODY_LENGTH:
+        logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                    message['message_id'], body_length)
+        spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+              'Dropping due to excessive body length (%s > %s chars)' % (body_length, MAX_MESSAGE_BODY_LENGTH))
+
+        metrics.incr('msg_drop_length_cnt')
+
+        # Truncate this here to avoid a duplicate log message in mark_message_as_sent(), as we still need to call
+        # that to update the body/subject
+        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
+
+        if drop_mode_id:
+            message['mode'] = 'drop'
+            message['mode_id'] = drop_mode_id
+
+        mark_message_as_sent(message)
+        return
+
     success = None
     try:
         success = distributed_send_message(message)

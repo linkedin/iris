@@ -1,5 +1,6 @@
 variables:
   app_name: "iris"
+  app_version: ""  # will be set by gen_packer_cfg.py
   git_tag: "master"
   aws_access_key: ""
   aws_secret_key: ""
@@ -14,7 +15,7 @@ builders:
     region: "us-west-2"
     instance_type: "t2.micro"
     ssh_username: "ubuntu"
-    ami_name: "{{ user `app_name` }} {{ timestamp }}"
+    ami_name: "{{ user `app_name` }} {{ user `app_version`}} {{ timestamp }}"
     ami_groups: "all"
     ssh_keypair_name: "{{ user `aws_ssh_keypair_name` }}"
     ssh_private_key_file: "{{ user `aws_ssh_private_key_file` }}"
@@ -29,15 +30,19 @@ builders:
     tags:
       type: 'packer_build'
       app: 'iris'
+      version: '{{ user `app_version` }}'
     run_tags:
       type: 'packer_build'
       app: 'iris'
+      version: '{{ user `app_version` }}'
     snapshot_tags:
       type: 'packer_build'
       app: 'iris'
+      version: '{{ user `app_version` }}'
     run_volume_tags:
       type: 'packer_build'
       app: 'iris'
+      version: '{{ user `app_version` }}'
 
   - type: "docker"
     image: "ubuntu:16.04"
@@ -45,39 +50,52 @@ builders:
 
 
 provisioners:
+  - type: "shell"
+    inline:
+      - mkdir /tmp/repo
+
   - type: "file"
-    source: "../config/systemd"
-    destination: "/tmp"
+    source: "../../src"
+    destination: "/tmp/repo"
+
+  - type: "file"
+    source: "../../setup.py"
+    destination: "/tmp/repo/setup.py"
+
+  - type: "file"
+    source: "../../db"
+    destination: "/tmp/repo"
+
+  - type: "file"
+    source: "../../ops"
+    destination: "/tmp/repo"
 
   - type: "shell"
     only: ["docker"]
     inline:
-      - "apt-get update && apt-get -y dist-upgrade && apt-get -y install sudo"
+      - "apt-get update && apt-get -y install sudo"
 
   - type: "shell"
     only: ["amazon-ebs"]
     inline:
-      - "sudo apt-get update && sudo apt-get -y dist-upgrade"
+      - "sudo apt-get update"
 
   - type: "shell"
     inline:
-      - sudo mv /tmp/systemd/uwsgi-iris.service /etc/systemd/system/uwsgi-iris.service
-      - sudo mv /tmp/systemd/nginx-iris.service /etc/systemd/system/nginx-iris.service
-      - sudo mv /tmp/systemd/nginx-iris.socket /etc/systemd/system/nginx-iris.socket
-      - rm -rf /tmp/systemd
       - sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python mysql-client
       - sudo rm -rf /var/cache/apt/archives/*
       - sudo useradd -m -s /bin/bash iris
       - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
       - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run
-      - "sudo -Hu iris curl -L https://github.com/linkedin/iris-api/archive/{{ user `git_tag` }}.zip -o /home/iris/source.zip"
-      - sudo -Hu iris unzip /home/iris/source.zip -d /home/iris
-      - "sudo -Hu iris mv /home/iris/iris-api-{{ user `git_tag` }} /home/iris/source"
+      - sudo mv /tmp/repo /home/iris/source
+      - "sudo chown -R iris:iris /home/iris/source"
+      - sudo mv /home/iris/source/ops/config/systemd/uwsgi-iris.service /etc/systemd/system/uwsgi-iris.service
+      - sudo mv /home/iris/source/ops/config/systemd/nginx-iris.service /etc/systemd/system/nginx-iris.service
+      - sudo mv /home/iris/source/ops/config/systemd/nginx-iris.socket /etc/systemd/system/nginx-iris.socket
       - sudo -Hu iris ln -s /home/iris/source/ops/daemons /home/iris/daemons
       - sudo -Hu iris ln -s /home/iris/source/ops/entrypoint.py /home/iris/entrypoint.py
       - sudo -Hu iris ln -s /home/iris/source/db /home/iris/db
       - sudo -Hu iris mkdir /home/iris/config
-      - sudo -Hu iris rm /home/iris/source.zip
       - sudo -Hu iris virtualenv /home/iris/env
       - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && python setup.py install'
 
@@ -90,6 +108,11 @@ provisioners:
 
 post-processors:
   - type: "docker-tag"
-    repository: "iris/iris"
-    tag: "0.0.1"
+    repository: "quay.io/iris/iris"
+    tag: "{{ user `app_version` }}"
+    only: ["docker"]
+
+  - type: "docker-tag"
+    repository: "quay.io/iris/iris"
+    tag: "latest"
     only: ["docker"]

@@ -123,7 +123,7 @@ def fix_user_contacts(contacts):
 def fetch_users(oncall_base_url):
 
     try:
-        return {user['name']: fix_user_contacts(user['contacts']) for user in requests.get('%s/api/v0/users?fields=name&fields=contacts' % oncall_base_url).json()}
+        return {user['name']: fix_user_contacts(user['contacts']) for user in requests.get('%s/api/v0/users?fields=name&fields=contacts&fields=active' % oncall_base_url).json() if user['active']}
     except (ValueError, KeyError, requests.exceptions.RequestException):
         logger.exception('Failed hitting oncall endpoint to fetch list of users')
         return {}

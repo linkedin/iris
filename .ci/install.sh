@@ -14,5 +14,3 @@ pushd ${TRAVIS_BUILD_DIR}
 popd
 
 bash ${CI_DIR}/setup_mysql.sh
-
-set +e
