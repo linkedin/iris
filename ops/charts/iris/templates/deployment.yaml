@@ -1,0 +1,36 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "fullname" . }}
+  labels:
+    iris-component: api
+    iris-component: web
+    iris-component: sender
+    iris-version: {{ .Chart.AppVersion }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app: {{ template "fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "fullname" . }}
+    spec:
+      containers:
+        - name: iris
+          image: {{ .Values.imageRegistry }}/iris:{{.Values.dockerTag}}
+          imagePullPolicy: {{ default "" .Values.imagePullPolicy | quote }}
+          ports:
+            - containerPort: {{ .Values.irisService.internalPort }}
+          env:
+            - name: DOCKER_DB_BOOTSTRAP
+              value: '1'
+            - name: IRIS_CFG_DB_USER
+              value: root
+            - name: IRIS_CFG_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "mysql.fullname" . }}
+                  key: mysql-root-password
+            - name: IRIS_CFG_DB_HOST
+              value: {{ template "mysql.fullname" . }}
