@@ -38,11 +38,13 @@ setuptools.setup(
         'pycrypto==2.6.1',
         'beaker==1.8.0',
         'webassets==0.12.0',
-        'python-ldap==2.4.9',
-        # plugin deps
-        'prometheus_client',
-        'influxdb',
     ],
+    extras_require={
+        'ldap': ['python-ldap==2.4.9'],
+        # plugin deps
+        'influxdb': ['influxdb'],
+        'prometheus': ['prometheus_client'],
+    },
     entry_points={
         'console_scripts': [
             'iris-api = iris.bin.run_server:main',
