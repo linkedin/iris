@@ -18,8 +18,11 @@ e2e:
 unit:
 	py.test -vv test
 
-check:
+flake8:
 	flake8 src test setup.py
+
+check:
+	make flake8
 	make test
 
 unit-cov:

@@ -20,8 +20,6 @@ import ujson
 from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, API
 from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
-from importlib import import_module
-import yaml
 import falcon.uri
 
 from collections import defaultdict
@@ -31,6 +29,7 @@ from . import db
 from . import utils
 from . import cache
 from . import ui
+from .config import load_config
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
@@ -500,46 +499,6 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   WHERE `application_owner`.`application_id` = %s'''
 
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
-
-
-def process_config_hook(config):
-    ''' Examine config dict for hooks and run them if present '''
-    if 'init_config_hook' in config:
-        try:
-            module = config['init_config_hook']
-            logger.info('Bootstrapping config using %s', module)
-            getattr(import_module(module), module.split('.')[-1])(config)
-        except ImportError:
-            logger.exception('Failed loading config hook %s', module)
-
-    return config
-
-
-def load_config_file(path=None):
-    ''' Get config from path to file, defaulting to cli arg. This can easily be monkey patched. '''
-    if not path:
-        import sys
-        if len(sys.argv) <= 1:
-            print 'ERROR: missing config file.'
-            print 'usage: %s API_CONFIG_FILE' % sys.argv[0]
-            sys.exit(1)
-        path = sys.argv[1]
-
-    with open(path) as h:
-        return yaml.safe_load(h)
-
-
-def load_config(path=None):
-    '''
-      Generate configs for iris. This first calls load_config_file, which
-      will read configs from a yaml file. It will then pass that through
-      process_config_hook() which looks for a key called init_config_hook
-      which is the name of a module to call which can tweak the config further.
-
-      load_config_file() can be monkey patched, in which case this config
-      loading functionality can be customized further.
-    '''
-    return process_config_hook(load_config_file(path))
 
 
 def stream_incidents_with_context(cursor):
@@ -3259,8 +3218,6 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
 
 def get_api(config):
-    logging.basicConfig(format='[%(asctime)s] [%(process)d] [%(levelname)s] %(name)s %(message)s',
-                        level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S %z')
     db.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
@@ -3284,4 +3241,6 @@ def get_api(config):
 
 
 def get_api_app():
+    logging.basicConfig(format='[%(asctime)s] [%(process)d] [%(levelname)s] %(name)s %(message)s',
+                        level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S %z')
     return get_api(load_config())
