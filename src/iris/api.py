@@ -2322,11 +2322,9 @@ class ApplicationPlans(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(query, app_name)
-        print query % app_name
-        payload = cursor.fetchall()
+        resp.body = ujson.dumps(cursor)
         cursor.close()
         connection.close()
-        resp.body = ujson.dumps(payload)
 
 
 class Applications(object):
