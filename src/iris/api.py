@@ -878,8 +878,9 @@ class Plans(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
+        fields = [f for f in fields if f in plan_columns]
         req.params.pop('fields', None)
-        if fields is None:
+        if not fields:
             fields = plan_columns
 
         query = plan_query % ', '.join(plan_columns[f] for f in fields)
@@ -1003,7 +1004,8 @@ class Incidents(object):
 
     def on_get(self, req, resp):
         fields = req.get_param_as_list('fields')
-        if fields is None:
+        req.params.pop('fields', None)
+        if not fields:
             fields = incident_columns
         req.params.pop('fields', None)
         query_limit = req.get_param_as_int('limit')
@@ -1323,9 +1325,10 @@ class Messages(object):
 
     def on_get(self, req, resp):
         fields = req.get_param_as_list('fields')
-        if fields is None:
-            fields = message_columns
         req.params.pop('fields', None)
+        fields = [f for f in fields if f in message_columns]
+        if not fields:
+            fields = message_columns
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
 
@@ -1472,7 +1475,8 @@ class Templates(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
-        if fields is None:
+        fields = [f for f in fields if f in template_columns]
+        if not fields:
             fields = template_columns
         req.params.pop('fields', None)
 
@@ -2290,8 +2294,9 @@ class ApplicationPlans(object):
            ]
         '''
         fields = req.get_param_as_list('fields')
+        fields = [f for f in fields if f in plan_columns]
         req.params.pop('fields', None)
-        if fields is None:
+        if not fields:
             fields = plan_columns.keys()
 
         connection = db.engine.raw_connection()
