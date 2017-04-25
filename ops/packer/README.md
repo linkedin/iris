@@ -23,3 +23,13 @@ Build Docker image:
 ```bash
 packer build -only=docker ./output/iris.json
 ```
+
+
+Usage
+-----
+
+### Docker
+
+```bash
+docker run --rm=true -i -t quay.io/iris/iris:latest /bin/bash
+```

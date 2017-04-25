@@ -1,0 +1,14 @@
+name: iris
+version: 0.0.1
+description: Distributed messaging and paging and incident management system
+keywords:
+  - paging
+  - messaging
+  - incident management
+home: https://github.com/linkedin/iris
+sources:
+  - https://github.com/linkedin/iris
+  - https://github.com/linkedin/iris-relay
+engine: gotpl
+icon: https://raw.githubusercontent.com/linkedin/iris/master/src/iris/ui/static/images/iris.svg
+appVersion: 0.0.14

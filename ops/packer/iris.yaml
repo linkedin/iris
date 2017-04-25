@@ -46,6 +46,9 @@ builders:
 
   - type: "docker"
     image: "ubuntu:16.04"
+    changes:
+      - 'EXPOSE 16649'
+      - 'CMD ["sudo", "-EHu", "iris", "bash", "-c", "source /home/iris/env/bin/activate && python /home/iris/entrypoint.py"]'
     commit: True
 
 
@@ -68,6 +71,10 @@ provisioners:
 
   - type: "file"
     source: "../../ops"
+    destination: "/tmp/repo"
+
+  - type: "file"
+    source: "../../configs"
     destination: "/tmp/repo"
 
   - type: "shell"
@@ -96,8 +103,9 @@ provisioners:
       - sudo -Hu iris ln -s /home/iris/source/ops/entrypoint.py /home/iris/entrypoint.py
       - sudo -Hu iris ln -s /home/iris/source/db /home/iris/db
       - sudo -Hu iris mkdir /home/iris/config
+      - sudo -Hu iris cp /home/iris/source/configs/config.dev.yaml /home/iris/config/config.yaml
       - sudo -Hu iris virtualenv /home/iris/env
-      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[ldap,prometheus]"'
+      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[prometheus]"'
 
   - type: "shell"
     only: ["docker"]

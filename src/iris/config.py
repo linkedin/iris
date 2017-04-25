@@ -59,6 +59,6 @@ def load_config(path=None):
         config['db']['conn']['kwargs']['host'] = os.environ['IRIS_CFG_DB_HOST']
     if 'IRIS_CFG_DB_USER' in os.environ:
         config['db']['conn']['kwargs']['user'] = os.environ['IRIS_CFG_DB_USER']
-    if 'IRIS_CFG_DB_PASS' in os.environ:
+    if 'IRIS_CFG_DB_PASSWORD' in os.environ:
         config['db']['conn']['kwargs']['password'] = os.environ['IRIS_CFG_DB_PASSWORD']
     return process_config_hook(config)

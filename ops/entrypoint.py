@@ -1,23 +1,23 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-import yaml
 import subprocess
 import os
 import socket
 import time
 import sys
 from glob import glob
+from iris.config import load_config
 
 dbpath = '/home/iris/db'
-configfile = '/home/iris/config/config.yaml'
 initializedfile = '/home/iris/db_initialized'
 
 
 def load_sqldump(config, sqlfile):
     print 'Importing %s...' % sqlfile
     with open(sqlfile) as h:
-        cmd = ['/usr/bin/mysql', '-h', config['host'], '-u', config['user'], '-p' + config['password'], config['database']]
+        cmd = ['/usr/bin/mysql', '-h', config['host'], '-u',
+               config['user'], '-p' + config['password'], config['database']]
         proc = subprocess.Popen(cmd, stdin=h)
         proc.communicate()
 
@@ -25,11 +25,14 @@ def load_sqldump(config, sqlfile):
             print 'DB successfully loaded ' + sqlfile
             return True
         else:
-            print 'Ran into problems during DB bootstrap. IRIS will likely not function correctly. mysql exit code: %s for %s' % (proc.returncode, sqlfile)
+            print ('Ran into problems during DB bootstrap. '
+                   'IRIS will likely not function correctly. '
+                   'mysql exit code: %s for %s') % (proc.returncode, sqlfile)
             return False
 
 
 def wait_for_mysql(config):
+    print 'Checking MySQL liveness on %s...' % config['host']
     db_address = (config['host'], 3306)
     tries = 0
     while True:
@@ -64,30 +67,20 @@ def initialize_mysql_schema(config):
 
 
 def main():
-    if not os.path.exists(configfile):
-        print 'Config file does not exist (%s)' % configfile
-        sys.exit(1)
-
-    if not os.path.exists(dbpath):
-        print 'DB schemas folder does not exist (%s)' % dbpath
-        sys.exit(1)
-
-    with open(configfile) as h:
-        try:
-            config = yaml.safe_load(h)['db']['conn']['kwargs']
-        except KeyError as e:
-            print 'Confg file missing keys: %s' % e
-            sys.exit(1)
+    iris_config = load_config(
+        os.environ.get('IRIS_CFG_PATH', '/home/iris/config/config.yaml'))
+    mysql_config = iris_config['db']['conn']['kwargs']
 
     # It often takes several seconds for MySQL to start up. iris dies upon start
     # if it can't immediately connect to MySQL, so we have to wait for it.
-    wait_for_mysql(config)
+    wait_for_mysql(mysql_config)
 
     if 'DOCKER_DB_BOOTSTRAP' in os.environ:
         if not os.path.exists(initializedfile):
-            initialize_mysql_schema(config)
+            initialize_mysql_schema(mysql_config)
 
-    os.execv('/usr/bin/uwsgi', ['', '--yaml', '/home/iris/daemons/uwsgi.yaml:prod'])
+    os.execv('/usr/bin/uwsgi',
+             ['', '--yaml', '/home/iris/daemons/uwsgi.yaml:prod'])
 
 
 if __name__ == '__main__':
