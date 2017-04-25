@@ -780,10 +780,9 @@ class Plan(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(query, plan_id)
-        results = cursor.fetchall()
+        plan = cursor.fetchone()
 
-        if results:
-            plan = results[0]
+        if plan:
             step = 0
             steps = []
             cursor.execute(single_plan_query_steps, plan['id'])
@@ -799,13 +798,11 @@ class Plan(object):
             if plan['tracking_template']:
                 plan['tracking_template'] = ujson.loads(plan['tracking_template'])
 
-            payload = ujson.dumps(plan)
+            resp.body = ujson.dumps(plan)
             connection.close()
         else:
             connection.close()
             raise HTTPNotFound()
-        resp.status = HTTP_200
-        resp.body = payload
 
     def on_post(self, req, resp, plan_id):
         session = db.Session()
@@ -1193,10 +1190,9 @@ class Incident(object):
             cursor.execute(single_incident_query, int(incident_id))
         except ValueError:
             raise HTTPBadRequest('Invalid incident id', '')
-        results = cursor.fetchall()
+        incident = cursor.fetchone()
 
-        if results:
-            incident = results[0]
+        if incident:
             cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
             incident['steps'] = cursor.fetchall()
             connection.close()
@@ -1271,14 +1267,13 @@ class Message(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(single_message_query, int(message_id))
-        results = cursor.fetchall()
+        message = cursor.fetchone()
         connection.close()
-        if results:
-            payload = ujson.dumps(results[0])
+        if message:
+            resp.body = ujson.dumps(message)
         else:
             raise HTTPNotFound()
         resp.status = HTTP_200
-        resp.body = payload
 
 
 class MessageAuditLog(object):
@@ -1315,14 +1310,8 @@ class MessageAuditLog(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(message_audit_log_query, int(message_id))
-        results = cursor.fetchall()
+        resp.body = ujson.dumps(cursor)
         connection.close()
-        if results:
-            payload = ujson.dumps(results)
-        else:
-            raise HTTPNotFound()
-        resp.status = HTTP_200
-        resp.body = payload
 
 
 class Messages(object):
@@ -1352,10 +1341,8 @@ class Messages(object):
             query += ' ORDER BY `message`.`created` DESC LIMIT %s' % query_limit
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(query)
-        payload = ujson.dumps(cursor)
+        resp.body = ujson.dumps(cursor)
         connection.close()
-        resp.status = HTTP_200
-        resp.body = payload
 
 
 class Notifications(object):
@@ -2849,11 +2836,9 @@ class Reprioritization(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(reprioritization_setting_query, username)
-        settings = cursor.fetchall()
+        resp.body = ujson.dumps(cursor)
         cursor.close()
         connection.close()
-        resp.status = HTTP_200
-        resp.body = ujson.dumps(settings)
 
     def on_post(self, req, resp, username):
         params = ujson.loads(req.context['body'])
