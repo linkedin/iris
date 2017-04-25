@@ -2258,6 +2258,34 @@ class ApplicationRename(object):
         resp.body = '[]'
 
 
+class ApplicationPlans(object):
+    allow_read_only = True
+
+    def on_get(self, req, resp, app_name):
+        fields = req.get_param_as_list('fields')
+        req.params.pop('fields', None)
+        if fields is None:
+            fields = plan_columns.keys()
+
+        query = '''SELECT %s
+                   FROM `plan_active` JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
+                   JOIN `plan_notification` ON `plan`.`id` = `plan_notification`.`plan_id`
+                   JOIN `template` ON `plan_notification`.`template` = `template`.`name`
+                   JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+                   JOIN `template_content` ON `template`.`id` = `template_content`.`template_id`
+                   JOIN `application` ON `template_content`.`application_id` = `application`.`id`
+                   JOIN `target` ON `target`.`id` = `plan`.`user_id`
+                   WHERE `application`.`name` = %%s
+                   GROUP BY `plan`.`id`''' % ','.join(plan_columns[f] for f in fields)
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute(query, app_name)
+        resp.body = ujson.dumps(cursor)
+        cursor.close()
+        connection.close()
+
+
 class Applications(object):
     allow_read_only = True
 
@@ -3199,6 +3227,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/applications/{app_name}/key', ApplicationKey())
     api.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
     api.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
+    api.add_route('/v0/applications/{app_name}/plans', ApplicationPlans())
     api.add_route('/v0/applications/{app_name}', Application())
     api.add_route('/v0/applications', Applications())
 
