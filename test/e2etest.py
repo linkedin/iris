@@ -174,9 +174,11 @@ def sample_phone(sample_user):
 
 @pytest.fixture(scope='module')
 def superuser_application():
-    '''application which should have 'allow_other_app_incidents' in DB set to 1, allowing it to create incidents as other applications.
-       should generally be 'iris-frontend' '''
-    return 'iris-frontend'
+    '''
+    application which should have 'allow_other_app_incidents' in DB set to 1,
+    allowing it to create incidents as other applications. should generally be 'iris'
+    '''
+    return 'iris'
 
 
 @pytest.fixture(scope='module')
