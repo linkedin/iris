@@ -35,7 +35,7 @@ def cache_applications():
     applications = new_applications
     connection.close()
     cursor.close()
-    logger.info('Loaded applications: %s', ', '.join(applications))
+    logger.debug('Loaded applications: %s', ', '.join(applications))
 
 
 def cache_priorities():
