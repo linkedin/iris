@@ -11,7 +11,7 @@ from gevent import spawn, sleep
 from gevent.pool import Pool
 from .message import update_message_mode
 from .. import db
-from ..role_lookup import get_role_lookup
+from ..role_lookup import get_role_lookups
 from . import auditlog
 
 import logging
@@ -346,9 +346,9 @@ class TargetReprioritization(object):
 
 
 class RoleTargets():
-    def __init__(self, role_lookup, engine):
+    def __init__(self, role_lookups, engine):
         self.data = {}
-        self.role_lookup = role_lookup
+        self.role_lookups = role_lookups
         self.engine = engine
         self.active_targets = set()
         self.initialize_active_targets()
@@ -357,12 +357,18 @@ class RoleTargets():
         try:
             return self.data[(role, target)]
         except KeyError:
-            if role == 'user':
-                names = [target]
-            else:
-                names = self.role_lookup.get(role, target)
-                if names is None:
-                    return None
+
+            names = None
+
+            # Iterate through our role lookup modules until we find one that works.
+            for role_lookup in self.role_lookups:
+                names = role_lookup.get(role, target)
+                if names is not None:
+                    break
+
+            if names is None:
+                logger.info('All role lookups modules failed to lookup %s:%s', role, target)
+                return None
 
             names = self.prune_inactive_targets(names)
             self.data[(role, target)] = names
@@ -418,7 +424,8 @@ def init(config):
                                 'AND `plan_notification`.`id` IN %s'))
     target_reprioritization = TargetReprioritization(db.engine)
     target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
-    role_lookup = get_role_lookup(config)
-    targets_for_role = RoleTargets(role_lookup, db.engine)
+    role_lookups = get_role_lookups(config)
+    logger.info('Enabled role lookup modules: %s', role_lookups)
+    targets_for_role = RoleTargets(role_lookups, db.engine)
 
     spawn(target_reprioritization.refresh)
