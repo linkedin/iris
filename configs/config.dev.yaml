@@ -2,7 +2,15 @@ server:
   host: 127.0.0.1
   port: 16649
   disable_auth: True
-role_lookup: dummy
+
+# Enabled modules for resolving complex user roles to individual usernames, processed
+# in the order listed here.
+role_lookups:
+  - user # support for 'role' being username
+  - mailing_list # mailing list config; see bottom of file
+  # - oncall # oncall service integration
+  - dummy # dummy role lookup used for testing purposes. Disable this in production.
+
 metrics: dummy
 
 # Change these to random long values when you run this in production
@@ -95,3 +103,28 @@ healthcheck_path: /tmp/status
 enable_gmail_oneclick: True
 gmail_one_click_url_key: 'foo'
 gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/relay'
+
+# Optionally, import ldap mailing lists and have the ability to target them in messages
+#ldap_lists:
+#  connection:
+#    url: 'ldaps://your ldap url'
+#    bind_args: ['your bind username', 'your bind password']
+#  search_strings:
+#    get_all_lists_filter: '(&(objectClass=group)(groupCN=*)(groupName=*))'
+#    get_all_sub_lists_filter: '(&(objectClass=group)(partOf=%s)(groupCN=*)(groupName=*))'
+#    list_search_string: 'OU=groups,OU=company,DC=com'
+#    user_search_string: 'OU=users,OU=company,DC=com'
+#    user_membership_filter: '(&(objectClass=user)(userName=*)(partOf=%s))'
+#    user_account_name_field: 'userName'
+#    list_cn_field: 'groupCN'
+#    list_name_field: 'groupName'
+#
+#  # Max depth for recursing nested ldap lists.
+#  max_depth: 3
+#
+#  # If a list result returns at least this many results, don't support unrolling at runtime.
+#  max_unrolled_users: 100
+#
+#  # Every $n users, stop inserting into mysql to avoid crashing it. Comment these out to disable.
+#  user_add_pause_interval: 500
+#  user_add_pause_duration: 1

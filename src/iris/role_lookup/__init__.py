@@ -4,5 +4,13 @@
 from iris.custom_import import import_custom_module
 
 
-def get_role_lookup(config):
-    return import_custom_module('iris.role_lookup', config['role_lookup'])(config)
+def get_role_lookups(config):
+
+    modules = config.get('role_lookups', [])
+
+    # Support old behavior when there is just one role_lookup module configured and the
+    # expected implicit user lookup.
+    if not modules:
+        modules = ['user', config['role_lookup']]
+
+    return [import_custom_module('iris.role_lookup', module)(config) for module in modules]

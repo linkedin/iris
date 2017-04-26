@@ -665,6 +665,32 @@ CREATE TABLE `generic_message_sent_status` (
   CONSTRAINT `generic_message_sent_status_message_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `mailing_list`
+--
+
+DROP TABLE IF EXISTS `mailing_list`;
+CREATE TABLE `mailing_list` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name_idx` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+--
+-- Table structure for table `mailing_list_membership`
+--
+
+DROP TABLE IF EXISTS `mailing_list_membership`;
+CREATE TABLE `mailing_list_membership` (
+  `list_id` bigint(20) NOT NULL,
+  `user_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`list_id`, `user_id`),
+  CONSTRAINT `mailing_list_membership_list_id_ibfk` FOREIGN KEY (`list_id`) REFERENCES `mailing_list` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `mailing_list_membership_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

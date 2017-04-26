@@ -31,7 +31,7 @@ Setup dev environment
 To install iris with extra features, you can pass in feature flag with pip:
 
 ```bash
-pip install -e '.[ldap,prometheus]'
+pip install -e '.[prometheus]'
 ```
 
 For list of extra features, please see `extras_require` setting in `setup.py`.
