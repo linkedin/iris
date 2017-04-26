@@ -878,7 +878,7 @@ class Plans(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
-        fields = [f for f in fields if f in plan_columns]
+        fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
             fields = plan_columns
@@ -1326,7 +1326,7 @@ class Messages(object):
     def on_get(self, req, resp):
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
-        fields = [f for f in fields if f in message_columns]
+        fields = [f for f in fields if f in message_columns] if fields else None
         if not fields:
             fields = message_columns
         query_limit = req.get_param_as_int('limit')
@@ -1475,7 +1475,7 @@ class Templates(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
-        fields = [f for f in fields if f in template_columns]
+        fields = [f for f in fields if f in template_columns] if fields else None
         if not fields:
             fields = template_columns
         req.params.pop('fields', None)
@@ -2294,7 +2294,7 @@ class ApplicationPlans(object):
            ]
         '''
         fields = req.get_param_as_list('fields')
-        fields = [f for f in fields if f in plan_columns]
+        fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
             fields = plan_columns.keys()
