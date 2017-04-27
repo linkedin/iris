@@ -8,7 +8,7 @@ import logging
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import requests
 from phonenumbers import format_number, parse, PhoneNumberFormat
 from phonenumbers.phonenumberutil import NumberParseException
@@ -457,10 +457,14 @@ def sync_ldap_lists(ldap_settings, engine):
             metrics.incr('ldap_memberships_added', len(add_members))
 
             for member in add_members:
-                session.execute('''INSERT IGNORE INTO `mailing_list_membership`
-                                   (`list_id`, `user_id`)
-                                   VALUES (:list_id, (SELECT `id` FROM `target` WHERE `name` = :name))''', {'list_id': list_id, 'name': member})
-                logger.info('Added %s to %s', member, list_name)
+                try:
+                    session.execute('''INSERT IGNORE INTO `mailing_list_membership`
+                                       (`list_id`, `user_id`)
+                                       VALUES (:list_id, (SELECT `id` FROM `target` WHERE `name` = :name))''', {'list_id': list_id, 'name': member})
+                    logger.info('Added %s to %s', member, list_name)
+                except (IntegrityError, DataError):
+                    logger.exception('Failed adding %s to %s', member, list_name)
+
                 user_add_count += 1
                 if (ldap_add_pause_interval is not None) and (user_add_count % ldap_add_pause_interval) == 0:
                     logger.info('Pausing for %s seconds every %s users.', ldap_add_pause_duration, ldap_add_pause_interval)
