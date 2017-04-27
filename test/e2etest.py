@@ -1219,7 +1219,7 @@ def test_post_user_modes(sample_user):
     change_to = {
         'high': 'default',
         'urgent': 'default',
-        'medium': 'im',
+        'medium': 'slack',
         'low': 'call'
     }
     re = session.post(base_url + 'users/modes/' + sample_user, json=change_to)
@@ -1248,7 +1248,7 @@ def test_post_target_application_modes(sample_user, sample_application_name):
         'application': sample_application_name,
         'high': 'default',
         'urgent': 'default',
-        'medium': 'im',
+        'medium': 'slack',
         'low': 'call'
     }
     modes = mode_data.copy()
@@ -1285,13 +1285,13 @@ def test_post_target_multiple_application_modes(sample_user, sample_application_
             sample_application_name: {
                 'high': 'sms',
                 'urgent': 'call',
-                'medium': 'im',
+                'medium': 'slack',
                 'low': 'call'
             },
             sample_application_name2: {
                 'high': 'email',
                 'urgent': 'email',
-                'medium': 'im',
+                'medium': 'slack',
                 'low': 'call'
             },
         },
@@ -1347,7 +1347,7 @@ def test_create_template(sample_user, sample_application_name):
         'content': {
             sample_application_name: {
                 'sms': {'subject': '', 'body': 'test_sms'},
-                'im': {'subject': '', 'body': 'test_im'},
+                'slack': {'subject': '', 'body': 'test_slack'},
                 'call': {'subject': '', 'body': 'test_call'},
                 'email': {'subject': 'email_subject', 'body': 'email_body'}
             }
@@ -1641,7 +1641,7 @@ def test_get_modes():
     assert 'sms' in data
     assert 'email' in data
     assert 'call' in data
-    assert 'im' in data
+    assert 'slack' in data
     assert 'drop' not in data
 
 
