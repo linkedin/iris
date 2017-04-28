@@ -1071,6 +1071,13 @@ class Incidents(object):
         :statuscode 400: invalid request
         :statuscode 404: plan not found
         :statuscode 401: application is not allowed to create incident for other application
+
+        A request is considered invalid if:
+
+        - plan name is missing
+        - application is invalid
+        - context json blob is longer than 655355 bytes
+        - none of the templates used in the plan supports the given application
         '''
         session = db.Session()
         incident_params = ujson.loads(req.context['body'])
