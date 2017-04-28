@@ -43,7 +43,6 @@ class IrisClient(requests.Session):
         return super(IrisClient, self).get(self.url + path, *args, **kwargs)
 
 
-
 class Cache():
     def __init__(self, engine, sql, active):
         self.engine = engine
@@ -444,7 +443,6 @@ def init(api_host, config):
     target_reprioritization = TargetReprioritization(db.engine)
     target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
     role_lookups = get_role_lookups(config)
-    logger.info('Enabled role lookup modules: %s', role_lookups)
     targets_for_role = RoleTargets(role_lookups, db.engine)
 
     spawn(target_reprioritization.refresh)
