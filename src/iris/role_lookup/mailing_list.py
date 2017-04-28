@@ -19,19 +19,40 @@ class mailing_list(object):
     def unroll_mailing_list(self, list_name):
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
+
+        cursor.execute('''
+          SELECT `mailing_list`.`target_id`,
+                 `mailing_list`.`count`
+          FROM `mailing_list`
+          JOIN `target` on `target`.`id` = `mailing_list`.`target_id`
+          WHERE `target`.`name` = %s
+        ''', list_name)
+
+        list_info = cursor.fetchone()
+
+        if not list_info:
+            logger.warn('Invalid mailing list %s', list_name)
+            cursor.close()
+            connection.close()
+            return None
+
+        list_id, list_count = list_info
+
+        if self.max_list_names > 0 and list_count >= self.max_list_names:
+            logger.warn('Not returning any results for list group %s as it contains too many members (%s > %s)',
+                        list_name, list_count, self.max_list_names)
+            cursor.close()
+            connection.close()
+            return None
+
         cursor.execute('''SELECT `target`.`name`
                           FROM `mailing_list_membership`
-                          JOIN `target` ON `mailing_list_membership`.`user_id` = `target`.`id`
-                          JOIN `mailing_list` ON `mailing_list_membership`.`list_id` = `mailing_list`.`id`
-                          WHERE `mailing_list`.`name` = %s''', [list_name])
+                          JOIN `target` on `target`.`id` = `mailing_list_membership`.`user_id`
+                          WHERE `mailing_list_membership`.`list_id` = %s''', [list_id])
         names = [row[0] for row in cursor]
+
         cursor.close()
         connection.close()
-        count = len(names)
-        if self.max_list_names > 0 and count >= self.max_list_names:
-            logger.warn('Not returning any results for list group %s as it contains too many members (%s > %s)',
-                        list_name, count, self.max_list_names)
-            return None
-        else:
-            logger.info('Unrolled %s people from list %s', count, list_name)
-            return names
+
+        logger.info('Unfurled %s people from list %s', len(names), list_name)
+        return names

@@ -45,7 +45,9 @@ stats_reset = {
     'ldap_lists_added': 0,
     'ldap_memberships_added': 0,
     'ldap_lists_removed': 0,
-    'ldap_memberships_removed': 0
+    'ldap_memberships_removed': 0,
+    'ldap_lists_failed_to_add': 0,
+    'ldap_memberships_failed_to_add': 0,
 }
 
 # logging
@@ -410,6 +412,18 @@ def sync_ldap_lists(ldap_settings, engine):
 
     session = sessionmaker(bind=engine)()
 
+    mailing_list_type_name = 'mailing-list'
+
+    list_type_id = session.execute('SELECT `id` FROM `target_type` WHERE `name` = :name', {'name': mailing_list_type_name}).scalar()
+    if not list_type_id:
+        try:
+            list_type_id = session.execute('INSERT INTO `target_type` (`name`) VALUES (:name)', {'name': mailing_list_type_name}).lastrowid
+            session.commit()
+            logger.info('Created target_type "%s" with id %s', mailing_list_type_name, list_type_id)
+        except (IntegrityError, DataError):
+            logger.exeption('Failed creating mailing-list type ID')
+            return
+
     ldap_add_pause_interval = ldap_settings.get('user_add_pause_interval', None)
     ldap_add_pause_duration = ldap_settings.get('user_add_pause_duration', 1)
 
@@ -419,7 +433,7 @@ def sync_ldap_lists(ldap_settings, engine):
     metrics.set('ldap_memberships_found', 0)
     logger.info('Found %s ldap lists', ldap_lists_count)
 
-    existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `mailing_list`''')}
+    existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id''', {'type_id': list_type_id})}
     kill_lists = existing_ldap_lists - {item[1] for item in ldap_lists}
     if kill_lists:
         metrics.incr('ldap_lists_removed', len(kill_lists))
@@ -434,15 +448,40 @@ def sync_ldap_lists(ldap_settings, engine):
             logger.info('Ignoring/pruning empty ldap list %s', list_name)
             continue
 
-        metrics.incr('ldap_memberships_found', len(members))
+        num_members = len(members)
+        metrics.incr('ldap_memberships_found', num_members)
 
-        list_id = session.execute('''SELECT `id` FROM `mailing_list` WHERE `name` = :name''', {'name': list_name}).scalar()
+        created = False
+        list_id = session.execute('''SELECT `mailing_list`.`target_id`
+                                     FROM `mailing_list`
+                                     JOIN `target` on `target`.`id` = `mailing_list`.`target_id`
+                                     WHERE `target`.`name` = :name''', {'name': list_name}).scalar()
 
         if not list_id:
-            list_id = session.execute('''INSERT INTO `mailing_list` (`name`) VALUES (:name)''', {'name': list_name}).lastrowid
-            session.commit()
+            try:
+                list_id = session.execute('''INSERT INTO `target` (`type_id`, `name`)
+                                             VALUES (:type_id, :name)''', {'type_id': list_type_id, 'name': list_name}).lastrowid
+                session.commit()
+            except (IntegrityError, DataError):
+                logger.exception('Failed adding row to target table for mailing list %s. Skipping this list.', list_name)
+                metrics.incr('ldap_lists_failed_to_add')
+                continue
+
+            try:
+                session.execute('''INSERT INTO `mailing_list` (`target_id`, `count`) VALUES (:list_id, :count)''', {'list_id': list_id, 'count': num_members})
+                session.commit()
+            except (IntegrityError, DataError):
+                logger.exception('Failed adding row to mailing_list table for mailing list %s (ID: %s). Skipping this list.', list_name, list_id)
+                metrics.incr('ldap_lists_failed_to_add')
+                continue
+
             logger.info('Created list %s with id %s', list_name, list_id)
             metrics.incr('ldap_lists_added')
+            created = True
+
+        if not created:
+            session.execute('UPDATE `mailing_list` SET `count` = :count WHERE `target_id` = :list_id', {'count': num_members, 'list_id': list_id})
+            session.commit()
 
         existing_members = {row[0] for row in session.execute('''
                             SELECT `target`.`name`
@@ -461,8 +500,9 @@ def sync_ldap_lists(ldap_settings, engine):
                     session.execute('''INSERT IGNORE INTO `mailing_list_membership`
                                        (`list_id`, `user_id`)
                                        VALUES (:list_id, (SELECT `id` FROM `target` WHERE `name` = :name))''', {'list_id': list_id, 'name': member})
-                    logger.info('Added %s to %s', member, list_name)
+                    logger.info('Added %s to list %s', member, list_name)
                 except (IntegrityError, DataError):
+                    metrics.incr('ldap_memberships_failed_to_add')
                     logger.exception('Failed adding %s to %s', member, list_name)
 
                 user_add_count += 1
