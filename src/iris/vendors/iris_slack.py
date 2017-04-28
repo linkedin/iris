@@ -29,30 +29,36 @@ class iris_slack(object):
         self.message_attachments = self.config.get('message_attachments', {})
 
     def construct_attachments(self, message):
-        # TODO:
-        # 1. Verify title, title_link and text.
-        # 2. Include message buttons. Need to update relay code.
+        # TODO: Verify title, title_link and text.
         att_json = {
             'fallback': self.message_attachments.get('fallback'),
             'pretext': self.message_attachments.get('pretext'),
-            'title': message['subject'],
-            'text': message['body'],
+            'title': 'Iris incident %r' % message['incident_id'],
             'mrkdwn_in': ['pretext'],
-        }
-        # only add interactive button for incidents
-        if 'incident_id' in message:
-            att_json['attachment_type'] = 'default'
-            att_json['callback_id'] = message.get('message_id')
-            att_json['color'] = 'danger'
-            att_json['title_link'] = '%s/%s' % (
-                self.config['iris_incident_url'], message['incident_id'])
-            att_json['actions'] = [{
+            'attachment_type': 'default',
+            'callback_id': message.get('message_id'),
+            'color': 'danger',
+            'title_link': '%s/%s' % (
+                self.config['iris_incident_url'], message['incident_id']),
+            'actions': [{
                 'name': 'claim',
                 'text': 'Claim Incident',
                 'type': 'button',
                 'value': 'claimed'
             }]
+        }
         return ujson.dumps([att_json])
+
+    def get_message_payload(self, message):
+        slack_message = {
+            'text': message['body'],
+            'token': self.config['auth_token'],
+            'channel': self.get_destination(message['destination'])
+        }
+        # only add interactive button for incidents
+        if 'incident_id' in message:
+            slack_message['attachments'] = self.construct_attachments(message)
+        return slack_message
 
     def get_destination(self, destination):
         # If the destination doesn't have '@' this adds it
@@ -62,24 +68,23 @@ class iris_slack(object):
 
     def send_message(self, message):
         start = time.time()
-        slack_message = {
-            'token': self.config['auth_token'],
-            'channel': self.get_destination(message['destination']),
-            'attachments': self.construct_attachments(message)
-        }
+        payload = self.get_message_payload(message)
         try:
             response = requests.post(self.config['base_url'],
-                                     params=slack_message,
+                                     params=payload,
                                      headers={'Content-Type': 'application/json'},
                                      proxies=self.proxy)
             if response.status_code == 200:
                 data = response.json()
                 if data['ok']:
                     return time.time() - start
-                # If message is invalid - {u'ok': False, u'error': u'invalid_arg_name'}
-                logger.error('Received an error from slack api: %s', data['error'])
+                # If message is invalid:
+                #   {u'ok': False, u'error': u'invalid_arg_name'}
+                logger.error('Received an error from slack api: %s',
+                             data['error'])
             else:
-                logger.error('Failed to send message to slack:%d', response.status_code)
+                logger.error('Failed to send message to slack: %d',
+                             response.status_code)
         except Exception:
             logger.exception('Slack post request failed')
 

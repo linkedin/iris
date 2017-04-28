@@ -91,7 +91,9 @@ class Templates():
             template = {}
             connection = self.engine.raw_connection()
             cursor = connection.cursor()
-            cursor.execute('''SELECT `template`.`id`, `application`.`name`, `mode`.`name`, `template_content`.`subject`, `template_content`.`body`
+            cursor.execute('''
+                SELECT `template`.`id`, `application`.`name`, `mode`.`name`,
+                       `template_content`.`subject`, `template_content`.`body`
                 FROM `template_active`
                 JOIN `template` ON `template`.`id` = `template_active`.`template_id`
                 JOIN `template_content` ON `template_content`.`template_id` = `template_active`.`template_id`
@@ -102,12 +104,15 @@ class Templates():
             for template_id, application, mode, subject, body in cursor:
                 logger.debug('[+] adding template: %s %s %s %s', key, template_id, application, mode)
                 try:
+                    # make sure message_id is delivered to the user
                     if self.has_message_id(subject) or self.has_message_id(body):
                         subject = self.env.from_string(subject)
-                        body = self.env.from_string(body)
                     else:
-                        subject = self.env.from_string('{{ iris.message_id }} ' + subject)
-                        body = self.env.from_string(body)
+                        if subject:
+                            subject = self.env.from_string('{{ iris.message_id }} ' + subject)
+                        else:
+                            subject = self.env.from_string('{{ iris.message_id }}')
+                    body = self.env.from_string(body)
                 except jinja2.exceptions.TemplateSyntaxError:
                     logger.info('[-] error parsing template: %s %s %s %s', key, template_id, application, mode)
                     continue
