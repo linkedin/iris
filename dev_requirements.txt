@@ -11,3 +11,4 @@ tox
 Sphinx
 sphinxcontrib-httpdomain
 sphinx_rtd_theme
+httmock

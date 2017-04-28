@@ -2,15 +2,24 @@
 # See LICENSE in the project root for license information.
 
 from iris.custom_import import import_custom_module
+import logging
+logger = logging.getLogger(__name__)
 
 
 def get_role_lookups(config):
-
     modules = config.get('role_lookups', [])
 
-    # Support old behavior when there is just one role_lookup module configured and the
-    # expected implicit user lookup.
+    # default to only support user and mailing_list.
     if not modules:
-        modules = ['user', config['role_lookup']]
+        modules = ['user', 'mailing_list']
 
-    return [import_custom_module('iris.role_lookup', module)(config) for module in modules]
+    imported_modules = []
+    for m in modules:
+        try:
+            imported_modules.append(
+                import_custom_module('iris.role_lookup', m)(config))
+            logger.info('Loaded lookup modules: %s', m)
+        except:
+            logger.exception('Failed to load role lookup module: %s', m)
+
+    return imported_modules

@@ -1,5 +1,5 @@
 LOCK TABLES `mode` WRITE;
-INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'im'),(8,'sms'),(36,'drop');
+INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'slack'),(8,'sms'),(36,'drop');
 UNLOCK TABLES;
 
 LOCK TABLES `priority` WRITE;
@@ -80,7 +80,7 @@ INSERT INTO `template_content` VALUES
     (12,8,26,'','c',NULL,NULL,NULL,NULL,NULL,NULL),
     (12,8,35,'email_subject','d',NULL,NULL,NULL,NULL,NULL,NULL),
     (13,8,8,'','test_sms',NULL,NULL,NULL,NULL,NULL,NULL),
-    (13,8,17,'','test_im',NULL,NULL,NULL,NULL,NULL,NULL),
+    (13,8,17,'','test_slack',NULL,NULL,NULL,NULL,NULL,NULL),
     (13,8,26,'','test_call',NULL,NULL,NULL,NULL,NULL,NULL),
     (13,8,35,'email_subject','email_body',NULL,NULL,NULL,NULL,NULL,NULL);
 UNLOCK TABLES;

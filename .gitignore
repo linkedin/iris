@@ -12,3 +12,4 @@ htmlcov
 venv
 /src/iris/ui/static/.webassets-cache
 /src/iris/ui/static/bundles
+.tox

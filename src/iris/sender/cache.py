@@ -42,9 +42,6 @@ class IrisClient(requests.Session):
     def get(self, path, *args, **kwargs):
         return super(IrisClient, self).get(self.url + path, *args, **kwargs)
 
-    def post(self, path, *args, **kwargs):
-        return super(IrisClient, self).post(self.url + path, *args, **kwargs)
-
 
 class Cache():
     def __init__(self, engine, sql, active):
@@ -94,7 +91,9 @@ class Templates():
             template = {}
             connection = self.engine.raw_connection()
             cursor = connection.cursor()
-            cursor.execute('''SELECT `template`.`id`, `application`.`name`, `mode`.`name`, `template_content`.`subject`, `template_content`.`body`
+            cursor.execute('''
+                SELECT `template`.`id`, `application`.`name`, `mode`.`name`,
+                       `template_content`.`subject`, `template_content`.`body`
                 FROM `template_active`
                 JOIN `template` ON `template`.`id` = `template_active`.`template_id`
                 JOIN `template_content` ON `template_content`.`template_id` = `template_active`.`template_id`
@@ -105,12 +104,15 @@ class Templates():
             for template_id, application, mode, subject, body in cursor:
                 logger.debug('[+] adding template: %s %s %s %s', key, template_id, application, mode)
                 try:
+                    # make sure message_id is delivered to the user
                     if self.has_message_id(subject) or self.has_message_id(body):
                         subject = self.env.from_string(subject)
-                        body = self.env.from_string(body)
                     else:
-                        subject = self.env.from_string('{{ iris.message_id }} ' + subject)
-                        body = self.env.from_string(body)
+                        if subject:
+                            subject = self.env.from_string('{{ iris.message_id }} ' + subject)
+                        else:
+                            subject = self.env.from_string('{{ iris.message_id }}')
+                    body = self.env.from_string(body)
                 except jinja2.exceptions.TemplateSyntaxError:
                     logger.info('[-] error parsing template: %s %s %s %s', key, template_id, application, mode)
                     continue
@@ -403,11 +405,32 @@ def purge():
     incidents.purge()
 
 
-def init(config):
+def init(api_host, config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
     global roles, incidents, templates, plans, iris_client
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0)
+    iris_client = IrisClient(api_host, 0)
+
+    # make sure API is online
+    max_trey = 36
+    api_chk_cnt = 0
+    while api_chk_cnt < max_trey:
+        try:
+            re = iris_client.get('target_roles')
+            if re.status_code == 200:
+                break
+        except:
+            pass
+        api_chk_cnt += 1
+        logger.warning(
+            'Not able to connect to Iris API %s, retry in 5 seconds.',
+            iris_client.url)
+        sleep(5)
+
+    if api_chk_cnt >= max_trey:
+        import sys
+        sys.exit('FATAL: Not able to connect to Iris API: %s' % iris_client.url)
+
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,
@@ -425,7 +448,6 @@ def init(config):
     target_reprioritization = TargetReprioritization(db.engine)
     target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
     role_lookups = get_role_lookups(config)
-    logger.info('Enabled role lookup modules: %s', role_lookups)
     targets_for_role = RoleTargets(role_lookups, db.engine)
 
     spawn(target_reprioritization.refresh)
