@@ -277,8 +277,7 @@ CREATE TABLE `target` (
   `type_id` int(11) NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `name` (`name`),
-  KEY `ix_target_type_id` (`type_id`),
+  UNIQUE KEY `name_type_idx` (`name`,`type_id`),
   KEY `active_index` (`active`),
   CONSTRAINT `target_ibfk_1` FOREIGN KEY (`type_id`) REFERENCES `target_type` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -670,13 +669,15 @@ CREATE TABLE `generic_message_sent_status` (
 --
 
 DROP TABLE IF EXISTS `mailing_list`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `mailing_list` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `name_idx` (`name`)
+  `target_id` bigint(20) NOT NULL,
+  `count` bigint(20) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`target_id`),
+  CONSTRAINT `mailing_list_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
-
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `mailing_list_membership`
@@ -687,7 +688,7 @@ CREATE TABLE `mailing_list_membership` (
   `list_id` bigint(20) NOT NULL,
   `user_id` bigint(20) NOT NULL,
   PRIMARY KEY (`list_id`, `user_id`),
-  CONSTRAINT `mailing_list_membership_list_id_ibfk` FOREIGN KEY (`list_id`) REFERENCES `mailing_list` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `mailing_list_membership_list_id_ibfk` FOREIGN KEY (`list_id`) REFERENCES `mailing_list` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `mailing_list_membership_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
