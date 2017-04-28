@@ -1024,8 +1024,10 @@ def mock_gwatch_renewer():
 
 
 def init_sender(config):
+    api_host = config['sender'].get('api_host', 'http://localhost:16649')
+
     db.init(config)
-    cache.init(config)
+    cache.init(api_host, config)
     metrics.init(config, 'iris-sender', default_sender_metrics)
     api_cache.cache_priorities()
     api_cache.cache_applications()
@@ -1052,7 +1054,6 @@ def init_sender(config):
 
 
 def main():
-
     global config
     config = load_config()
 

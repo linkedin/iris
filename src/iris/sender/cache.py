@@ -42,8 +42,6 @@ class IrisClient(requests.Session):
     def get(self, path, *args, **kwargs):
         return super(IrisClient, self).get(self.url + path, *args, **kwargs)
 
-    def post(self, path, *args, **kwargs):
-        return super(IrisClient, self).post(self.url + path, *args, **kwargs)
 
 
 class Cache():
@@ -403,11 +401,32 @@ def purge():
     incidents.purge()
 
 
-def init(config):
+def init(api_host, config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
     global roles, incidents, templates, plans, iris_client
 
-    iris_client = IrisClient(config['sender'].get('api_host', 'http://localhost:16649'), 0)
+    iris_client = IrisClient(api_host, 0)
+
+    # make sure API is online
+    max_trey = 36
+    api_chk_cnt = 0
+    while api_chk_cnt < max_trey:
+        try:
+            re = iris_client.get('target_roles')
+            if re.status_code == 200:
+                break
+        except:
+            pass
+        api_chk_cnt += 1
+        logger.warning(
+            'Not able to connect to Iris API %s, retry in 5 seconds.',
+            iris_client.url)
+        sleep(5)
+
+    if api_chk_cnt >= max_trey:
+        import sys
+        sys.exit('FATAL: Not able to connect to Iris API: %s' % iris_client.url)
+
     plans = Plans(db.engine)
     templates = Templates(db.engine)
     incidents = Cache(db.engine,

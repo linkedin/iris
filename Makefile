@@ -33,8 +33,8 @@ e2e-cov:
 
 combined-cov:
 	rm -f .coverage*
-	make unit-cov
 	SUPPORT_COMBINED_COVERAGE=1 make e2e-cov
+	make unit-cov
 	coverage combine
 	coverage report -m
 
