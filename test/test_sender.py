@@ -8,12 +8,6 @@
 import time
 from iris.bin.sender import init_sender
 import msgpack
-from httmock import all_requests, HTTMock
-
-
-@all_requests
-def mock_api_response(url, request):
-    return {'status_code': 200}
 
 
 def test_configure(mocker):
@@ -22,37 +16,40 @@ def test_configure(mocker):
     mocker.patch('iris.bin.sender.api_cache.cache_priorities')
     mocker.patch('iris.bin.sender.api_cache.cache_applications')
     mocker.patch('iris.bin.sender.api_cache.cache_modes')
-    with HTTMock(mock_api_response):
-        init_sender({
-            'db': {
-                'conn': {
-                    'kwargs': {
-                        'scheme': 'mysql+pymysql',
-                        'user': 'foo',
-                        'password': 'bar',
-                        'host': '127.0.0.1',
-                        'database': 'iris',
-                        'charset': 'utf8',
-                    },
-                    'str': '%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s'
-                },
+    mock_iris_client = mocker.MagicMock()
+    mocker.patch('iris.sender.cache.IrisClient').return_value = mock_iris_client
+    mock_iris_client.get.return_value.status_code = 200
+
+    init_sender({
+        'db': {
+            'conn': {
                 'kwargs': {
-                    'pool_recycle': 3600,
-                    'echo': True,
-                    'pool_size': 100,
-                    'max_overflow': 100,
-                    'pool_timeout': 60,
-                }
+                    'scheme': 'mysql+pymysql',
+                    'user': 'foo',
+                    'password': 'bar',
+                    'host': '127.0.0.1',
+                    'database': 'iris',
+                    'charset': 'utf8',
+                },
+                'str': '%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s'
             },
-            'sender': {
-                'debug': True,
-            },
-            'oncall': 'http://localhost:8002',
-            'role_lookup': 'dummy',
-            'metrics': 'dummy',
-            'skipsend': True,
-            'skipgmailwatch': True,
-        })
+            'kwargs': {
+                'pool_recycle': 3600,
+                'echo': True,
+                'pool_size': 100,
+                'max_overflow': 100,
+                'pool_timeout': 60,
+            }
+        },
+        'sender': {
+            'debug': True,
+        },
+        'oncall': 'http://localhost:8002',
+        'role_lookup': 'dummy',
+        'metrics': 'dummy',
+        'skipsend': True,
+        'skipgmailwatch': True,
+    })
 
 
 fake_message = {
