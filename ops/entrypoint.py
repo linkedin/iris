@@ -13,11 +13,13 @@ dbpath = '/home/iris/db'
 initializedfile = '/home/iris/db_initialized'
 
 
-def load_sqldump(config, sqlfile):
+def load_sqldump(config, sqlfile, one_db=True):
     print 'Importing %s...' % sqlfile
     with open(sqlfile) as h:
         cmd = ['/usr/bin/mysql', '-h', config['host'], '-u',
-               config['user'], '-p' + config['password'], config['database']]
+               config['user'], '-p' + config['password']]
+        if one_db:
+            cmd += ['-o', config['database']]
         proc = subprocess.Popen(cmd, stdin=h)
         proc.communicate()
 
@@ -54,13 +56,19 @@ def wait_for_mysql(config):
 
 def initialize_mysql_schema(config):
     print 'Initializing Iris database'
-
-    load_sqldump(config, os.path.join(dbpath, 'schema_0.sql'))
+    # disable one_db to let schema_0.sql create the database
+    re = load_sqldump(config, os.path.join(dbpath, 'schema_0.sql'), one_db=False)
+    if not re:
+        sys.exit('Failed to load schema into DB.')
 
     for f in glob(os.path.join(dbpath, 'patches', '*.sql')):
-        load_sqldump(config, f)
+        re = load_sqldump(config, f)
+        if not re:
+            sys.exit('Failed to load DB patche: %s.' % f)
 
-    load_sqldump(config, os.path.join(dbpath, 'dummy_data.sql'))
+    re = load_sqldump(config, os.path.join(dbpath, 'dummy_data.sql'))
+    if not re:
+        sys.stderr.write('Failed to load dummy data.')
 
     with open(initializedfile, 'w'):
         print 'Wrote %s so we don\'t bootstrap db again' % initializedfile
