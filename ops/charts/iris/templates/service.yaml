@@ -15,4 +15,4 @@ spec:
       protocol: TCP
   selector:
     app: {{ template "fullname" . }}
-  type: LoadBalancer
+  type: NodePort
