@@ -1778,9 +1778,20 @@ def test_post_notification(sample_user, sample_application_name):
         'target': sample_user,
         'subject': 'test',
         'priority': 'low',
+        'mode': 'email',
+        'email_html': 'foobar',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 400
-    assert re.json()['title'] == 'Both body and template are missing'
+    assert re.json()['title'] == 'Body, template, and email_html are missing, so we cannot construct message.'
 
     re = requests.post(base_url + 'notifications', json={
         'role': invalid_role,

@@ -1390,9 +1390,10 @@ class Notifications(object):
                 'Both priority and mode are missing, at least one of it is required', '')
 
         # Avoid problems down the line if we have no way of creating the message
-        # body, which happens if both body and template are not specified.
-        if not message.get('body') and not message.get('template'):
-            raise HTTPBadRequest('Both body and template are missing', '')
+        # body, which happens if both body and template are not specified, or if we don't
+        # have email_html
+        if not message.get('body') and not message.get('template') and not message.get('email_html'):
+            raise HTTPBadRequest('Body, template, and email_html are missing, so we cannot construct message.', '')
 
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
