@@ -946,7 +946,7 @@ def fetch_and_send_message():
         mark_message_as_sent(message)
         return
 
-    success = None
+    success = False
     try:
         success = distributed_send_message(message)
     except Exception:
