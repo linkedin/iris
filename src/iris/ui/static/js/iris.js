@@ -2394,16 +2394,8 @@ iris = {
     bindArrowKeys: function(dataTable) {
       $(document).keydown(function(e) {
 
-        // Don't paginate a data table if any text fields are focused
-        var focus = false;
-        $('body').find('input, textarea').each(function() {
-          if ($(this).is(':focus')) {
-            focus = true;
-            return false; // bail out of loop
-          }
-        })
-
-        if (focus) {
+        if (document.activeElement && (document.activeElement.nodeName === 'INPUT'
+                                      || document.activeElement.nodeName === 'TEXTAREA')) {
           return;
         }
 
