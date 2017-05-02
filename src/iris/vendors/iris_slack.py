@@ -51,7 +51,8 @@ class iris_slack(object):
 
     def get_message_payload(self, message):
         slack_message = {
-            'text': message['body'],
+            'text': '[%s] %s' % (message.get('application', 'unknown app'),
+                                 message['body']),
             'token': self.config['auth_token'],
             'channel': self.get_destination(message['destination'])
         }
