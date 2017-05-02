@@ -15,13 +15,14 @@ def test_atttachments_construction_for_incident():
         }
     })
     fake_msg = {
+        'application': 'grafana',
         'incident_id': 123,
         'body': u'test body',
         'message_id': 456,
         'destination': 'user1'
     }
     msg_payload = slack_vendor.get_message_payload(fake_msg)
-    assert msg_payload['text'] == fake_msg['body']
+    assert msg_payload['text'] == '[grafana] %s' % fake_msg['body']
     assert msg_payload['token'] == 'abc'
     assert msg_payload['channel'] == '@user1'
 
@@ -54,12 +55,13 @@ def test_atttachments_construction_for_notification():
         }
     })
     fake_msg = {
+        'application': 'grafana',
         'body': 'test body notification',
         'destination': 'user1'
     }
     msg_payload = slack_vendor.get_message_payload(fake_msg)
     assert msg_payload == {
-        'text': fake_msg['body'],
+        'text': '[grafana] %s' % fake_msg['body'],
         'token': 'abc',
         'channel': '@user1'
     }
