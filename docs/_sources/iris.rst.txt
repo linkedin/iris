@@ -28,3 +28,14 @@ As can be seen, Iris is the crux of the entire framework:
         |           +------+------+
         +-----------| iris sender |
                     +-------------+
+
+
+Security
+--------
+
+Since Iris will be integrated with internal infrastructure, please do not expose
+Iris web and API to the public internet.
+
+Please also make sure **only trusted** users are given access to create and
+update templates since those templates will be rendered using Jinja. Jinja's
+sandbox can be abused to evaluate arbitrary untrusted Python code.

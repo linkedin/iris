@@ -36,7 +36,7 @@
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
     <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
-        <link rel="next" title="Iris" href="iris.html"/>
+        <link rel="next" title="Installation" href="installation.html"/>
         <link rel="prev" title="Iris user manual" href="user_manual.html"/> 
 
   
@@ -93,15 +93,19 @@
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="user_manual.html">Iris user manual</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Iris admin manual</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#getting-started-with-docker">Getting started with Docker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#service-integration">Service Integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nagios.html">Nagios Integration</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#iris-components">Iris components</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="iris.html">Iris</a></li>
 <li class="toctree-l3"><a class="reference internal" href="sender.html">Iris sender</a></li>
 <li class="toctree-l3"><a class="reference internal" href="relay.html">Iris relay</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#application-integration">Application Integration</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="nagios.html">Nagios Integration</a></li>
 </ul>
 </li>
 </ul>
@@ -173,30 +177,27 @@
   <div class="section" id="iris-admin-manual">
 <h1>Iris admin manual<a class="headerlink" href="#iris-admin-manual" title="Permalink to this headline">¶</a></h1>
 <p>This manual documents everything you need to know to setup and mantain Iris.</p>
-<div class="section" id="getting-started-with-docker">
-<h2>Getting started with Docker<a class="headerlink" href="#getting-started-with-docker" title="Permalink to this headline">¶</a></h2>
-<p>We have built a docker compose setup for you to spin up Iris cluster in one command. Please clone
-the docker compose repository and follow the readme there.</p>
-</div>
-<div class="section" id="iris-components">
-<h2>Iris components<a class="headerlink" href="#iris-components" title="Permalink to this headline">¶</a></h2>
-<p>More indepth documentation for each Iris components:</p>
+<div class="section" id="introduction">
+<h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="iris.html">Iris</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="iris.html#overview">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#getting-started-with-docker">Getting started with Docker</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="sender.html">Iris sender</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="sender.html#sender-tasks-workflow">Sender tasks workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="configuration.html#slack-integration">Slack integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#adding-slack-bot">Adding Slack bot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html#updating-iris-configs">Updating Iris configs</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="relay.html">Iris relay</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
-<div class="section" id="application-integration">
-<h2>Application Integration<a class="headerlink" href="#application-integration" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="service-integration">
+<h2>Service Integration<a class="headerlink" href="#service-integration" title="Permalink to this headline">¶</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="nagios.html">Nagios Integration</a><ul>
@@ -216,6 +217,24 @@ the docker compose repository and follow the readme there.</p>
 </ul>
 </div>
 </div>
+<div class="section" id="iris-components">
+<h2>Iris components<a class="headerlink" href="#iris-components" title="Permalink to this headline">¶</a></h2>
+<p>More indepth documentation for each Iris components:</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="iris.html">Iris</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="iris.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iris.html#security">Security</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sender.html">Iris sender</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sender.html#sender-tasks-workflow">Sender tasks workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="relay.html">Iris relay</a></li>
+</ul>
+</div>
+</div>
 </div>
 
 
@@ -228,7 +247,7 @@ the docker compose repository and follow the readme there.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="iris.html" class="btn btn-neutral float-right" title="Iris" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
         <a href="user_manual.html" class="btn btn-neutral" title="Iris user manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>

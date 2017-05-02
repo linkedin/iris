@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Iris relay &mdash; Iris 0.0.14 documentation</title>
+  <title>Installation &mdash; Iris 0.0.14 documentation</title>
   
 
   
@@ -37,8 +37,8 @@
         <link rel="search" title="Search" href="search.html"/>
     <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
         <link rel="up" title="Iris admin manual" href="admin_manual.html"/>
-        <link rel="next" title="API" href="api.html"/>
-        <link rel="prev" title="Iris sender" href="sender.html"/> 
+        <link rel="next" title="Configuration" href="configuration.html"/>
+        <link rel="prev" title="Iris admin manual" href="admin_manual.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -94,14 +94,16 @@
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="user_manual.html">Iris user manual</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="admin_manual.html">Iris admin manual</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#introduction">Introduction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#service-integration">Service Integration</a></li>
-<li class="toctree-l2 current"><a class="reference internal" href="admin_manual.html#iris-components">Iris components</a><ul class="current">
-<li class="toctree-l3"><a class="reference internal" href="iris.html">Iris</a></li>
-<li class="toctree-l3"><a class="reference internal" href="sender.html">Iris sender</a></li>
-<li class="toctree-l3 current"><a class="current reference internal" href="#">Iris relay</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="admin_manual.html#introduction">Introduction</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#getting-started-with-docker">Getting started with Docker</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#service-integration">Service Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#iris-components">Iris components</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
@@ -151,13 +153,13 @@
         
           <li><a href="admin_manual.html">Iris admin manual</a> &raquo;</li>
         
-      <li>Iris relay</li>
+      <li>Installation</li>
     
     
       <li class="wy-breadcrumbs-aside">
         
             
-            <a href="_sources/relay.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/installation.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
@@ -170,12 +172,14 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="iris-relay">
-<h1>Iris relay<a class="headerlink" href="#iris-relay" title="Permalink to this headline">¶</a></h1>
-<p>iris-relay receives responses from gmail, sms replies, and phone call keypad
-presses. It passes these events over to iris to acknowledge incident
-claiming. It is designed to sit on the edge of your network, so it can receive
-payloads from public APIs.</p>
+  <div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="getting-started-with-docker">
+<h2>Getting started with Docker<a class="headerlink" href="#getting-started-with-docker" title="Permalink to this headline">¶</a></h2>
+<p>We have built a docker compose setup for you to spin up Iris cluster in one
+command. Please clone the docker compose repository and follow the readme
+there.</p>
+</div>
 </div>
 
 
@@ -188,10 +192,10 @@ payloads from public APIs.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="api.html" class="btn btn-neutral float-right" title="API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="sender.html" class="btn btn-neutral" title="Iris sender" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="admin_manual.html" class="btn btn-neutral" title="Iris admin manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   

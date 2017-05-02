@@ -1,0 +1,329 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Configuration &mdash; Iris 0.0.14 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="genindex.html"/>
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
+        <link rel="up" title="Iris admin manual" href="admin_manual.html"/>
+        <link rel="next" title="Nagios Integration" href="nagios.html"/>
+        <link rel="prev" title="Installation" href="installation.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> Iris
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.14
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="user_manual.html">Iris user manual</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="admin_manual.html">Iris admin manual</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="admin_manual.html#introduction">Introduction</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Configuration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#slack-integration">Slack integration</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#service-integration">Service Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#iris-components">Iris components</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Iris</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="admin_manual.html">Iris admin manual</a> &raquo;</li>
+        
+      <li>Configuration</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/configuration.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="configuration">
+<h1>Configuration<a class="headerlink" href="#configuration" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="slack-integration">
+<h2>Slack integration<a class="headerlink" href="#slack-integration" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="adding-slack-bot">
+<h3>Adding Slack bot<a class="headerlink" href="#adding-slack-bot" title="Permalink to this headline">¶</a></h3>
+<p>Iris can send Slack messages by integrating with a Slack bot.</p>
+<ol class="arabic simple">
+<li>Create a Slack App<ol class="arabic">
+<li>Go to <a class="reference external" href="https://api.slack.com/apps">https://api.slack.com/apps</a>.</li>
+<li>Click &#8220;Create New App&#8221; button on the upper right.</li>
+<li>Provide an App Name (example - iris)</li>
+<li>Choose your Slack team</li>
+<li>Click &#8220;Create App&#8221;</li>
+</ol>
+</li>
+<li>Go to &#8220;Bot Users&#8221; under &#8220;Features&#8221; and do the following:<ol class="arabic">
+<li>Click &#8220;Add a Bot User&#8221;</li>
+<li>Choose a default username for the bot (example - iris)</li>
+<li>Click &#8220;Add Bot User&#8221;</li>
+<li>Click &#8220;Save Changes&#8221;</li>
+</ol>
+</li>
+<li>To enable Interactive Message, click &#8220;Interactive Messages&#8221; under &#8220;Features&#8221; and do the following:<ol class="arabic">
+<li>Click &#8220;Enable Interactive Messages&#8221;</li>
+<li>Add a HTTPS endpoint: &#8220;<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>&#8220;</li>
+<li>Click &#8220;Enable Interactive Messages&#8221; button</li>
+</ol>
+</li>
+<li>Click &#8220;OAuth &amp; Permissions&#8221; under &#8220;Features&#8221; and do the folling:<ol class="arabic">
+<li>Under Permission Scopes, add the following:<ul>
+<li>incoming-webhook</li>
+<li>commands</li>
+<li>bot</li>
+<li>channels:read</li>
+<li>chat:write:bot</li>
+</ul>
+</li>
+<li>Click &#8220;Save Changes&#8221;</li>
+<li>Under &#8220;OAuth Tokens &amp; Redirect URLs&#8221; section:<ol class="arabic">
+<li>Click &#8220;Install App to Team&#8221;</li>
+<li>Redirected to a confirmation page that has all the details about the bot</li>
+<li>Choose &#8220;Slackbot&#8221; in the Post to dropdown</li>
+<li>Click &#8220;Authorize&#8221;</li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
+<p>After completing the above steps, you should be able to find the following two secrets:</p>
+<dl class="docutils">
+<dt>Bot User OAuth Token</dt>
+<dd>Found under &#8220;Features&#8221; -&gt; &#8220;OAuth &amp; Permissions&#8221; -&gt; &#8220;OAuth Tokens &amp; Redirect Urls&#8221; -&gt; &#8220;Bot User OAuth Access Token&#8221;</dd>
+<dt>Verification Token</dt>
+<dd>Found under &#8220;Settings&#8221; -&gt; &#8220;Basic Information&#8221; -&gt; &#8220;App Credentials&#8221;</dd>
+</dl>
+</div>
+<div class="section" id="updating-iris-configs">
+<h3>Updating Iris configs<a class="headerlink" href="#updating-iris-configs" title="Permalink to this headline">¶</a></h3>
+<p>The last step is to create the slack config section with those secrets for Iris and Iris relay.</p>
+<p>In Iris config, add the following section under venders block with <strong>Bot User OAuth Token</strong>:</p>
+<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">vendors</span><span class="p p-Indicator">:</span>
+<span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">type</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">iris_slack</span>
+  <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">slack</span>
+  <span class="l l-Scalar l-Scalar-Plain">auth_token</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">BOT_USER_OAUTH_TOKEN</span>
+  <span class="l l-Scalar l-Scalar-Plain">base_url</span><span class="p p-Indicator">:</span> <span class="s">&#39;https://slack.com/api/chat.postMessage&#39;</span>
+  <span class="c1"># this url config is for constructing url link for the message title</span>
+  <span class="l l-Scalar l-Scalar-Plain">iris_incident_url</span><span class="p p-Indicator">:</span> <span class="s">&#39;https://YOUR_IRIS_URL/incidents&#39;</span>
+  <span class="c1"># we also support an optional proxy key here</span>
+  <span class="l l-Scalar l-Scalar-Plain">message_attachments</span><span class="p p-Indicator">:</span>
+    <span class="l l-Scalar l-Scalar-Plain">fallback</span><span class="p p-Indicator">:</span> <span class="s">&#39;New</span><span class="nv"> </span><span class="s">Iris</span><span class="nv"> </span><span class="s">notification!&#39;</span>
+</pre></div>
+</div>
+<p>In Iris relay config, add the following top level section with <strong>Verification Token</strong>:</p>
+<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">slack</span><span class="p p-Indicator">:</span>
+  <span class="l l-Scalar l-Scalar-Plain">auth_token</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">VERIFICATION_TOKEN</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="nagios.html" class="btn btn-neutral float-right" title="Nagios Integration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="installation.html" class="btn btn-neutral" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, The Iris team.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.0.14',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
