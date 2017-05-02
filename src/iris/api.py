@@ -1661,7 +1661,7 @@ class UserModes(object):
 
 
 class TargetRoles(object):
-    allow_read_only = False
+    allow_read_only = True
 
     def on_get(self, req, resp):
         '''
