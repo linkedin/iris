@@ -1,0 +1,17 @@
+## For internal access
+
+The Iris service can be accessed via port {{ .Values.irisService.externalPort }} on the following DNS names from within your cluster:
+
+    `iris` or `iris.{{ .Release.Namespace }}.svc.cluster.local`
+
+
+## For external access
+
+Iris service is configured to use NodePort type, you can use the following
+command to get the external port for the service:
+
+    kubectl describe services iris
+
+For external IP, use:
+
+    kubectl cluster-info
