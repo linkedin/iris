@@ -2393,6 +2393,20 @@ iris = {
     },
     bindArrowKeys: function(dataTable) {
       $(document).keydown(function(e) {
+
+        // Don't paginate a data table if any text fields are focused
+        var focus = false;
+        $('body').find('input, textarea').each(function() {
+          if ($(this).is(':focus')) {
+            focus = true;
+            return false; // bail out of loop
+          }
+        })
+
+        if (focus) {
+          return;
+        }
+
         if (e.keyCode == 37) {
           dataTable.page('previous').draw(false);
         } else if (e.keyCode == 39) {
