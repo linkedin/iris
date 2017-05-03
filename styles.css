@@ -285,6 +285,10 @@ footer {
   box-shadow: 0px 500px 0px 500px #41566d;
 }
 
+footer a {
+  color: #fff;
+}
+
 @media all and (max-width: 930px) {
   .splash {
     padding: 10%;
@@ -297,7 +301,7 @@ footer {
   }
 
   .promo-container {
-    padding: 5% 0;
+    padding: 3% 0;
     font-size: 1.2em;
     line-height: 1.2em;
   }
@@ -305,6 +309,11 @@ footer {
   .promo-container li:first-child {
     text-align: center;
     display: block;
+    float: none;
+  }
+
+  .promo-container li {
+    text-align: center;
     float: none;
   }
 
