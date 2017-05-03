@@ -160,24 +160,24 @@ header nav li:hover:after {
   margin: 0;
 }
 
-.subheader {
+.promo-container {
   color: #696C6F;
-  padding: 35px 0;
-  box-shadow: 0 2px 3px rgba(0,0,0,.1);
+  padding: 20px 0;
+  box-shadow: 0 -2px 3px rgba(0,0,0,.1);
 }
 
-.subheader li {
+.promo-container li {
   float: left;
   padding: 10px 1%;
   height: 60px;
   line-height: 40px;
 }
 
-.subheader li img {
+.promo-container li img {
   max-width: 100%;
 }
 
-.subheader li:first-child {
+.promo-container li:first-child {
   padding-left: 0;
 }
 
@@ -296,13 +296,13 @@ footer {
     margin-bottom: 30px;
   }
 
-  .subheader {
+  .promo-container {
     padding: 5% 0;
     font-size: 1.2em;
     line-height: 1.2em;
   }
 
-  .subheader li:first-child {
+  .promo-container li:first-child {
     text-align: center;
     display: block;
     float: none;
@@ -380,6 +380,11 @@ button {
 button:hover {
   background-color: #286090;
   border-color: #204d74;
+}
+
+button > a {
+  color: #fff;
+  display: block;
 }
 
 .cf:before,
