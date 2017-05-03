@@ -96,14 +96,18 @@
 <li class="toctree-l1"><a class="reference internal" href="admin_manual.html">Iris admin manual</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">REST API</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#v0-plans">/v0/plans</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-messages">/v0/messages</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-target-roles">/v0/target_roles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-users">/v0/users</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#v0-applications">/v0/applications</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#healthcheck">/healthcheck</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hmac-auth">HMAC Auth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#routes">Routes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#v0-plans">/v0/plans</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-messages">/v0/messages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-target-roles">/v0/target_roles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-users">/v0/users</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-applications">/v0/applications</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#healthcheck">/healthcheck</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="sender_api.html">Sender API</a></li>
@@ -176,8 +180,32 @@
             
   <div class="section" id="rest-api">
 <h1>REST API<a class="headerlink" href="#rest-api" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="hmac-auth">
+<h2>HMAC Auth<a class="headerlink" href="#hmac-auth" title="Permalink to this headline">¶</a></h2>
+<p>API requests which require auth will have an extra <code class="code docutils literal"><span class="pre">AUTHORIZATION</span></code> HTTP header. It looks like
+this:</p>
+<div class="highlight-none"><div class="highlight"><pre><span></span>AUTHORIZATION: hmac $application:$payload
+</pre></div>
+</div>
+<p><code class="code docutils literal"><span class="pre">$payload</span></code> is a base64 encoded hmac sha512 digest of the following string. In the resulting base64 string, instances of <code class="code docutils literal"><span class="pre">+</span></code> are replaced with <code class="code docutils literal"><span class="pre">-</span></code>
+and <code class="code docutils literal"><span class="pre">/</span></code> are replaced with <code class="code docutils literal"><span class="pre">_</span></code>.</p>
+<div class="highlight-none"><div class="highlight"><pre><span></span>$window $httpMethod $path $body
+</pre></div>
+</div>
+<p><code class="code docutils literal"><span class="pre">$window</span></code> is the current unix timestamp in seconds, divided by 5, floor&#8217;d.</p>
+<p><code class="code docutils literal"><span class="pre">$httpMethod</span></code> is generally <code class="code docutils literal"><span class="pre">POST</span></code></p>
+<p><code class="code docutils literal"><span class="pre">$path</span></code> is the path portion of the URL, such as <code class="code docutils literal"><span class="pre">/v0/incidents</span></code></p>
+<p><code class="code docutils literal"><span class="pre">$body</span></code> is generally the json-formatted post body.</p>
+<p>Example client implementations:</p>
+<ul class="simple">
+<li><a class="reference external" href="https://github.com/houqp/iris-python-client">Python</a></li>
+<li><a class="reference external" href="https://github.com/kripplek/node-iris">NodeJS</a></li>
+</ul>
+</div>
+<div class="section" id="routes">
+<h2>Routes<a class="headerlink" href="#routes" title="Permalink to this headline">¶</a></h2>
 <div class="section" id="v0-plans">
-<h2>/v0/plans<a class="headerlink" href="#v0-plans" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/plans<a class="headerlink" href="#v0-plans" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--v0-plans">
 <code class="descname">GET </code><code class="descname">/v0/plans</code><a class="headerlink" href="#get--v0-plans" title="Permalink to this definition">¶</a></dt>
@@ -213,7 +241,7 @@
 
 </div>
 <div class="section" id="v0-incidents">
-<h2>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h3>
 <dl class="post">
 <dt id="post--v0-incidents">
 <code class="descname">POST </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#post--v0-incidents" title="Permalink to this definition">¶</a></dt>
@@ -301,7 +329,7 @@
 
 </div>
 <div class="section" id="v0-messages">
-<h2>/v0/messages<a class="headerlink" href="#v0-messages" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/messages<a class="headerlink" href="#v0-messages" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--v0-messages-message_id">
 <code class="descname">GET </code><code class="descname">/v0/messages/{message_id}</code><a class="headerlink" href="#get--v0-messages-message_id" title="Permalink to this definition">¶</a></dt>
@@ -363,7 +391,7 @@
 
 </div>
 <div class="section" id="v0-target-roles">
-<h2>/v0/target_roles<a class="headerlink" href="#v0-target-roles" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/target_roles<a class="headerlink" href="#v0-target-roles" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--v0-target_roles">
 <code class="descname">GET </code><code class="descname">/v0/target_roles</code><a class="headerlink" href="#get--v0-target_roles" title="Permalink to this definition">¶</a></dt>
@@ -392,7 +420,7 @@
 
 </div>
 <div class="section" id="v0-users">
-<h2>/v0/users<a class="headerlink" href="#v0-users" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/users<a class="headerlink" href="#v0-users" title="Permalink to this headline">¶</a></h3>
 <dl class="delete">
 <dt id="delete--v0-users-reprioritization-username-src_mode_name">
 <code class="descname">DELETE </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#delete--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
@@ -412,7 +440,7 @@
 
 </div>
 <div class="section" id="v0-modes">
-<h2>/v0/modes<a class="headerlink" href="#v0-modes" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/modes<a class="headerlink" href="#v0-modes" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--v0-modes">
 <code class="descname">GET </code><code class="descname">/v0/modes</code><a class="headerlink" href="#get--v0-modes" title="Permalink to this definition">¶</a></dt>
@@ -432,7 +460,7 @@
 
 </div>
 <div class="section" id="v0-applications">
-<h2>/v0/applications<a class="headerlink" href="#v0-applications" title="Permalink to this headline">¶</a></h2>
+<h3>/v0/applications<a class="headerlink" href="#v0-applications" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--v0-applications-app_name-incident_emails">
 <code class="descname">GET </code><code class="descname">/v0/applications/{app_name}/incident_emails</code><a class="headerlink" href="#get--v0-applications-app_name-incident_emails" title="Permalink to this definition">¶</a></dt>
@@ -490,7 +518,7 @@ that defines content for that application.</p>
 
 </div>
 <div class="section" id="healthcheck">
-<h2>/healthcheck<a class="headerlink" href="#healthcheck" title="Permalink to this headline">¶</a></h2>
+<h3>/healthcheck<a class="headerlink" href="#healthcheck" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
 <dt id="get--healthcheck">
 <code class="descname">GET </code><code class="descname">/healthcheck</code><a class="headerlink" href="#get--healthcheck" title="Permalink to this definition">¶</a></dt>
@@ -508,6 +536,7 @@ GOOD
 </div>
 </dd></dl>
 
+</div>
 </div>
 </div>
 
