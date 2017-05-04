@@ -600,6 +600,7 @@ def set_target_contact_by_priority(message):
               SELECT `target_contact`.`destination` AS dest, `mode`.`name` AS mode_name, `mode`.`id` AS mode_id
               FROM `mode`
               JOIN `target` ON `target`.`name` = :target
+              JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
               JOIN `application` ON `application`.`name` = :application
 
               -- left join because the "drop" mode isn't going to have a target_contact entry
@@ -638,6 +639,8 @@ def set_target_contact_by_priority(message):
                 AND EXISTS (SELECT 1 FROM `application_mode`
                             WHERE `application_mode`.`mode_id` = `mode`.`id`
                             AND   `application_mode`.`application_id` = `application`.`id`)
+                -- And ensure this only works for users
+                AND `target_type`.`name` = 'user'
         ''', message)
 
     try:
@@ -660,16 +663,20 @@ def set_target_contact_by_priority(message):
 
 def set_target_contact(message):
     try:
-        if 'mode' in message:
-            # for out of band notification, we already have the mode and
+        if 'mode' in message or 'mode_id' in message:
+            # for out of band notification, we already have the mode *OR*
             # mode_id set by API
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
             cursor.execute('''
                 SELECT `destination` FROM `target_contact`
                 JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
-                WHERE `target`.`name` = %s AND `target_contact`.`mode_id` = %s;
-                ''', (message['target'], message['mode_id']))
+                JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
+                WHERE `target`.`name` = %(target)s
+                AND `target_type`.`name` = 'user'
+                AND (`target_contact`.`mode_id` = %(mode_id)s OR `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                LIMIT 1
+                ''', {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
@@ -680,7 +687,7 @@ def set_target_contact(message):
         if result:
             cache.target_reprioritization(message)
         return result
-    except ValueError:
+    except (ValueError, TypeError):
         logger.exception('target does not have mode %r', message)
         return set_target_fallback_mode(message)
 
@@ -707,7 +714,7 @@ def render(message):
         message['body'] = 'Batch ID: %(batch_id)s' % message
         message['template_id'] = None
     else:
-        if message['body'] is None:
+        if not message['body']:
             message['body'] = ''
         error = None
         try:
@@ -923,6 +930,9 @@ def fetch_and_send_message():
         return
 
     render(message)
+
+    if not message.get('body'):
+        message['body'] = ''
 
     # Drop this message, and mark it as dropped, rather than sending it, if its body is too long and we were normally
     # going to send it anyway.
