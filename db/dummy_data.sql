@@ -7,7 +7,7 @@ INSERT INTO `priority` VALUES (8,'urgent',26),(17,'high',8),(26,'medium',35),(35
 UNLOCK TABLES;
 
 LOCK TABLES `target_type` WRITE;
-INSERT INTO `target_type` VALUES (2,'team'),(1,'user');
+INSERT INTO `target_type` VALUES (3,'mailing-list'),(2,'team'),(1,'user');
 UNLOCK TABLES;
 
 LOCK TABLES `target_role` WRITE;
@@ -15,7 +15,7 @@ INSERT INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44
 UNLOCK TABLES;
 
 LOCK TABLES `target` WRITE;
-INSERT INTO `target` VALUES (1,'demo',1,1),(2,'abc',1,1),(3,'foo',1,1),(4,'demo_team',2,1),(5,'foo_team',2,1);
+INSERT INTO `target` VALUES (1,'demo',1,1),(2,'abc',1,1),(3,'foo',1,1),(4,'demo_team',2,1),(5,'foo_team',2,1),(6,'abc',3,1),(7,'demo',3,1);
 UNLOCK TABLES;
 
 LOCK TABLES `user` WRITE;

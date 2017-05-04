@@ -1742,7 +1742,7 @@ class Targets(object):
                 req.params['startswith'] = req.params['startswith'] + '%'
                 filters_sql.append('`name` like :startswith')
 
-            sql = '''SELECT `name` FROM `target`'''
+            sql = '''SELECT DISTINCT `name` FROM `target`'''
 
             if filters_sql:
                 sql += ' WHERE %s' % ' AND '.join(filters_sql)
@@ -1755,7 +1755,7 @@ class Targets(object):
             resp.body = payload
         except Exception:
             session.close()
-            logger.exception('ERROR')
+            logger.exception('Failed getting targets')
             raise
 
 
