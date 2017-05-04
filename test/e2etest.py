@@ -1720,7 +1720,6 @@ def test_app_stats(sample_application_name):
 
 
 def test_post_notification(sample_user, sample_application_name):
-
     # The iris-api in this case will send a request to iris-sender's
     # rpc endpoint. Don't bother if sender isn't working.
     try:
@@ -1780,6 +1779,18 @@ def test_post_notification(sample_user, sample_application_name):
         'priority': 'low',
         'mode': 'email',
         'email_html': 'foobar',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
+        'mode': 'email',
+        'email_html': 'foobar',
+        'body': '',
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'

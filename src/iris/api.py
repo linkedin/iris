@@ -1397,6 +1397,11 @@ class Notifications(object):
         if not message.get('body') and not message.get('template') and not message.get('email_html'):
             raise HTTPBadRequest('Body, template, and email_html are missing, so we cannot construct message.', '')
 
+        # Handle the edge-case where someone is only specifying email_html and not the others. Avoid KeyError's later on
+        if message.get('email_html') and not message.get('body') and not message.get('template'):
+            logger.info('Setting empty body for oob message %s', message)
+            message['body'] = ''
+
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))
