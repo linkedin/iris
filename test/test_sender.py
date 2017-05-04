@@ -67,6 +67,7 @@ fake_notification = {
     'target': 'test-user',
     'role': 'user',
     'subject': 'test subject',
+    'body': 'test body',
 }
 
 fake_plan = {
@@ -143,7 +144,7 @@ def test_fetch_and_send_message(mocker):
         fetch_and_send_message, send_queue
     )
 
-    # dry out send queue
+    # drain out send queue
     while send_queue.qsize() > 0:
         send_queue.get()
     send_queue.put(fake_message)
@@ -223,7 +224,7 @@ def test_handle_api_request_v0_send_timeout(mocker):
 
     iris.sender.rpc.handle_api_request(mock_socket, mock_address)
 
-    mock_socket.sendall.called_with(msgpack.packb('TIMEOUT'))
+    mock_socket.sendall.assert_called_with(msgpack.packb('TIMEOUT'))
 
 
 def test_render_email_response_message(mocker):
@@ -330,3 +331,81 @@ def test_aggregate_audit_msg(mocker):
         '',
         '',
         "Aggregated with key (19546, 'test-app', 'high', 'test-user')")
+
+
+def test_handle_api_notification_request_invalid_message(mocker):
+    from iris.sender.rpc import handle_api_notification_request
+    mock_socket = mocker.MagicMock()
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'application': 'test_app',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('INVALID role'))
+
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'role': 'user',
+            'application': 'test_app',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('INVALID target'))
+
+    mocker.patch('iris.sender.rpc.cache').targets_for_role.return_value = ['foo']
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'target': 'foo',
+            'role': 'user',
+            'application': 'test_app',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('INVALID body'))
+
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'target': 'foo',
+            'role': 'user',
+            'application': 'test_app',
+            'template': 'test',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('INVALID context'))
+
+    # should work when user is setting body key
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'target': 'foo',
+            'role': 'user',
+            'application': 'test_app',
+            'body': 'test',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('OK'))
+
+    # should work when user is setting template key
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'target': 'foo',
+            'role': 'user',
+            'application': 'test_app',
+            'template': 'test',
+            'context': {},
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('OK'))
+
+    # should work when user is setting email_html key
+    handle_api_notification_request(mock_socket, mocker.MagicMock(), {
+        'data': {
+            'target': 'foo',
+            'role': 'user',
+            'application': 'test_app',
+            'email_html': '<p>test</p>',
+        }
+    })
+    mock_socket.sendall.assert_called_with(msgpack.packb('OK'))
+
+    from iris.bin.sender import send_queue
+    # drain out send queue
+    while send_queue.qsize() > 0:
+        send_queue.get()

@@ -1720,7 +1720,7 @@ def test_app_stats(sample_application_name):
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
 
-def test_post_notification(sample_user, sample_application_name):
+def test_post_invalid_notification(sample_user, sample_application_name):
     # The iris-api in this case will send a request to iris-sender's
     # rpc endpoint. Don't bother if sender isn't working.
     try:
@@ -1768,10 +1768,60 @@ def test_post_notification(sample_user, sample_application_name):
         'target': sample_user,
         'subject': 'test',
         'priority': 'low',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'body, template, and email_html are missing, so we cannot construct message.'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': invalid_role,
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
         'body': 'foo'
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
-    assert re.status_code == 200
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID role:target'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': invalid_user,
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID role:target'
+
+    re = requests.post(base_url + 'notifications', json={
+        'mode': 'email',
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'email_html': ['foo']
+    })
+    assert re.status_code == 400
+    assert 'email_html needs to be a string' in re.text
+
+
+def test_post_notification(sample_user, sample_application_name):
+    # The iris-api in this case will send a request to iris-sender's
+    # rpc endpoint. Don't bother if sender isn't working.
+    try:
+        sock = socket.socket()
+        sock.connect(sender_address)
+        sock.close()
+    except socket.error:
+        pytest.skip('Skipping this test as sender is not running/reachable.')
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.text == '[]'
+    assert re.status_code == 200
 
     re = requests.post(base_url + 'notifications', json={
         'role': 'user',
@@ -1795,35 +1845,6 @@ def test_post_notification(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
-
-    re = requests.post(base_url + 'notifications', json={
-        'role': 'user',
-        'target': sample_user,
-        'subject': 'test',
-        'priority': 'low',
-    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
-    assert re.status_code == 400
-    assert re.json()['title'] == 'Body, template, and email_html are missing, so we cannot construct message.'
-
-    re = requests.post(base_url + 'notifications', json={
-        'role': invalid_role,
-        'target': sample_user,
-        'subject': 'test',
-        'priority': 'low',
-        'body': 'foo'
-    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
-    assert re.status_code == 400
-    assert re.json()['description'] == 'INVALID role:target'
-
-    re = requests.post(base_url + 'notifications', json={
-        'role': 'user',
-        'target': invalid_user,
-        'subject': 'test',
-        'priority': 'low',
-        'body': 'foo'
-    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
-    assert re.status_code == 400
-    assert re.json()['description'] == 'INVALID role:target'
 
 
 def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):

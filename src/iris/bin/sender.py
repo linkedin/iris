@@ -714,7 +714,7 @@ def render(message):
         message['body'] = 'Batch ID: %(batch_id)s' % message
         message['template_id'] = None
     else:
-        if not message['body']:
+        if message.get('body') is None:
             message['body'] = ''
         error = None
         try:
@@ -931,7 +931,7 @@ def fetch_and_send_message():
 
     render(message)
 
-    if not message.get('body'):
+    if message.get('body') is None:
         message['body'] = ''
 
     # Drop this message, and mark it as dropped, rather than sending it, if its body is too long and we were normally
@@ -962,8 +962,8 @@ def fetch_and_send_message():
     except Exception:
         logger.exception('Failed to send message: %s', message)
         if message['mode'] == 'email':
-            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
             metrics.incr('task_failure')
+            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
         else:
             logger.error('reclassifying as email %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
             old_mode = message['mode']

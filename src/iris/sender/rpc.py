@@ -93,31 +93,58 @@ def reject_api_request(socket, address, err_msg):
 
 def handle_api_notification_request(socket, address, req):
     notification = req['data']
-    notification['subject'] = '[%(application)s] %(subject)s' % notification
+    if 'application' not in notification:
+        reject_api_request(socket, address, 'INVALID application')
+        logger.warn('Dropping OOB message due to missing application key')
+        return
+    notification['subject'] = '[%s] %s' % (notification['application'],
+                                           notification.get('subject', ''))
     role = notification.get('role')
     if not role:
         reject_api_request(socket, address, 'INVALID role')
-        logger.warn('Dropping OOB message with invalid role "%s" from app %s', role, notification.get('application'))
+        logger.warn('Dropping OOB message with invalid role "%s" from app %s',
+                    role, notification['application'])
         return
     target = notification.get('target')
     if not target:
         reject_api_request(socket, address, 'INVALID target')
-        logger.warn('Dropping OOB message with invalid target "%s" from app %s', target, notification.get('application'))
+        logger.warn('Dropping OOB message with invalid target "%s" from app %s',
+                    target, notification['application'])
         return
 
     expanded_targets = cache.targets_for_role(role, target)
     if not expanded_targets:
         reject_api_request(socket, address, 'INVALID role:target')
-        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s', role, target, notification.get('application'))
+        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                    role, target, notification['application'])
         return
 
     # If we're rendering this using templates+context instead of body, fill in the
     # needed iris key.
-    if notification.get('template') and notification.get('context'):
-        notification['context']['iris'] = notification['context'].get('iris', {})
+    if 'template' in notification:
+        if 'context' not in notification:
+            logger.warn('Dropping OOB message due to missing context from app %s',
+                        notification['application'])
+            reject_api_request(socket, address, 'INVALID context')
+            return
+        else:
+            # fill in dummy iris meta data
+            notification['context']['iris'] = {}
+    elif 'email_html' in notification:
+        if not isinstance(notification['email_html'], basestring):
+            logger.warn('Dropping OOB message with invalid email_html from app %s: %s',
+                        notification['application'], notification['email_html'])
+            reject_api_request(socket, address, 'INVALID email_html')
+            return
+    elif 'body' not in notification:
+        reject_api_request(socket, address, 'INVALID body')
+        logger.warn('Dropping OOB message with invalid body from app %s',
+                    notification['application'])
+        return
 
     logger.info('-> %s OK, to %s:%s (%s:%s)',
-                address, role, target, notification.get('application', '?'), notification.get('priority', notification.get('mode', '?')))
+                address, role, target, notification['application'],
+                notification.get('priority', notification.get('mode', '?')))
 
     for _target in expanded_targets:
         temp_notification = notification.copy()
@@ -145,7 +172,8 @@ def handle_slave_send(socket, address, req):
             metrics.incr('slave_message_send_success_cnt')
         else:
             response = 'FAIL'
-            logger.error('Got falsy value from send_message for message (ID %s) from master %s: %s', message_id, address, runtime)
+            logger.error('Got falsy value from send_message for message (ID %s) from master %s: %s',
+                         message_id, address, runtime)
             metrics.incr('slave_message_send_fail_cnt')
     except Exception:
         response = 'FAIL'

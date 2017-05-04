@@ -1407,16 +1407,24 @@ class Notifications(object):
             raise HTTPBadRequest(
                 'Both priority and mode are missing, at least one of it is required', '')
 
-        # Avoid problems down the line if we have no way of creating the message
-        # body, which happens if both body and template are not specified, or if we don't
-        # have email_html
-        if not message.get('body') and not message.get('template') and not message.get('email_html'):
-            raise HTTPBadRequest('Body, template, and email_html are missing, so we cannot construct message.', '')
-
-        # Handle the edge-case where someone is only specifying email_html and not the others. Avoid KeyError's later on
-        if message.get('email_html') and not message.get('body') and not message.get('template'):
-            logger.info('Setting empty body for oob message %s', message)
-            message['body'] = ''
+        # Avoid problems down the line if we have no way of creating the
+        # message body, which happens if both body and template are not
+        # specified, or if we don't have email_html
+        if 'template' in message:
+            if not isinstance(message['template'], basestring):
+                raise HTTPBadRequest('template needs to be a string', '')
+        elif 'body' in message:
+            if not isinstance(message['body'], basestring):
+                raise HTTPBadRequest('body needs to be a string', '')
+        elif 'email_html' in message:
+            if not isinstance(message['email_html'], basestring):
+                raise HTTPBadRequest('email_html needs to be a string', '')
+            # Handle the edge-case where someone is only specifying email_html
+            # and not the others. Avoid KeyError's later on in sender
+            if message.get('body') is None:
+                message['body'] = ''
+        else:
+            raise HTTPBadRequest('body, template, and email_html are missing, so we cannot construct message.', '')
 
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
