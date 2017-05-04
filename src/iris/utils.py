@@ -59,7 +59,9 @@ def parse_response(response, mode, source):
             return None, 'claim'
         msg_id = session.execute('''SELECT `message`.`id` from `message`
                                     JOIN `target` on `target`.`id` = `message`.`target_id`
+                                    JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
                                     WHERE `target`.`name` = :target_name
+                                    AND `target_type`.`name` = 'user'
                                     ORDER BY `message`.`id` DESC
                                     LIMIT 1''', {'target_name': target_name}).scalar()
         session.close()
@@ -73,7 +75,9 @@ def parse_response(response, mode, source):
         msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
                                                         JOIN `target` on `target`.`id` = `message`.`target_id`
                                                         JOIN `incident` on `incident`.`id` = `message`.`incident_id`
+                                                        JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
                                                         WHERE `target`.`name` = :target_name
+                                                        AND `target_type`.`name` = 'user'
                                                         AND `incident`.`active` = TRUE''', {'target_name': target_name})]
         session.close()
         return msg_ids, 'claim_all'
@@ -157,7 +161,7 @@ def claim_incident(incident_id, owner, session=None):
     session.execute('''UPDATE `incident`
                        SET `incident`.`updated` = :updated,
                            `incident`.`active` = :active,
-                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner)
+                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
                        WHERE `incident`.`id` = :incident_id''',
                     {'incident_id': incident_id, 'active': active, 'owner': owner, 'updated': now})
 
@@ -176,7 +180,7 @@ def claim_bulk_incidents(incident_ids, owner):
     session.execute('''UPDATE `incident`
                        SET `incident`.`updated` = :updated,
                            `incident`.`active` = :active,
-                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner)
+                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
                        WHERE `incident`.`id` IN :incident_ids''',
                     {'incident_ids': incident_ids, 'active': active, 'owner': owner, 'updated': now})
 
@@ -199,11 +203,11 @@ def claim_bulk_incidents(incident_ids, owner):
 
 def claim_incidents_from_batch_id(batch_id, owner):
     session = db.Session()
-    sql = ('UPDATE incident '
-           'INNER JOIN message ON (message.incident_id=incident.id) '
-           'SET incident.owner_id=(SELECT target.id FROM target WHERE target.name=:owner) '
-           '  , incident.updated=:now, incident.active=0 '
-           'WHERE message.batch=:batch_id ')
+    sql = '''UPDATE `incident`
+             JOIN `message` ON `message`.`incident_id` = `incident`.`id`
+             SET `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
+                 `incident`.`updated` = :now, `incident`.`active`=0
+             WHERE `message`.`batch` = :batch_id'''
     args = {
         'batch_id': batch_id,
         'owner': owner,

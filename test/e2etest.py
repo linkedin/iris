@@ -250,11 +250,12 @@ def create_incident_with_message(application, plan, target, mode):
                           )''', {'application': application, 'plan': plan})
         incident_id = cursor.lastrowid
         assert incident_id
+        conn.commit()
         cursor.execute('''INSERT INTO `message` (`created`, `application_id`, `target_id`, `priority_id`, `mode_id`, `active`, `incident_id`)
                           VALUES(
                                   NOW(),
                                   (SELECT `id` FROM `application` WHERE `name` = %(application)s),
-                                  (SELECT `id` FROM `target` WHERE `name` = %(target)s),
+                                  (SELECT `id` FROM `target` WHERE `name` = %(target)s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
                                   (SELECT `id` FROM `priority` WHERE `name` = 'low'),
                                   (SELECT `id` FROM `mode` WHERE `name` = %(mode)s),
                                   TRUE,
