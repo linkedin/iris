@@ -337,7 +337,9 @@ insert_plan_query = '''INSERT INTO `plan` (
     `threshold_window`, `threshold_count`, `aggregation_window`,
     `aggregation_reset`, `tracking_key`, `tracking_type`, `tracking_template`
 ) VALUES (
-    (SELECT `id` FROM `target` where `name` = :creator),
+    (SELECT `id` FROM `target` where `name` = :creator AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
     :name,
     :created,
     :description,
@@ -377,12 +379,15 @@ LEFT JOIN `target` ON `target`.`id` = `target_reprioritization`.`target_id`
 LEFT JOIN `mode` `mode_src` ON `mode_src`.`id` = `target_reprioritization`.`src_mode_id`
 LEFT JOIN `mode` `mode_dst` ON `mode_dst`.`id` = `target_reprioritization`.`dst_mode_id`
 WHERE `target`.`name` = %s
+AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
 '''
 
 update_reprioritization_settings_query = '''INSERT INTO target_reprioritization (
     `target_id`, `src_mode_id`, `dst_mode_id`, `count`, `duration`
 ) VALUES (
-    (SELECT `id` FROM `target` WHERE `name` = :target),
+    (SELECT `id` FROM `target` WHERE `name` = :target AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
     :src_mode_id,
     :dst_mode_id,
     :count,
@@ -393,9 +398,10 @@ update_reprioritization_settings_query = '''INSERT INTO target_reprioritization 
 
 delete_reprioritization_settings_query = '''DELETE
 FROM `target_reprioritization`
-WHERE `target_id` = (SELECT `id` from `target` where `name` = :target_name)
-      AND
-      `src_mode_id` = (SELECT `id` from `mode` where `name` = :mode_name)'''
+WHERE `target_id` = (SELECT `id` from `target` where `name` = :target_name AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    ))
+AND `src_mode_id` = (SELECT `id` from `mode` where `name` = :mode_name)'''
 
 get_user_modes_query = '''SELECT
     `priority`.`name` as priority,
@@ -412,7 +418,9 @@ JOIN `target_application_mode` on `target_application_mode`.`priority_id` = `pri
 JOIN `mode` on `mode`.`id` = `target_application_mode`.`mode_id`
 JOIN `target` on `target`.`id` =  `target_application_mode`.`target_id`
 JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
-WHERE `target`.`name` = :username AND `application`.`name` = :app'''
+WHERE `target`.`name` = :username
+AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+AND `application`.`name` = :app'''
 
 get_all_users_app_modes_query = '''SELECT
     `application`.`name` as application,
@@ -443,29 +451,35 @@ insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
 VALUES (
     (SELECT `id` from `priority` WHERE `name` = :priority),
-    (SELECT `id` from `target` WHERE `name` = :name),
+    (SELECT `id` from `target` WHERE `name` = :name AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
     (SELECT `id` from `mode` WHERE `name` = :mode))
 ON DUPLICATE KEY UPDATE
     `target_mode`.`mode_id` = (SELECT `id` from `mode` WHERE `name` = :mode)'''
 
 delete_user_modes_query = '''DELETE FROM `target_mode`
-WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name)
-      AND
-      `priority_id` = (SELECT `id` from `priority` WHERE `name` = :priority)'''
+WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id` =
+                    (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+AND `priority_id` = (SELECT `id` from `priority` WHERE `name` = :priority)'''
 
 insert_target_application_modes_query = '''INSERT
 INTO `target_application_mode`
     (`priority_id`, `target_id`, `mode_id`, `application_id`)
 VALUES (
     (SELECT `id` from `priority` WHERE `name` = :priority),
-    (SELECT `id` from `target` WHERE `name` = :name),
+    (SELECT `id` from `target` WHERE `name` = :name AND `target`.`type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
     (SELECT `id` from `mode` WHERE `name` = :mode),
     (SELECT `id` from `application` WHERE `name` = :app))
 ON DUPLICATE KEY UPDATE
     `target_application_mode`.`mode_id` = (SELECT `id` from `mode` WHERE `name` = :mode)'''
 
 delete_target_application_modes_query = '''DELETE FROM `target_application_mode`
-WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name) AND
+WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )) AND
       `priority_id` = (SELECT `id` from `priority` WHERE `name` = :priority) AND
       `application_id` = (SELECT `id` from `application` WHERE `name` = :app)'''
 
@@ -1544,10 +1558,10 @@ class Templates(object):
                         raise HTTPBadRequest('Invalid jinja template', str(e))
                     contents.append(_content)
 
-            template_id = session.execute(
-                ('INSERT INTO `template` (`name`, `created`, `user_id`) '
-                 'VALUES (:name, now(), (SELECT `id` from `target` where `name` = :creator))'),
-                template_params).lastrowid
+            template_id = session.execute('''INSERT INTO `template` (`name`, `created`, `user_id`)
+                                             VALUES (:name, now(), (SELECT `id` from `target` where `name` = :creator AND `type_id` = (
+                                                        SELECT `id` FROM `target_type` WHERE `name` = 'user'
+                                                      )))''', template_params).lastrowid
 
             for _content in contents:
                 _content.update({'template_id': template_id})

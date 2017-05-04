@@ -93,14 +93,14 @@ def prune_user(engine, username):
     metrics.incr('users_purged')
 
     try:
-        engine.execute('DELETE FROM `target` WHERE `name` = %s', username)
+        engine.execute('''DELETE FROM `target` WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', username)
         logger.info('Deleted inactive user %s', username)
 
     # The user has messages or some other user data which should be preserved.
     # Just mark as inactive.
     except IntegrityError:
         logger.info('Marking user %s inactive', username)
-        engine.execute('UPDATE `target` SET `active` = FALSE WHERE `name` = %s', username)
+        engine.execute('''UPDATE `target` SET `active` = FALSE WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', username)
 
     except SQLAlchemyError as e:
         logger.error('Deleting user %s failed: %s', username, e)
@@ -378,7 +378,7 @@ def batch_remove_ldap_memberships(session, list_id, members):
     for memberships_this_batch in batch_items_from_list(members, deletes_per_match):
         affected = session.execute('''DELETE FROM `mailing_list_membership`
                                       WHERE `list_id` = :list_id
-                                      AND `user_id` IN (SELECT `id` FROM `target` WHERE `name` IN :members)''',
+                                      AND `user_id` IN (SELECT `id` FROM `target` WHERE `name` IN :members AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))''',
                                    {'list_id': list_id, 'members': tuple(memberships_this_batch)}).rowcount
         logger.info('Deleted %s members from list id %s', affected, list_id)
     session.commit()
