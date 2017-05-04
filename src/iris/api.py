@@ -357,7 +357,9 @@ insert_plan_step_query = '''INSERT INTO `plan_notification` (
     :plan_id,
     :step,
     :priority_id,
-    (SELECT `id` FROM `target` WHERE `name` = :target),
+    (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :target AND `target`.`type_id` =
+      (SELECT `target_role`.`type_id` FROM `target_role` WHERE `id` = :role_id)
+    ),
     :template,
     :role_id,
     :repeat,
