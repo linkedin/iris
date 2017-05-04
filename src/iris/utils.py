@@ -59,8 +59,9 @@ def parse_response(response, mode, source):
             return None, 'claim'
         msg_id = session.execute('''SELECT `message`.`id` from `message`
                                     JOIN `target` on `target`.`id` = `message`.`target_id`
+                                    JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
                                     WHERE `target`.`name` = :target_name
-                                    AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                                    AND `target_type`.`name` = 'user'
                                     ORDER BY `message`.`id` DESC
                                     LIMIT 1''', {'target_name': target_name}).scalar()
         session.close()
@@ -74,8 +75,9 @@ def parse_response(response, mode, source):
         msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
                                                         JOIN `target` on `target`.`id` = `message`.`target_id`
                                                         JOIN `incident` on `incident`.`id` = `message`.`incident_id`
+                                                        JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
                                                         WHERE `target`.`name` = :target_name
-                                                        AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                                                        AND `target_type`.`name` = 'user'
                                                         AND `incident`.`active` = TRUE''', {'target_name': target_name})]
         session.close()
         return msg_ids, 'claim_all'

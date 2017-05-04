@@ -375,11 +375,12 @@ reprioritization_setting_query = '''SELECT
     `target_reprioritization`.`count` as `count`,
     `target_reprioritization`.`duration` as `duration`
 FROM `target_reprioritization`
-LEFT JOIN `target` ON `target`.`id` = `target_reprioritization`.`target_id`
-LEFT JOIN `mode` `mode_src` ON `mode_src`.`id` = `target_reprioritization`.`src_mode_id`
-LEFT JOIN `mode` `mode_dst` ON `mode_dst`.`id` = `target_reprioritization`.`dst_mode_id`
+JOIN `target` ON `target`.`id` = `target_reprioritization`.`target_id`
+JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
+JOIN `mode` `mode_src` ON `mode_src`.`id` = `target_reprioritization`.`src_mode_id`
+JOIN `mode` `mode_dst` ON `mode_dst`.`id` = `target_reprioritization`.`dst_mode_id`
 WHERE `target`.`name` = %s
-AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+AND `target_type`.`name` = 'user'
 '''
 
 update_reprioritization_settings_query = '''INSERT INTO target_reprioritization (
@@ -417,9 +418,10 @@ get_target_application_modes_query = '''SELECT
 JOIN `target_application_mode` on `target_application_mode`.`priority_id` = `priority`.`id`
 JOIN `mode` on `mode`.`id` = `target_application_mode`.`mode_id`
 JOIN `target` on `target`.`id` =  `target_application_mode`.`target_id`
+JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
 JOIN `application` on `application`.`id` = `target_application_mode`.`application_id`
 WHERE `target`.`name` = :username
-AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+AND `target_type`.`name` = 'user'
 AND `application`.`name` = :app'''
 
 get_all_users_app_modes_query = '''SELECT
