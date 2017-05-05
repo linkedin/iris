@@ -1,9 +1,7 @@
 all: serve
 
 serve:
-	gunicorn --reload --access-logfile=- -b '0.0.0.0:16649' --worker-class gevent \
-		-e CONFIG=./configs/config.dev.yaml \
-		iris.wrappers.gunicorn:application
+	iris-server ./configs/config.dev.yaml
 
 sender:
 	iris-sender configs/config.dev.yaml
