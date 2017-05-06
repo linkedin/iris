@@ -1213,6 +1213,15 @@ def test_get_incident(iris_incidents):
     assert re.status_code == 404
 
 
+def test_get_invalid_incident(iris_incidents):
+    if len(iris_incidents) < 1:
+        pytest.skip('Skipping this test as we don\'t have enough incidents')
+
+    re = requests.get(base_url + 'incidents?id=job')
+    assert re.status_code == 400
+    assert 'id should be <type \'int\'>' in re.content
+
+
 def test_post_user_modes(sample_user):
     session = requests.Session()
     session.headers = username_header(sample_user)
