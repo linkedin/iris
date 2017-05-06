@@ -246,7 +246,6 @@ def create_messages(incident_id, plan_notification_id):
 
     if not names:
         metrics.incr('role_target_lookup_error')
-
         # Try to get creator of the plan and nag them instead
         name = None
         try:
@@ -255,22 +254,28 @@ def create_messages(incident_id, plan_notification_id):
             pass
 
         if not name:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, role: %s, target: %s, result: %s and failed looking '
-                          'up the plan\'s creator'), incident_id, plan_notification_id, role, target, names)
+            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                          'role: %s, target: %s, result: %s and failed looking '
+                          'up the plan\'s creator'),
+                         incident_id, plan_notification_id, role, target, names)
             return False
 
         try:
             priority_id = api_cache.priorities['low']['id']
         except KeyError:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, role: %s, target: %s, result: %s and failed looking '
-                          'up ID for low priority'), incident_id, plan_notification_id, role, target, names)
+            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                          'role: %s, target: %s, result: %s and failed looking '
+                          'up ID for low priority'),
+                         incident_id, plan_notification_id, role, target, names)
             return False
 
-        logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, role: %s, target: %s, result: %s. '
+        logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                      'role: %s, target: %s, result: %s. '
                       'Reaching out to %s instead and lowering priority to low (%s)'),
                      incident_id, plan_notification_id, role, target, names, name, priority_id)
 
-        body = 'You are receiving this as you created this plan and we can\'t resolve %s of %s at this time.\n\n' % (role, target)
+        body = ('You are receiving this as you created this plan and we can\'t resolve'
+                ' %s of %s at this time.\n\n') % (role, target)
         names = [name]
         changed_target = True
 
@@ -286,8 +291,12 @@ def create_messages(incident_id, plan_notification_id):
                             application_id, target_id, priority_id, body))
 
             if changed_target:
-                connection.commit()  # needed for the lastrowid to exist in the DB to satsify the constraint
-                auditlog.message_change(cursor.lastrowid, auditlog.TARGET_CHANGE, role + '|' + target, name,
+                # needed for the lastrowid to exist in the DB to satsify the constraint
+                connection.commit()
+                auditlog.message_change(cursor.lastrowid,
+                                        auditlog.TARGET_CHANGE,
+                                        role + '|' + target,
+                                        name,
                                         'Changing target as we failed resolving original target')
 
         else:
@@ -833,8 +842,10 @@ def update_message_sent_status(message, status):
 
     session = db.Session()
     try:
-        session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`) VALUES (:message_id, :status)
-                           ON DUPLICATE KEY UPDATE `status` =  :status''', {'message_id': message_id, 'status': status})
+        session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
+                           VALUES (:message_id, :status)
+                           ON DUPLICATE KEY UPDATE `status` =  :status''',
+                        {'message_id': message_id, 'status': status})
         session.commit()
     except (DataError, IntegrityError):
         logger.exception('Failed setting message sent status for message %s', message)
@@ -900,7 +911,8 @@ def fetch_and_send_message():
     if not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
-            spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+            spawn(auditlog.message_change,
+                  message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to hard quota violation.')
 
             # If we know the ID for the mode drop, reflect that for the message
@@ -908,10 +920,11 @@ def fetch_and_send_message():
                 message['mode'] = 'drop'
                 message['mode_id'] = drop_mode_id
             else:
-                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s', message, 'drop')
+                logger.error('Can\'t mark message %s as dropped as we don\'t know the mode ID for %s',
+                             message, 'drop')
 
-            # Render, so we're able to populate the message table with the proper subject/etc as well as
-            # information that it was dropped.
+            # Render, so we're able to populate the message table with the
+            # proper subject/etc as well as information that it was dropped.
             render(message)
             mark_message_as_sent(message)
         return
@@ -934,19 +947,21 @@ def fetch_and_send_message():
     if message.get('body') is None:
         message['body'] = ''
 
-    # Drop this message, and mark it as dropped, rather than sending it, if its body is too long and we were normally
-    # going to send it anyway.
+    # Drop this message, and mark it as dropped, rather than sending it, if its
+    # body is too long and we were normally going to send it anyway.
     body_length = len(message['body'])
     if body_length > MAX_MESSAGE_BODY_LENGTH:
         logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
                     message['message_id'], body_length)
-        spawn(auditlog.message_change, message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
-              'Dropping due to excessive body length (%s > %s chars)' % (body_length, MAX_MESSAGE_BODY_LENGTH))
+        spawn(auditlog.message_change,
+              message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+              'Dropping due to excessive body length (%s > %s chars)' % (
+                  body_length, MAX_MESSAGE_BODY_LENGTH))
 
         metrics.incr('msg_drop_length_cnt')
 
-        # Truncate this here to avoid a duplicate log message in mark_message_as_sent(), as we still need to call
-        # that to update the body/subject
+        # Truncate this here to avoid a duplicate log message in
+        # mark_message_as_sent(), as we still need to call that to update the body/subject
         message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
         if drop_mode_id:
