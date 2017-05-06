@@ -583,14 +583,18 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         if isinstance(values, basestring):
             values = values.split(',')
         for val in values:
-            if op == 'in':
-                if len(values) == 1:
-                    op = 'eq'
-                    val = col_type(values[0])
+            try:
+                if op == 'in':
+                    if len(values) == 1:
+                        op = 'eq'
+                        val = col_type(values[0])
+                    else:
+                        val = tuple([col_type(v) for v in values])
                 else:
-                    val = tuple([col_type(v) for v in values])
-            else:
-                val = col_type(val)
+                    val = col_type(val)
+            except (ValueError, TypeError):
+                raise HTTPBadRequest('invalid argument type',
+                                     '%s should be %s' % (col, col_type))
             val = connection.escape(val)
             if col in filter_escaped_value_transforms:
                 val = filter_escaped_value_transforms[col](val)
