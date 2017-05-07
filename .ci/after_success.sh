@@ -8,6 +8,6 @@ pushd ${TRAVIS_BUILD_DIR}
 
 # Kill the `make serve` executed prior to this, so the e2e coverage tests
 # will properly run. The sender will still be alive.
-killall -9 gunicorn
+killall -9 iris-server
 
 make combined-cov
