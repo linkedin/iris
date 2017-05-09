@@ -10,6 +10,9 @@ test:
 	make unit
 	make e2e
 
+docs:
+	make -C docs html
+
 e2e:
 	py.test -vv ./test/e2etest.py
 
@@ -36,4 +39,4 @@ combined-cov:
 	coverage combine
 	coverage report -m
 
-.PHONY: test
+.PHONY: test docs

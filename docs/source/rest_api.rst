@@ -1,22 +1,25 @@
 REST API
 ========
 
+.. _hmac-auth-label:
+
 HMAC Auth
 ---------
 
-API requests which require auth will have an extra :code:`AUTHORIZATION` HTTP header. It looks like
-this:
+API requests which require API key auth will have an extra
+:code:`AUTHORIZATION` HTTP header. It looks like this:
 
 .. code-block:: none
 
   AUTHORIZATION: hmac $application:$payload
 
-:code:`$payload` is a base64 encoded hmac sha512 digest of the following string. In the resulting base64 string, instances of :code:`+` are replaced with :code:`-`
-and :code:`/` are replaced with :code:`_`.
+:code:`$payload` is a base64 encoded hmac sha512 digest of the following string
+with the app's API key. In the resulting base64 string, instances of :code:`+`
+are replaced with :code:`-` and :code:`/` are replaced with :code:`_`.
 
 .. code-block:: none
 
-  $window $httpMethod $path $body
+  HMAC($api_key, "$window $httpMethod $path $body")
 
 :code:`$window` is the current unix timestamp in seconds, divided by 5, floor'd.
 

@@ -56,6 +56,9 @@ class AutofalconDirective(Directive):
                 continue
             if not docstring:
                 continue
+            if not (handler.__self__.allow_read_no_auth and method == 'GET'):
+                docstring += '\n:reqheader Authorization: see :ref:`hmac-auth-label`.\n'
+
             docstring = prepare_docstring(docstring)
 
             # generate section title if needed
