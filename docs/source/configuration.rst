@@ -85,3 +85,19 @@ In Iris relay config, add the following top level section with **Verification To
 
     slack:
       auth_token: VERIFICATION_TOKEN
+
+
+
+Known issues
+````````````
+
+For message button integration, your relay should be getting POST request from
+Slack every time a button is clicked. If your relay is getting GET instead of
+POST, then you are running into a known bug in Slack. You will need to reset
+the relay webhook state by doing the following:
+
+#. Go to "Interactive Messages" under "Features"
+#. Set HTTPS endpont to a URL under another domain. For example, you can use https://www.google.comw
+#. Click "Save changes" button
+#. Set HTTPS endpoint back to your relay: "https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay"
+#. Click "Save changes" button again
