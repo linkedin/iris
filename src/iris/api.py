@@ -2232,8 +2232,8 @@ class ApplicationEmailIncidents(object):
            Content-Type: application/json
 
            {
-             "irisfoobar@fakeemail.com": "sandbox_high_plan",
-             "racontreras@linkedin.com": "sandbox_high_plan"
+             "incident@fakeemail.cde": "page_oncall_plan",
+             "audit@fakeemail.abc": "audit_plan"
            }
         '''
         connection = db.engine.raw_connection()
