@@ -91,7 +91,7 @@ def secure_filename(filename):
 
 
 class StaticResource(object):
-    allow_read_only = True
+    allow_read_no_auth = True
     frontend_route = False
 
     def __init__(self, path):
@@ -110,7 +110,7 @@ class StaticResource(object):
 
 
 class Index(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -118,7 +118,7 @@ class Index(object):
 
 
 class Stats(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -127,7 +127,7 @@ class Stats(object):
 
 
 class Plans(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -136,7 +136,7 @@ class Plans(object):
 
 
 class Plan(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp, plan):
@@ -149,7 +149,7 @@ class Plan(object):
 
 
 class Incidents(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -159,7 +159,7 @@ class Incidents(object):
 
 
 class Incident(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp, incident):
@@ -168,7 +168,7 @@ class Incident(object):
 
 
 class Messages(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -179,7 +179,7 @@ class Messages(object):
 
 
 class Message(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp, message):
@@ -188,7 +188,7 @@ class Message(object):
 
 
 class Templates(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -197,7 +197,7 @@ class Templates(object):
 
 
 class Template(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp, template):
@@ -208,7 +208,7 @@ class Template(object):
 
 
 class Applications(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -218,7 +218,7 @@ class Applications(object):
 
 
 class Application(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp, application):
@@ -230,7 +230,7 @@ class Application(object):
 
 
 class Login():
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def __init__(self, auth_manager):
@@ -265,7 +265,7 @@ class Login():
 
 
 class Logout():
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -274,7 +274,7 @@ class Logout():
 
 
 class User():
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_get(self, req, resp):
@@ -286,7 +286,7 @@ class User():
 
 
 class JinjaValidate():
-    allow_read_only = False
+    allow_read_no_auth = False
     frontend_route = True
 
     def on_post(self, req, resp):
