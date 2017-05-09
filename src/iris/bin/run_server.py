@@ -7,15 +7,15 @@ import sys
 import multiprocessing
 import gunicorn.app.base
 from gunicorn.six import iteritems
-from iris.config import load_config
-from iris.api import get_api
+import iris
+import iris.config
+import iris.api
 
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
-    def __init__(self, app, options=None):
+    def __init__(self, options=None):
         self.options = options or {}
-        self.application = app
         super(StandaloneApplication, self).__init__()
 
     def load_config(self):
@@ -25,14 +25,19 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
             self.cfg.set(key.lower(), value)
 
     def load(self):
-        return self.application
+        reload(iris)
+        reload(iris.config)
+        reload(iris.api)
+        config = iris.config.load_config(sys.argv[1])
+        return iris.api.get_api(config)
 
 
 def main():
-    config = load_config(sys.argv[1])
+    config = iris.config.load_config(sys.argv[1])
     server = config['server']
 
     options = {
+        'preload_app': False,
         'reload': True,
         'bind': '%s:%s' % (server['host'], server['port']),
         'worker_class': 'gevent',
@@ -40,5 +45,9 @@ def main():
         'workers': (multiprocessing.cpu_count() * 2) + 1
     }
 
-    gunicorn_server = StandaloneApplication(get_api(config), options)
+    gunicorn_server = StandaloneApplication(options)
     gunicorn_server.run()
+
+
+if __name__ == '__main__':
+    main()
