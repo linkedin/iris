@@ -1390,6 +1390,65 @@ class Notifications(object):
         logger.info('Sender used for notifications: %s:%s', *self.sender_addr)
 
     def on_post(self, req, resp):
+        '''
+        Create out of band notifications. Notification is ad-hoc message that's
+        not tied to an incident. To achieve real-time delivery, notifications
+        are not persisted in the Database.
+
+        You can set the priority key to honor target's priority preference or
+        set the mode key to force the message transport.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "role": "secondary-oncall",
+               "target": "test_oncall_team",
+               "subject": "wake up",
+               "body": "something is on fire",
+               "priority": "high"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "role": "user",
+               "target": "test_user",
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "email"
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           []
+
+        :statuscode 200: notification send request queued
+        :statuscode 400: invalid request
+        :statuscode 401: application is not allowed to create out of band notification
+
+        A request is considered invalid if:
+
+        - either target, subject or role is missing
+        - both priority and mode are missing
+        - invalid priority, mode
+        - both tempalte, body and email_html are missing
+        - template, body and email_html is not a string
+        - message queue request rejected by sender
+        '''
+
         message = ujson.loads(req.context['body'])
         msg_attrs = set(message)
         if not msg_attrs >= self.required_attrs:
