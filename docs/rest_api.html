@@ -101,6 +101,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#v0-plans">/v0/plans</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-messages">/v0/messages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-notifications">/v0/notifications</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-target-roles">/v0/target_roles</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-users">/v0/users</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
@@ -181,15 +182,16 @@
   <div class="section" id="rest-api">
 <h1>REST API<a class="headerlink" href="#rest-api" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="hmac-auth">
-<h2>HMAC Auth<a class="headerlink" href="#hmac-auth" title="Permalink to this headline">¶</a></h2>
-<p>API requests which require auth will have an extra <code class="code docutils literal"><span class="pre">AUTHORIZATION</span></code> HTTP header. It looks like
-this:</p>
+<span id="hmac-auth-label"></span><h2>HMAC Auth<a class="headerlink" href="#hmac-auth" title="Permalink to this headline">¶</a></h2>
+<p>API requests which require API key auth will have an extra
+<code class="code docutils literal"><span class="pre">AUTHORIZATION</span></code> HTTP header. It looks like this:</p>
 <div class="highlight-none"><div class="highlight"><pre><span></span>AUTHORIZATION: hmac $application:$payload
 </pre></div>
 </div>
-<p><code class="code docutils literal"><span class="pre">$payload</span></code> is a base64 encoded hmac sha512 digest of the following string. In the resulting base64 string, instances of <code class="code docutils literal"><span class="pre">+</span></code> are replaced with <code class="code docutils literal"><span class="pre">-</span></code>
-and <code class="code docutils literal"><span class="pre">/</span></code> are replaced with <code class="code docutils literal"><span class="pre">_</span></code>.</p>
-<div class="highlight-none"><div class="highlight"><pre><span></span>$window $httpMethod $path $body
+<p><code class="code docutils literal"><span class="pre">$payload</span></code> is a base64 encoded hmac sha512 digest of the following string
+with the app&#8217;s API key. In the resulting base64 string, instances of <code class="code docutils literal"><span class="pre">+</span></code>
+are replaced with <code class="code docutils literal"><span class="pre">-</span></code> and <code class="code docutils literal"><span class="pre">/</span></code> are replaced with <code class="code docutils literal"><span class="pre">_</span></code>.</p>
+<div class="highlight-none"><div class="highlight"><pre><span></span>HMAC($api_key, &quot;$window $httpMethod $path $body&quot;)
 </pre></div>
 </div>
 <p><code class="code docutils literal"><span class="pre">$window</span></code> is the current unix timestamp in seconds, divided by 5, floor&#8217;d.</p>
@@ -245,7 +247,8 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <dl class="post">
 <dt id="post--v0-incidents">
 <code class="descname">POST </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#post--v0-incidents" title="Permalink to this definition">¶</a></dt>
-<dd><p>Create incidents. Id for the new incident will be returned.</p>
+<dd><blockquote>
+<div><p>Create incidents. Id for the new incident will be returned.</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/incidents</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 <span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
@@ -267,13 +270,13 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Status Codes:</th><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.2">201 Created</a> &#8211; incident created</li>
-<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.1">400 Bad Request</a> &#8211; invalid request</li>
-<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.5">404 Not Found</a> &#8211; plan not found</li>
-<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.2">401 Unauthorized</a> &#8211; application is not allowed to create incident for other application</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">statuscode 201:</th><td class="field-body">incident created</td>
+</tr>
+<tr class="field-even field"><th class="field-name">statuscode 400:</th><td class="field-body">invalid request</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">statuscode 404:</th><td class="field-body">plan not found</td>
+</tr>
+<tr class="field-even field"><th class="field-name">statuscode 401:</th><td class="field-body">application is not allowed to create incident for other application</td>
 </tr>
 </tbody>
 </table>
@@ -284,6 +287,19 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <li>context json blob is longer than 655355 bytes</li>
 <li>none of the templates used in the plan supports the given application</li>
 </ul>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="get">
@@ -390,6 +406,86 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 </dd></dl>
 
 </div>
+<div class="section" id="v0-notifications">
+<h3>/v0/notifications<a class="headerlink" href="#v0-notifications" title="Permalink to this headline">¶</a></h3>
+<dl class="post">
+<dt id="post--v0-notifications">
+<code class="descname">POST </code><code class="descname">/v0/notifications</code><a class="headerlink" href="#post--v0-notifications" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Create out of band notifications. Notification is ad-hoc message that&#8217;s
+not tied to an incident. To achieve real-time delivery, notifications
+are not persisted in the Database.</p>
+<p>You can set the priority key to honor target&#8217;s priority preference or
+set the mode key to force the message transport.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;secondary-oncall&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_oncall_team&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;priority&quot;</span><span class="p">:</span> <span class="s2">&quot;high&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_user&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[]</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">statuscode 200:</th><td class="field-body">notification send request queued</td>
+</tr>
+<tr class="field-even field"><th class="field-name">statuscode 400:</th><td class="field-body">invalid request</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">statuscode 401:</th><td class="field-body">application is not allowed to create out of band notification</td>
+</tr>
+</tbody>
+</table>
+<p>A request is considered invalid if:</p>
+<ul class="simple">
+<li>either target, subject or role is missing</li>
+<li>both priority and mode are missing</li>
+<li>invalid priority, mode</li>
+<li>both tempalte, body and email_html are missing</li>
+<li>template, body and email_html is not a string</li>
+<li>message queue request rejected by sender</li>
+</ul>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
 <div class="section" id="v0-target-roles">
 <h3>/v0/target_roles<a class="headerlink" href="#v0-target-roles" title="Permalink to this headline">¶</a></h3>
 <dl class="get">
@@ -424,7 +520,8 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <dl class="delete">
 <dt id="delete--v0-users-reprioritization-username-src_mode_name">
 <code class="descname">DELETE </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#delete--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
-<dd><p>Delete a reprioritization mode for a user&#8217;s mode setting</p>
+<dd><blockquote>
+<div><p>Delete a reprioritization mode for a user&#8217;s mode setting</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">DELETE</span> <span class="nn">/v0/users/reprioritization/{username}/{src_mode_name}</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 </pre></div>
@@ -436,6 +533,19 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <span class="p">[]</span>
 </pre></div>
 </div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 </div>
@@ -444,7 +554,8 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <dl class="get">
 <dt id="get--v0-modes">
 <code class="descname">GET </code><code class="descname">/v0/modes</code><a class="headerlink" href="#get--v0-modes" title="Permalink to this definition">¶</a></dt>
-<dd><p>List all iris modes</p>
+<dd><blockquote>
+<div><p>List all iris modes</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/modes</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 </pre></div>
@@ -456,6 +567,19 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <span class="p">[</span><span class="s2">&quot;sms&quot;</span><span class="p">,</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span> <span class="s2">&quot;call&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 </div>
@@ -464,7 +588,8 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <dl class="get">
 <dt id="get--v0-applications-app_name-incident_emails">
 <code class="descname">GET </code><code class="descname">/v0/applications/{app_name}/incident_emails</code><a class="headerlink" href="#get--v0-applications-app_name-incident_emails" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get email addresses which will create incidents on behalf of this application</p>
+<dd><blockquote>
+<div><p>Get email addresses which will create incidents on behalf of this application</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/applications/{app_name}/incident_emails</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 </pre></div>
@@ -479,6 +604,19 @@ and <code class="code docutils literal"><span class="pre">/</span></code> are re
 <span class="p">}</span>
 </pre></div>
 </div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="get">
