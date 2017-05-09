@@ -633,7 +633,7 @@ class AuthMiddleware(object):
         req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         method = req.method
 
-        if resource.allow_read_only and method == 'GET':
+        if resource.allow_read_no_auth and method == 'GET':
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
@@ -669,7 +669,7 @@ class AuthMiddleware(object):
         req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         method = req.method
 
-        if resource.allow_read_only and method == 'GET':
+        if resource.allow_read_no_auth and method == 'GET':
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
@@ -794,7 +794,7 @@ class ACLMiddleware(object):
 
 
 class Plan(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, plan_id):
         if plan_id.isdigit():
@@ -860,7 +860,7 @@ class Plan(object):
 
 
 class Plans(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         '''
@@ -1022,7 +1022,7 @@ class Plans(object):
 
 
 class Incidents(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         fields = req.get_param_as_list('fields')
@@ -1174,7 +1174,7 @@ class Incidents(object):
 
 
 class Incident(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, incident_id):
         '''
@@ -1262,7 +1262,7 @@ class Incident(object):
 
 
 class Message(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, message_id):
         '''
@@ -1312,7 +1312,7 @@ class Message(object):
 
 
 class MessageAuditLog(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, message_id):
         '''
@@ -1350,7 +1350,7 @@ class MessageAuditLog(object):
 
 
 class Messages(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         fields = req.get_param_as_list('fields')
@@ -1382,7 +1382,7 @@ class Messages(object):
 
 
 class Notifications(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
     def __init__(self, sender_addr):
@@ -1444,7 +1444,7 @@ class Notifications(object):
 
 
 class Template(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
             if template_id.isdigit():
@@ -1512,7 +1512,7 @@ class Template(object):
 
 
 class Templates(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         query_limit = req.get_param_as_int('limit')
@@ -1610,7 +1610,7 @@ class Templates(object):
 
 
 class UserModes(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     enforce_user = True
 
     def on_get(self, req, resp, username):
@@ -1697,7 +1697,7 @@ class UserModes(object):
 
 
 class TargetRoles(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         '''
@@ -1744,7 +1744,7 @@ class TargetRoles(object):
 
 
 class Targets(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp):
         session = db.Session()
@@ -1772,7 +1772,7 @@ class Targets(object):
 
 
 class Target(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
         session = db.Session()
@@ -1803,7 +1803,7 @@ class Target(object):
 
 
 class Application(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
         connection = db.engine.raw_connection()
@@ -2031,7 +2031,7 @@ class Application(object):
 
 
 class ApplicationQuota(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
         connection = db.engine.raw_connection()
@@ -2123,7 +2123,7 @@ class ApplicationQuota(object):
 
 
 class ApplicationKey(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp, app_name):
         if not req.context['username']:
@@ -2153,7 +2153,7 @@ class ApplicationKey(object):
 
 
 class ApplicationEmailIncidents(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp, app_name):
         '''
@@ -2256,7 +2256,7 @@ class ApplicationEmailIncidents(object):
 
 
 class ApplicationRename(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_put(self, req, resp, app_name):
         if not req.context['is_admin']:
@@ -2297,7 +2297,7 @@ class ApplicationRename(object):
 
 
 class ApplicationPlans(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
         '''
@@ -2367,7 +2367,7 @@ class ApplicationPlans(object):
 
 
 class Applications(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
@@ -2445,7 +2445,7 @@ class Applications(object):
 
 
 class Modes(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp):
         '''
@@ -2480,7 +2480,7 @@ class Modes(object):
 
 
 class Priorities(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
@@ -2498,7 +2498,7 @@ class Priorities(object):
 
 
 class User(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     enforce_user = True
 
     def on_get(self, req, resp, username):
@@ -2560,7 +2560,7 @@ class User(object):
 
 
 class ResponseMixin(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def __init__(self, iris_sender_app):
         self.iris_sender_app = iris_sender_app
@@ -2896,7 +2896,7 @@ class ResponseSlack(ResponseMixin):
 
 
 class TwilioDeliveryUpdate(object):
-    allow_read_only = False
+    allow_read_no_auth = False
 
     def on_post(self, req, resp):
         post_dict = falcon.uri.parse_query_string(req.context['body'])
@@ -2922,7 +2922,7 @@ class TwilioDeliveryUpdate(object):
 
 
 class Reprioritization(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     enforce_user = True
 
     def on_get(self, req, resp, username):
@@ -2992,7 +2992,7 @@ class Reprioritization(object):
 
 
 class ReprioritizationMode(object):
-    allow_read_only = False
+    allow_read_no_auth = False
     enforce_user = True
 
     def on_delete(self, req, resp, username, src_mode_name):
@@ -3030,7 +3030,7 @@ class ReprioritizationMode(object):
 
 
 class Healthcheck(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def __init__(self, path):
         self.healthcheck_path = path
@@ -3065,7 +3065,7 @@ class Healthcheck(object):
 
 
 class Stats(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp):
         queries = {
@@ -3132,7 +3132,7 @@ class Stats(object):
 
 
 class ApplicationStats(object):
-    allow_read_only = True
+    allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
         app = cache.applications.get(app_name)

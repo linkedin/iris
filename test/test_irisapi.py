@@ -42,7 +42,7 @@ class TestHealthcheck(falcon.testing.TestCase):
 class TestAuth(falcon.testing.TestCase):
 
     class DummyResource(object):
-        allow_read_only = False
+        allow_read_no_auth = False
 
         def on_get(self, req, resp):
             resp.status = falcon.HTTP_200
@@ -94,7 +94,7 @@ class TestAuth(falcon.testing.TestCase):
         self.assertEqual(result.status_code, 401)
 
         # Test read only
-        dummy.allow_read_only = True
+        dummy.allow_read_no_auth = True
         result = self.simulate_get(path='/foo/bar')
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.content, 'Hello world')
