@@ -2297,7 +2297,7 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     assert re.headers['X-IRIS-INCIDENT'] == 'Not created'
 
 
-def test_ui_routes(sample_user, sample_admin_user):
+def test_ui_routes_redirect(sample_user, sample_admin_user):
     # When not logged in, various pages redirect to login page
     re = requests.get(ui_url + 'user', allow_redirects=False)
     assert re.status_code == 302
@@ -2311,10 +2311,14 @@ def test_ui_routes(sample_user, sample_admin_user):
     assert re.status_code == 302
     assert re.headers['Location'] == '/login/'
 
+
+def test_ui_route_login_page(sample_user, sample_admin_user):
     # And login page displays itself
     re = requests.get(ui_url + 'login', allow_redirects=False)
     assert re.status_code == 200
 
+
+def test_ui_routes(sample_user, sample_admin_user):
     # And allows itself to work & login & set the beaker session cookie
     re = requests.post(ui_url + 'login', allow_redirects=False, data={'username': sample_user, 'password': 'foo'})
     assert re.status_code == 302

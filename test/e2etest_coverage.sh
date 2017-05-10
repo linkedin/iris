@@ -4,7 +4,7 @@ cd $(dirname ${CURDIR})
 if [ ! -z "$SUPPORT_COMBINED_COVERAGE" ]; then
   export COVERAGE_FILE=.coverage.e2e
 fi
-coverage run --source=iris src/iris/bin/run_server.py configs/config.dev.yaml &>/dev/null &
+coverage run --source=iris ./test/e2eserver.py configs/config.dev.yaml &>/dev/null &
 pid=$!
 sleep 2
 if ! kill -0 "$pid" ; then
