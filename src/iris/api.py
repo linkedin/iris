@@ -3310,7 +3310,7 @@ class ApplicationStats(object):
 
 def update_cache_worker():
     while True:
-        logger.info('Reinitializing cache')
+        logger.debug('Reinitializing cache')
         cache.init()
         sleep(60)
 

@@ -37,6 +37,14 @@ pip install -e '.[prometheus]'
 For list of extra features, please see `extras_require` setting in `setup.py`.
 
 
+Run everything
+--------------
+
+```bash
+forego start
+```
+
+
 Run API server
 --------------
 
@@ -51,7 +59,6 @@ Run sender
 ```bash
 iris-sender configs/config.dev.yaml
 ```
-
 
 Tests
 -----
