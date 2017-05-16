@@ -47,7 +47,7 @@ setuptools.setup(
     },
     entry_points={
         'console_scripts': [
-            'iris-server = iris.bin.run_server:main',
+            'iris-dev = iris.bin.run_server:main',
             'iris = iris.bin.run_server:main',
             'iris-sender = iris.bin.sender:main',
             'iris-sync-targets = iris.bin.sync_targets:main',

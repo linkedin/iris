@@ -1,7 +1,7 @@
 all: serve
 
 serve:
-	iris-server ./configs/config.dev.yaml
+	iris-dev ./configs/config.dev.yaml
 
 sender:
 	iris-sender configs/config.dev.yaml

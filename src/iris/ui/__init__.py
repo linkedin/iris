@@ -5,6 +5,7 @@ from jinja2 import FileSystemLoader
 from jinja2.sandbox import SandboxedEnvironment
 from webassets import Environment as AssetsEnvironment, Bundle
 from webassets.ext.jinja2 import AssetsExtension
+from webassets.script import CommandLineEnvironment
 import os
 import ujson
 import requests
@@ -63,6 +64,10 @@ default_route = '/incidents'
 
 
 jinja2_env.globals['default_route'] = default_route
+
+
+def build_assets():
+    CommandLineEnvironment(assets_env, logger).build()
 
 
 def login_url(req):
