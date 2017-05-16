@@ -2211,6 +2211,31 @@ class ApplicationKey(object):
         resp.body = ujson.dumps({'key': key})
 
 
+class ApplicationReKey(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp, app_name):
+        if not req.context['is_admin']:
+            raise HTTPUnauthorized('You must be an admin to rekey an app', '')
+
+        data = {
+            'app_name': app_name,
+            'new_key': hashlib.sha256(os.urandom(32)).hexdigest()
+        }
+
+        session = db.Session()
+        affected = session.execute('''UPDATE `application` SET `key` = :new_key WHERE `name` = :app_name''', data).rowcount
+        session.commit()
+        session.close()
+
+        if not affected:
+            raise HTTPBadRequest('No rows changed; app name likely incorrect', '')
+
+        logger.info('Admin user %s has re-key\'d app %s', req.context['username'], app_name)
+
+        resp.body = '[]'
+
+
 class ApplicationEmailIncidents(object):
     allow_read_no_auth = False
 
@@ -3362,6 +3387,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     api.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
     api.add_route('/v0/applications/{app_name}/key', ApplicationKey())
+    api.add_route('/v0/applications/{app_name}/rekey', ApplicationReKey())
     api.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
     api.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
     api.add_route('/v0/applications/{app_name}/plans', ApplicationPlans())

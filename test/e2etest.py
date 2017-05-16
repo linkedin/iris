@@ -2186,6 +2186,31 @@ def test_view_app_key(sample_application_name, sample_admin_user):
     assert re.json().viewkeys() == {'key'}
 
 
+def test_change_app_key(sample_application_name, sample_admin_user):
+    re = requests.post(base_url + 'applications/%s/rekey' % sample_application_name)
+    assert re.status_code == 401
+    assert re.json()['title'] == 'You must be an admin to rekey an app'
+
+    re = requests.post(base_url + 'applications/%s/rekey' % 'fakeapp123', headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'No rows changed; app name likely incorrect'
+
+    re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    old_key = re.json()['key']
+    assert old_key
+
+    re = requests.post(base_url + 'applications/%s/rekey' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    new_key = re.json()['key']
+    assert new_key
+
+    assert old_key != new_key
+
+
 def test_twilio_delivery_update(fake_message_id):
     if not fake_message_id:
         pytest.skip('We do not have enough data in DB to do this test')
