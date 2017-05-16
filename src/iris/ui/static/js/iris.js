@@ -1877,8 +1877,10 @@ iris = {
       applicationSavebutton: '#application-save-button',
       applicationRenameButton: '#application-rename-button',
       applicationDeleteButton: '#application-delete-button',
+      applicationRekeyButton: '#application-rekey-button',
       showRenameModalButton: '#show-rename-modal-button',
       showDeleteModalButton: '#show-delete-modal-button',
+      showRekeyModalButton: '#show-rekey-modal-button',
       removeVariableButton: '.remove-variable',
       removeOwnerButton: '.remove-owner',
       showApiKeyButton: '#show-api-key-button',
@@ -1911,8 +1913,10 @@ iris = {
       data.$page.on('click', data.applicationSavebutton, this.saveApplication.bind(this));
       data.$page.on('click', data.showRenameModalButton, this.showRenameModal.bind(this));
       data.$page.on('click', data.showDeleteModalButton, this.showDeleteModal.bind(this));
+      data.$page.on('click', data.showRekeyModalButton, this.showRekeyModal.bind(this));
       data.$page.on('click', data.applicationRenameButton, this.renameApplication.bind(this));
       data.$page.on('click', data.applicationDeleteButton, this.deleteApplication.bind(this));
+      data.$page.on('click', data.applicationRekeyButton, this.rekeyApplication.bind(this));
       data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
       data.$page.on('click', data.dangerousActionsToggle, this.toggleDangerousActions.bind(this));
       data.$page.on('click', data.removeVariableButton, function() {
@@ -2201,6 +2205,9 @@ iris = {
     showDeleteModal: function() {
       $('#delete-app-modal').modal();
     },
+    showRekeyModal: function() {
+      $('#rekey-app-modal').modal();
+    },
     renameApplication: function() {
       var self = this, $nameBox = $('#app-new-name-box'),
           newName = $.trim($nameBox.val());
@@ -2208,7 +2215,7 @@ iris = {
         $nameBox.focus();
         return;
       }
-      var $renameBtn = $('#application-rename-button');
+      var $renameBtn = $(this.data.applicationRenameButton);
       $renameBtn.prop('disabled', true);
       $.ajax({
         url: '/v0/applications/' + this.data.application + '/rename',
@@ -2229,7 +2236,7 @@ iris = {
       });
     },
     deleteApplication: function() {
-      var $deleteBtn = $('#application-delete-button');
+      var $deleteBtn = $(this.data.applicationDeleteButton);
       $deleteBtn.prop('disabled', true);
       $.ajax({
         url: '/v0/applications/' + this.data.application,
@@ -2244,6 +2251,23 @@ iris = {
         $deleteBtn.prop('disabled', false);
       }).always(function() {
         $('#delete-app-modal').modal('hide');
+      });
+    },
+    rekeyApplication: function() {
+      var $rekeyBtn = $(this.data.applicationRekeyButton);
+      $rekeyBtn.prop('disabled', true);
+      $.ajax({
+        url: '/v0/applications/' + this.data.application + '/rekey',
+        method: 'POST',
+        contentType: 'application/json'
+      }).done(function(r) {
+        iris.createAlert('Successfully rekey\'d application', 'success')
+      }).fail(function(r) {
+        iris.createAlert('Failed re-keying application: ' + r.responseJSON['title'])
+      }).always(function() {
+        $('#rekey-app-modal').modal('hide');
+        $('body').scrollTop(0);
+        $rekeyBtn.prop('disabled', false);
       });
     },
     showLoader: function() {
