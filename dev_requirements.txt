@@ -4,10 +4,8 @@ mock==2.0.0
 pytest==3.0.5
 pytest-mock==1.5.0
 pytest-cov
-# for py26 mock dep
-ordereddict
 flake8
 tox
-Sphinx
+Sphinx==1.5.6
 sphinxcontrib-httpdomain
 sphinx_rtd_theme
