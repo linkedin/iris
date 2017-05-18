@@ -27,9 +27,6 @@ from ldap.filter import escape_filter_chars
 import time
 ldap_pagination_size = 1000
 
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-requests.packages.urllib3.disable_warnings(SNIMissingWarning)
-requests.packages.urllib3.disable_warnings(InsecurePlatformWarning)
 logging.getLogger('requests').setLevel(logging.WARNING)
 
 
