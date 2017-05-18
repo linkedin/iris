@@ -1,8 +1,7 @@
-[![Build Status](https://travis-ci.org/linkedin/iris.svg?branch=master)](https://travis-ci.org/linkedin/iris)
-[![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause)
-
-Iris
+[Iris](http://iris.claims) [![Build Status](https://travis-ci.org/linkedin/iris.svg?branch=master)](https://travis-ci.org/linkedin/iris) [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause) [![Gitter chat](https://badges.gitter.im/irisoncall/Lobby.png)](https://gitter.im/irisoncall/Lobby)
 ========
+
+<img src="https://github.com/linkedin/iris/raw/master/src/iris/ui/static/images/iris-small.png" width="100">
 
 Iris core, API, UI and sender service
 
@@ -45,7 +44,7 @@ forego start
 ```
 
 
-Run API server
+Run web server
 --------------
 
 ```bash
