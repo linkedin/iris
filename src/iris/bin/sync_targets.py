@@ -16,10 +16,6 @@ from phonenumbers.phonenumberutil import NumberParseException
 from iris.api import load_config
 from iris import metrics
 
-from requests.packages.urllib3.exceptions import (
-    InsecureRequestWarning, SNIMissingWarning, InsecurePlatformWarning
-)
-
 # Used for the optional ldap mailing list resolving functionality
 import ldap
 from ldap.controls import SimplePagedResultsControl
