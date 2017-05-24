@@ -1,0 +1,16 @@
+machine:
+  services:
+    - docker
+  python:
+      version: 2.7.11
+
+dependencies:
+  override:
+    # stop mysql server in favor of our own docker mysql
+    - sudo service mysql stop
+    - bash .ci/install.sh
+
+test:
+  override:
+    - bash .ci/script.sh
+    - bash .ci/after_success.sh || echo "coverage collection failed"
