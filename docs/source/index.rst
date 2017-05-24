@@ -1,7 +1,10 @@
 Iris - Escalation System
 ========================
 
-Iris is a highly configurable and flexible service for escalations.
+.. _Oncall: http://oncall.tools
+.. _Iris: http://iris.claims
+
+Iris_ is a highly configurable and flexible service for escalations.
 
 .. image:: _static/demo.png
     :width: 100%
@@ -24,6 +27,11 @@ organizations to notify them of events. Here is a quick summary of its features:
 - Professionally-designed rich frontend facilitating great usability, to make
   creating and managing complex escalation plans a breeze.
 - High availability, distributed by nature.
+
+At linkedin, we use Iris together with our open-source shift scheduling system
+Oncall_. The combination of the two provide a way to manage on-call schedules
+and ensure that the person scheduled as on-call at a given time is notified of
+any issues.
 
 
 Table of contents
