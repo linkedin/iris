@@ -3,6 +3,11 @@ Iris - Escalation System
 
 Iris is a highly configurable and flexible service for escalations.
 
+.. image:: _static/demo.png
+    :width: 100%
+    :align: center
+    :alt: Iris demo
+
 Iris allows you to easily escalate to individual users and teams in your
 organizations to notify them of events. Here is a quick summary of its features:
 
