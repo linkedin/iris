@@ -1,4 +1,4 @@
-[Iris](http://iris.claims) [![Build Status](https://travis-ci.org/linkedin/iris.svg?branch=master)](https://travis-ci.org/linkedin/iris) [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause) [![Gitter chat](https://badges.gitter.im/irisoncall/Lobby.png)](https://gitter.im/irisoncall/Lobby)
+[Iris](http://iris.claims) [![Build Status](https://circleci.com/gh/linkedin/iris.svg?style=shield)](https://circleci.com/gh/linkedin/iris) [![License](https://img.shields.io/badge/License-BSD%202--Clause-orange.svg)](https://opensource.org/licenses/BSD-2-Clause) [![Gitter chat](https://badges.gitter.im/irisoncall/Lobby.png)](https://gitter.im/irisoncall/Lobby)
 ========
 
 Iris core, API, UI and sender service
