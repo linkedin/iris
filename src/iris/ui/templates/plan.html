@@ -272,7 +272,9 @@
     </p>
     <p>
       <label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label>
-      <input type="text" class="form-control border-bottom typeahead" placeholder="team name" data-type="target" value="{{target}}" data-url-type="team">
+      <input type="text" class="form-control border-bottom typeahead"
+             placeholder="{{target_role_type}} name" data-type="target"
+             value="{{target}}" data-url-type="{{target_role_type}}">
     </p>
     <p>
       <label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label>

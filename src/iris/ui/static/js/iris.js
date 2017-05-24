@@ -181,6 +181,15 @@ iris = {
           path = this.data.path = location[location.length - 1],
           self = this;
 
+      if (this.data.blankModel.target_roles.length >= 1) {
+        var default_role = this.data.blankModel.target_roles[0].name,
+            default_role_type = this.data.blankModel.target_roles[0].type;
+        this.data.blankModel.role = default_role;
+        this.data.blankModel.target_role_type = default_role_type;
+        this.data.blankModel.steps[0][0].role = default_role;
+        this.data.blankModel.steps[0][0].target_role_type = default_role_type;
+      }
+
       Handlebars.registerPartial('plan-step', $('#plan-step-template').html());
       Handlebars.registerPartial('plan-notification', $('#plan-notification-template').html());
       Handlebars.registerPartial('plan-tracking-notification', this.data.trackingTemplateSource);
@@ -237,7 +246,7 @@ iris = {
           }
         });
 
-        //if path is new, render in edit mode.
+        // if path is new, render in edit mode.
         if (plan === 'new') {
           self.data.$page.html(template(self.data.blankModel));
           iris.changeTitle('New Plan');
@@ -250,7 +259,7 @@ iris = {
             self.data.ajaxResponse = response; //set response in root object for clone plan functionality.
             response.viewMode = self.data.viewMode;
             response.availableTemplates = self.data.blankModel.availableTemplates;
-            //convert 'repeat' field to 'count' for frontend
+            // convert 'repeat' field to 'count' for frontend
             for (i = 0; i < response.steps.length; i++) {
               for (j = 0; j < response.steps[i].length; j++) {
                 response.steps[i][j].count = response.steps[i][j].repeat + 1;
@@ -365,13 +374,16 @@ iris = {
     },
     updateValues: function(){
       var $this = $(this);
-      //Update selected attribute in the DOM on change. This is needed for drag & drop to copy over attribute states.
+      // Update selected attribute in the DOM on change. This is needed for
+      // drag & drop to copy over attribute states.
       if ( $this.is('select') ) {
         $('option:selected', this).attr('selected',true).siblings().removeAttr('selected');
       }
 
       if ($this.is('select[data-type="role"]')) {
-        $this.parents('.plan-notification').find('input[data-type="target"]').val('').attr('placeholder', $this.find('option:selected').attr('data-url-type') + ' name');
+        $this.parents('.plan-notification').find('input[data-type="target"]').val('').attr(
+            'placeholder',
+            $this.find('option:selected').attr('data-url-type') + ' name');
         iris.typeahead.init();
       }
 
@@ -382,7 +394,7 @@ iris = {
           template = Handlebars.compile(this.data.notificationTemplateSource);
 
       $step.find('.plan-notification-add').before(template(this.data.blankModel));
-      //re-init typeahead
+      // re-init typeahead
       iris.typeahead.init();
     },
     removeNotification: function(){
