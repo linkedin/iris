@@ -11,7 +11,12 @@ INSERT INTO `target_type` VALUES (3,'mailing-list'),(2,'team'),(1,'user');
 UNLOCK TABLES;
 
 LOCK TABLES `target_role` WRITE;
-INSERT INTO `target_role` VALUES (8,'user',1),(17,'manager',1),(35,'team',2),(44,'oncall-primary',2),(45,'oncall-secondary',2);
+INSERT INTO `target_role` VALUES
+    (8,'user',1),
+    (17,'manager',2),
+    (35,'team',2),
+    (44,'oncall-primary',2),
+    (45,'oncall-secondary',2);
 UNLOCK TABLES;
 
 LOCK TABLES `target` WRITE;
