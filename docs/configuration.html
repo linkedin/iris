@@ -251,6 +251,20 @@
 </pre></div>
 </div>
 </div>
+<div class="section" id="known-issues">
+<h3>Known issues<a class="headerlink" href="#known-issues" title="Permalink to this headline">¶</a></h3>
+<p>For message button integration, your relay should be getting POST request from
+Slack every time a button is clicked. If your relay is getting GET instead of
+POST, then you are running into a known bug in Slack. You will need to reset
+the relay webhook state by doing the following:</p>
+<ol class="arabic simple">
+<li>Go to &#8220;Interactive Messages&#8221; under &#8220;Features&#8221;</li>
+<li>Set HTTPS endpont to a URL under another domain. For example, you can use <a class="reference external" href="https://www.google.comw">https://www.google.comw</a></li>
+<li>Click &#8220;Save changes&#8221; button</li>
+<li>Set HTTPS endpoint back to your relay: &#8220;<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>&#8220;</li>
+<li>Click &#8220;Save changes&#8221; button again</li>
+</ol>
+</div>
 </div>
 </div>
 
