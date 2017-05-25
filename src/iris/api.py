@@ -2322,6 +2322,23 @@ class ApplicationEmailIncidents(object):
 
             # Configure new/existing ones
             for email_address, plan_name in email_to_plans.iteritems():
+
+                # If this plan does not have steps that support this app, block this
+                app_template_count = session.execute('''
+                    SELECT EXISTS (
+                        SELECT 1 FROM
+                        `plan_notification`
+                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                        WHERE `plan_notification`.`plan_id` = (SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name)
+                        AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)
+                    )
+                ''', {'app_name': app_name, 'plan_name': plan_name}).scalar()
+
+                if not app_template_count:
+                    session.close()
+                    raise HTTPBadRequest('Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (email_address, plan_name))
+
                 try:
                     session.execute('''INSERT INTO `incident_emails` (`application_id`, `email`, `plan_name`)
                                        VALUES ((SELECT `id` FROM `application` WHERE `name` = :app_name), :email_address, :plan_name)
@@ -2835,7 +2852,25 @@ class ResponseGmail(ResponseMixin):
                 if 'In-Reply-To' in email_headers:
                     logger.warning('Not creating incident for email %s as this is an email reply, rather than a fresh email.', to)
                     resp.status = HTTP_204
-                    resp.set_header('X-IRIS-INCIDENT', 'Not created')
+                    resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
+                    return
+
+                app_template_count = session.execute('''
+                    SELECT EXISTS (
+                        SELECT 1 FROM
+                        `plan_notification`
+                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                        WHERE `plan_notification`.`plan_id` = :plan_id
+                        AND `template_content`.`application_id` = :app_id
+                    )
+                ''', {'app_id': email_check_result['application_id'], 'plan_id': email_check_result['plan_id']}).scalar()
+
+                if not app_template_count:
+                    session.close()
+                    logger.warning('Not creating incident for email %s as no template actions for this app.', to)
+                    resp.status = HTTP_204
+                    resp.set_header('X-IRIS-INCIDENT', 'Not created (no template actions for this app)')
                     return
 
                 incident_info = {

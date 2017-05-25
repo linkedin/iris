@@ -59,23 +59,27 @@ INSERT INTO `plan` VALUES
     (28,'demo-test-incident-post','2017-01-25 23:26:45',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
     (31,'demo-test-foo','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',2,900,10,300,300,NULL,NULL,NULL),
     (37,'demo-test-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
-    (38,'demo-test-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL);
+    (38,'demo-test-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
+    (39,'demo-test-other-app-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL);
 UNLOCK TABLES;
 
 LOCK TABLES `plan_active` WRITE;
 INSERT INTO `plan_active` VALUES
     ('demo-test-foo',31),
-    ('demo-test-incident-post',38);
+    ('demo-test-incident-post',38),
+    ('demo-test-other-app-incident-post',39);
 UNLOCK TABLES;
 
 LOCK TABLES `template` WRITE;
 INSERT INTO `template` VALUES
     (12,'test_template','2017-01-25 15:26:45',1),
-    (13,'test_template','2017-01-25 15:30:35',1);
+    (13,'test_template','2017-01-25 15:30:35',1),
+    (14,'test_template_2','2017-01-25 15:30:35',1);
 UNLOCK TABLES;
 
 LOCK TABLES `template_active` WRITE;
 INSERT INTO `template_active` VALUES ('test_template',13);
+INSERT INTO `template_active` VALUES ('test_template_2',14);
 UNLOCK TABLES;
 
 LOCK TABLES `template_content` WRITE;
@@ -87,7 +91,8 @@ INSERT INTO `template_content` VALUES
     (13,8,8,'','test_sms',NULL,NULL,NULL,NULL,NULL,NULL),
     (13,8,17,'','test_slack',NULL,NULL,NULL,NULL,NULL,NULL),
     (13,8,26,'','test_call',NULL,NULL,NULL,NULL,NULL,NULL),
-    (13,8,35,'email_subject','email_body',NULL,NULL,NULL,NULL,NULL,NULL);
+    (13,8,35,'email_subject','email_body',NULL,NULL,NULL,NULL,NULL,NULL),
+    (14,10,35,'email_subject','email_body',NULL,NULL,NULL,NULL,NULL,NULL);
 UNLOCK TABLES;
 
 LOCK TABLES `template_variable` WRITE;
@@ -132,7 +137,8 @@ INSERT INTO `plan_notification` VALUES
     (28,31,2,'test_template',4,44,8,1,300),
     (29,37,1,'test_template',4,35,35,0,600),
     (30,37,1,'test_template',4,44,17,1,300),
-    (31,38,1,'test_template',4,35,35,0,600);
+    (31,38,1,'test_template',4,35,35,0,600),
+    (32,39,1,'test_template_2',4,35,35,0,600);
 UNLOCK TABLES;
 
 LOCK TABLES `response` WRITE;
