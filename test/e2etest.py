@@ -212,10 +212,54 @@ def sample_template_name(sample_application_name, sample_application_name2):
 
 
 @pytest.fixture(scope='module')
-def sample_plan_name():
-    '''List of iris messages'''
+def sample_plan_name(sample_application_name):
+    '''Get a plan name that is guaranteed to work with our sample_application_name'''
+
+    if not sample_application_name:
+        return None
+
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('SELECT `name` FROM `plan_active` LIMIT 1')
+        cursor.execute('''SELECT `name`
+                          FROM `plan_active` WHERE
+                          EXISTS (
+                              SELECT 1 FROM
+                              `plan_notification`
+                              JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                              JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                              WHERE `plan_notification`.`plan_id` = `plan_active`.`plan_id`
+                              AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = %s)
+                          ) LIMIT 1''', [sample_application_name])
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+
+
+@pytest.fixture(scope='module')
+def sample_plan_name2(sample_application_name2, sample_application_name):
+    '''Get a plan name that is guaranteed to work with our sample_application_name2 and guaranteed to not work with sample_application_name'''
+
+    if not sample_application_name2 or not sample_application_name:
+        return None
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''SELECT `name`
+                          FROM `plan_active` WHERE
+                          EXISTS (
+                              SELECT 1 FROM
+                              `plan_notification`
+                              JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                              JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                              WHERE `plan_notification`.`plan_id` = `plan_active`.`plan_id`
+                              AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = %s)
+                          )
+                          AND NOT EXISTS(
+                              SELECT 1 FROM
+                              `plan_notification`
+                              JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                              JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                              WHERE `plan_notification`.`plan_id` = `plan_active`.`plan_id`
+                              AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = %s)
+                          ) LIMIT 1''', [sample_application_name2, sample_application_name])
         result = cursor.fetchone()
         if result:
             return result[0]
@@ -2231,7 +2275,10 @@ def test_twilio_delivery_update(fake_message_id):
     assert re.json()['twilio_delivery_status'] == 'delivered'
 
 
-def test_configure_email_incidents(sample_application_name, sample_application_name2, sample_plan_name, sample_email, sample_admin_user):
+def test_configure_email_incidents(sample_application_name, sample_application_name2, sample_plan_name, sample_plan_name2, sample_email, sample_admin_user):
+    if not sample_application_name or not sample_application_name2 or not sample_plan_name or not sample_plan_name2 or not sample_email or not sample_admin_user:
+        pytest.skip('We do not have enough data in DB to do this test')
+
     # Test wiping incident email addresses for an app
     re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={}, headers=username_header(sample_admin_user))
     assert re.status_code == 200
@@ -2256,13 +2303,18 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
     assert re.json()[special_email] == sample_plan_name
 
     # Block one application stealing another application's email
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name2, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name2, json={special_email: sample_plan_name2}, headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'These email addresses are already in use by another app: %s' % special_email
 
+    # Block using an unsupported plan for a specific app
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name2}, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (special_email, sample_plan_name2)
 
-def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_admin_user):
-    if not sample_application_name or not sample_plan_name or not sample_email:
+
+def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_plan_name2, sample_admin_user):
+    if not sample_application_name or not sample_plan_name or not sample_plan_name2 or not sample_email:
         pytest.skip('We do not have enough data in DB to do this test')
 
     special_email = 'irisfoobar@fakeemail.com'
@@ -2319,7 +2371,32 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
 
     re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
     assert re.status_code == 204
-    assert re.headers['X-IRIS-INCIDENT'] == 'Not created'
+    assert re.headers['X-IRIS-INCIDENT'] == 'Not created (email reply not fresh email)'
+
+    # Also try creating an incident with a plan target'ing an unsupported app, which will cause problems later
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''INSERT INTO `incident_emails` (`email`, `plan_name`, `application_id`) VALUES (%(email)s, %(plan)s, (SELECT `id` FROM `application` WHERE `name` = %(application)s))
+                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application)s), `plan_name` = %(plan)s
+                       ''', {'application': sample_application_name, 'plan': sample_plan_name2, 'email': special_email})
+        conn.commit()
+
+    email_make_incident_payload = {
+        'body': 'This string should not become an incident',
+        'headers': [
+            {'name': 'From', 'value': 'foo@bar.com'},
+            {'name': 'To', 'value': special_email},
+            {'name': 'Subject', 'value': 'fooject'},
+        ]
+    }
+
+    re = requests.post(base_url + 'response/gmail', json=email_make_incident_payload)
+    assert re.status_code == 204
+    assert re.headers['X-IRIS-INCIDENT'] == 'Not created (no template actions for this app)'
+
+    # Clean up that deliberately broken DB entry
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('DELETE FROM `incident_emails` WHERE `email` = %s', [special_email])
+        conn.commit()
 
 
 def test_ui_routes_redirect(sample_user, sample_admin_user):
