@@ -81,5 +81,5 @@ make unit-cov
 Adding new plugins
 ------------------
 
-1. create the plugin file under `src/iris/plugis` dir
+1. create the plugin file under `src/iris/plugins` dir
 1. edit `src/iris/plugins/__init__.py` to add plugin module to `__all__` list
