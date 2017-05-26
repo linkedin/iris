@@ -9,6 +9,7 @@ import quopri
 import time
 import markdown
 import dns.resolver
+import dns.exception
 import logging
 
 logger = logging.getLogger()
