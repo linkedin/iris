@@ -10,8 +10,8 @@ Setup database
 --------------
 
 1. remove `ONLY_FULL_GROUP_BY` from MySQL config `sql_mode`
-1. create mysql schema: `mysql -u USER -p < ./db/schema_0.sql`
-1. import dummy data: `mysql -u USER -p -o iris < ./db/dummy_data.sql`
+2. create mysql schema: `mysql -u USER -p < ./db/schema_0.sql`
+3. import dummy data: `mysql -u USER -p -o iris < ./db/dummy_data.sql`
 
 `dummy_data.sql` contains the following entities:
   * user `demo`
@@ -23,9 +23,9 @@ Setup dev environment
 ---------------------
 
 1. create & source your virtualenv
-1. run `pip install -e .`
-1. run `pip install -r dev_requirements.txt`
-1. edit ./configs/config.dev.yaml to setup database credential and other settings
+2. run `pip install -e .`
+3. run `pip install -r dev_requirements.txt`
+4. edit ./configs/config.dev.yaml to setup database credential and other settings
 
 To install iris with extra features, you can pass in feature flag with pip:
 
@@ -82,4 +82,4 @@ Adding new plugins
 ------------------
 
 1. create the plugin file under `src/iris/plugis` dir
-1. edit `src/iris/plugins/__init__.py` to add plugin module to `__all__` list
+2. edit `src/iris/plugins/__init__.py` to add plugin module to `__all__` list
