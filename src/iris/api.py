@@ -858,6 +858,70 @@ class Plan(object):
             logger.exception('ERROR')
             raise
 
+    def on_delete(self, req, resp, plan_id):
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to delete unused plans', '')
+
+        if plan_id.isdigit():
+            query = '''SELECT EXISTS(SELECT 1 FROM `plan` WHERE `id` = %s)'''
+            plan_name = None
+        else:
+            query = '''SELECT EXISTS(SELECT 1 FROM `plan` WHERE `name` = %s)'''
+            plan_name = plan_id
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(query, plan_id)
+        result = cursor.fetchone()
+
+        if not result[0]:
+            connection.close()
+            raise HTTPBadRequest('No plan matched', '')
+
+        if not plan_name:
+            cursor.execute('SELECT `name` FROM `plan` WHERE `id` = %s', plan_id)
+            result = cursor.fetchone()
+            if not result:
+                connection.close()
+                raise HTTPBadRequest('Could not resolve this plan_id to name', '')
+            plan_name = result[0]
+
+        # Check if any quota is using these.
+        cursor.execute('''SELECT `application`.`name`
+                          FROM `application_quota`
+                          JOIN `application` on `application`.`id` = `application_quota`.`application_id`
+                          WHERE `application_quota`.`plan_name` = %s''', plan_name)
+        result = cursor.fetchone()
+
+        if result:
+            connection.close()
+            raise HTTPBadRequest('Cannot delete this plan as the application %s is using it for quota' % result[0], '')
+
+        # Check if any incidents were made with these plan IDs. If they were, fail
+        cursor.execute('SELECT COUNT(*) FROM `incident` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
+        result = cursor.fetchone()
+
+        if result[0]:
+            connection.close()
+            raise HTTPBadRequest('Cannot delete this plan as %s incidents have been created using it' % result[0], '')
+
+        # Delete all steps
+        cursor.execute('DELETE FROM `plan_notification` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
+
+        # Purge plan_active
+        cursor.execute('DELETE FROM `plan_active` WHERE `name` = %s', plan_name)
+
+        # Delete all matching plans
+        cursor.execute('DELETE FROM `plan` WHERE `name` = %s', plan_name)
+
+        connection.commit()
+        connection.close()
+
+        logger.info('%s deleted plan %s', req.context['username'], plan_name)
+
+        resp.status = HTTP_200
+        resp.body = '[]'
+
 
 class Plans(object):
     allow_read_no_auth = True
@@ -872,31 +936,31 @@ class Plans(object):
 
            GET /v0/plans?name__contains=foo&active=1 HTTP/1.1
 
-        **Example response**:
+          **Example response**:
 
-        .. sourcecode:: http
+          .. sourcecode:: http
 
-           HTTP/1.1 200 OK
-           Content-Type: application/json
+             HTTP/1.1 200 OK
+             Content-Type: application/json
 
-           [
-               {
-                   "description": "This is plan foo",
-                   "threshold_count": 10,
-                   "creator": "user1",
-                   "created": 1478154275,
-                   "aggregation_reset": 300,
-                   "aggregation_window": 300,
-                   "threshold_window": 900,
-                   "tracking_type": null,
-                   "tracking_template": null,
-                   "tracking_key": null,
-                   "active": 1,
-                   "id": 123456,
-                   "name": "foo-sla0"
-               }
-           ]
-        '''
+             [
+                 {
+                     "description": "This is plan foo",
+                     "threshold_count": 10,
+                     "creator": "user1",
+                     "created": 1478154275,
+                     "aggregation_reset": 300,
+                     "aggregation_window": 300,
+                     "threshold_window": 900,
+                     "tracking_type": null,
+                     "tracking_template": null,
+                     "tracking_key": null,
+                     "active": 1,
+                     "id": 123456,
+                     "name": "foo-sla0"
+                 }
+             ]
+          '''
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')

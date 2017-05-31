@@ -879,6 +879,88 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.json()['description'] == 'Priority not found for step 1'
 
 
+def test_delete_plan(sample_user, sample_team, sample_template_name, sample_application_name):
+    re = requests.delete(base_url + 'plans/plan')
+    assert re.status_code == 401
+    assert re.json()['title'] == 'You must be a logged in user to delete unused plans'
+
+    re = requests.delete(base_url + 'plans/fake-plan-name-12345', headers=username_header(sample_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'No plan matched'
+
+    re = requests.delete(base_url + 'plans/02342342412345', headers=username_header(sample_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'No plan matched'
+
+    data = {
+        'creator': sample_user,
+        'name': sample_user + '-test-to-delete',
+        'description': 'Test plan for e2e test',
+        'threshold_window': 900,
+        'threshold_count': 10,
+        'aggregation_window': 300,
+        'aggregation_reset': 300,
+        'steps': [
+            [
+                {
+                    'role': 'team',
+                    'target': sample_team,
+                    'priority': 'low',
+                    'wait': 600,
+                    'repeat': 0,
+                    'template': sample_template_name
+                },
+            ],
+        ],
+        'isValid': True
+    }
+
+    # Test creating and deleting by ID
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 201
+    plan_id = re.content.strip()
+    assert plan_id
+
+    re = requests.get(base_url + 'plans/%s' % plan_id)
+    assert re.status_code == 200
+
+    re = requests.delete(base_url + 'plans/%s' % plan_id, headers=username_header(sample_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'plans/%s' % plan_id)
+    assert re.status_code == 404
+
+    # Test creating and deleting by name
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 201
+    plan_id = re.content.strip()
+    assert plan_id
+
+    re = requests.get(base_url + 'plans/%s' % plan_id)
+    assert re.status_code == 200
+
+    re = requests.delete(base_url + 'plans/%s' % data['name'], headers=username_header(sample_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'plans/%s' % plan_id)
+    assert re.status_code == 404
+
+    # Test failing to delete because incidents
+    data_cant_kill = data.copy()
+    data_cant_kill['name'] += '-but-cant'
+
+    re = requests.post(base_url + 'plans', json=data_cant_kill)
+    assert re.status_code == 201
+    plan_id = re.content.strip()
+    assert plan_id
+
+    assert create_incident_with_message(sample_application_name, data_cant_kill['name'], sample_user, 'email')
+
+    re = requests.delete(base_url + 'plans/%s' % data_cant_kill['name'], headers=username_header(sample_user))
+    assert re.status_code == 400
+    assert 'incidents have been created using it' in re.json()['title']
+
+
 def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
     data = {
         'creator': sample_user,
