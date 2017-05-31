@@ -1078,6 +1078,7 @@ class Plans(object):
             session.close()
             raise HTTPBadRequest('Validation error', str(e))
         except HTTPBadRequest:
+            session.close()
             raise
         except Exception:
             session.close()
