@@ -1505,6 +1505,10 @@ table.dataTable thead .sorting_asc {
   margin: 0 3px;
 }
 
+h3 .btn-primary {
+  margin: 0 3px;
+}
+
 .border-top {
   border-top: 1px solid #dddedf;
 }

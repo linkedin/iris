@@ -139,7 +139,9 @@ iris = {
       createPlanBtn: '#publish-plan',
       clonePlanBtn: '#clone-plan',
       showTestPlanModalBtn: '#test-plan-modal-btn',
+      showDeletePlanModalBtn: '#delete-plan-modal-btn',
       testPlanBtn: '#test-plan',
+      deletePlanBtn: '#delete-plan',
       versionSelect: '.version-select',
       activatePlan: '.badge[data-active="0"]',
       viewRelated: '.view-related',
@@ -212,6 +214,7 @@ iris = {
       $(data.createPlanBtn).on('click', this.createPlan.bind(this));
       data.$page.on('click', data.clonePlanBtn, this.clonePlan.bind(this));
       $(data.testPlanBtn).on('click', this.testPlan.bind(this));
+      $(data.deletePlanBtn).on('click', this.deletePlan.bind(this));
       data.$page.on('click', data.showTestPlanModalBtn, this.testPlanModal.bind(this));
       data.$page.on('change', data.planNotificationInputs, this.updateValues);
       data.$page.on('click', data.aggregationBtn, this.toggleAggregation);
@@ -318,6 +321,20 @@ iris = {
         window.location = '/incidents/' + r
       }).fail(function(r) {
         iris.createAlert('Failed creating test incident: ' + r.responseJSON['title'])
+      }).always(function() {
+        $modal.modal('hide');
+      })
+    },
+    deletePlan: function() {
+      var $modal = $('#delete-plan-modal');
+      $.ajax({
+          url: '/v0/plans/' + this.data.name,
+          method: 'DELETE',
+      }).done(function(r) {
+        window.onbeforeunload = null;
+        window.location = '/plans/';
+      }).fail(function(r) {
+        iris.createAlert('Failed deleting plan: ' + r.responseJSON['title'])
       }).always(function() {
         $modal.modal('hide');
       })
