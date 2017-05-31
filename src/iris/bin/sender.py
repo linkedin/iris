@@ -241,12 +241,12 @@ def create_messages(incident_id, plan_notification_id):
     # find role/priority from plan_notification_id
     names = cache.targets_for_role(role, target)
     priority_id = plan_notification['priority_id']
-    changed_target = False
+    redirect_to_plan_owner = False
     body = ''
 
     if not names:
-        metrics.incr('role_target_lookup_error')
         # Try to get creator of the plan and nag them instead
+        metrics.incr('role_target_lookup_error')
         name = None
         try:
             name = cache.plans[plan_notification['plan_id']]['creator']
@@ -277,7 +277,7 @@ def create_messages(incident_id, plan_notification_id):
         body = ('You are receiving this as you created this plan and we can\'t resolve'
                 ' %s of %s at this time.\n\n') % (role, target)
         names = [name]
-        changed_target = True
+        redirect_to_plan_owner = True
 
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
@@ -290,14 +290,15 @@ def create_messages(incident_id, plan_notification_id):
                            (plan_notification['plan_id'], plan_notification_id, incident_id,
                             application_id, target_id, priority_id, body))
 
-            if changed_target:
+            if redirect_to_plan_owner:
                 # needed for the lastrowid to exist in the DB to satsify the constraint
                 connection.commit()
-                auditlog.message_change(cursor.lastrowid,
-                                        auditlog.TARGET_CHANGE,
-                                        role + '|' + target,
-                                        name,
-                                        'Changing target as we failed resolving original target')
+                auditlog.message_change(
+                    cursor.lastrowid,
+                    auditlog.TARGET_CHANGE,
+                    role + '|' + target,
+                    name,
+                    'Changing target to plan owner as we failed resolving original target')
 
         else:
             metrics.incr('target_not_found')
