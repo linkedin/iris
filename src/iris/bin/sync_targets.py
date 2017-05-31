@@ -109,28 +109,23 @@ def fetch_teams_from_oncall(oncall_base_url):
 
 
 def fix_user_contacts(contacts):
-    try:
-        contacts['slack'] = contacts.pop('im')
-    except KeyError:
-        pass
+    sms = contacts.get('sms')
+    if sms:
+        contacts['sms'] = normalize_phone_number(sms)
 
-    try:
-        contacts['sms'] = normalize_phone_number(contacts['sms'])
-    except KeyError:
-        pass
-
-    try:
-        contacts['call'] = normalize_phone_number(contacts['call'])
-    except KeyError:
-        pass
+    call = contacts.get('call')
+    if call:
+        contacts['call'] = normalize_phone_number(call)
 
     return contacts
 
 
 def fetch_users_from_oncall(oncall_base_url):
-
+    oncall_user_endpoint = oncall_base_url + '/api/v0/users?fields=name&fields=contacts&fields=active'
     try:
-        return {user['name']: fix_user_contacts(user['contacts']) for user in requests.get('%s/api/v0/users?fields=name&fields=contacts&fields=active' % oncall_base_url).json() if user['active']}
+        return {user['name']: fix_user_contacts(user['contacts'])
+                for user in requests.get(oncall_user_endpoint).json()
+                if user['active']}
     except (ValueError, KeyError, requests.exceptions.RequestException):
         logger.exception('Failed hitting oncall endpoint to fetch list of users')
         return {}
