@@ -6,7 +6,7 @@ from gevent import spawn, sleep
 from collections import deque
 from datetime import datetime
 from iris.sender.shared import send_queue
-from iris.cache import priorities, applications
+import iris.cache
 from iris import metrics
 import logging
 import ujson
@@ -62,9 +62,13 @@ class ApplicationQuota(object):
         self.expand_targets = expand_targets
         self.iris_application = None
         if sender_app:
-            self.iris_application = applications.get(sender_app)
-            if not self.iris_application:
+            self.iris_application = iris.cache.applications.get(sender_app)
+            if self.iris_application:
+                logger.info('Using iris application (%s) for sender quota notifications.', sender_app)
+            else:
                 logger.error('Invalid iris application (%s) used for sender. Quota breach notificiations/incidents will not work.', sender_app)
+        else:
+            logger.warning('Iris sender_app not configured so notifications for quota breaches will not work')
 
         self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
         self.last_incidents = {}  # application: (incident_id, time())
@@ -235,7 +239,7 @@ class ApplicationQuota(object):
             logger.error('Failed resolving %s:%s to notify soft quota breach.', target_role, target_name)
             return
 
-        priority = priorities.get('low')
+        priority = iris.cache.priorities.get('low')
 
         if not priority:
             logger.error('Failed resolving low priority to notify soft quota breach')
