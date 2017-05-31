@@ -593,9 +593,14 @@ def set_target_fallback_mode(message):
         cursor.close()
         connection.close()
 
+        old_mode = message['mode']
         message['destination'] = destination
         message['mode'] = mode
         message['mode_id'] = mode_id
+        update_message_mode(message)
+        auditlog.message_change(
+            message['message_id'], auditlog.MODE_CHANGE, old_mode, message['mode'],
+            'Changing mode due to original mode failure')
         return True
     # target doesn't have email either - bail
     except ValueError:
@@ -672,6 +677,7 @@ def set_target_contact_by_priority(message):
 
 
 def set_target_contact(message):
+    # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
     try:
         if 'mode' in message or 'mode_id' in message:
             # for out of band notification, we already have the mode *OR*
@@ -696,6 +702,9 @@ def set_target_contact(message):
             result = set_target_contact_by_priority(message)
         if result:
             cache.target_reprioritization(message)
+        else:
+            logger.warn('target does not have mode %r', message)
+            result = set_target_fallback_mode(message)
         return result
     except (ValueError, TypeError):
         logger.exception('target does not have mode %r', message)
@@ -901,6 +910,8 @@ def fetch_and_send_message():
     has_contact = set_target_contact(message)
     if not has_contact:
         mark_message_has_no_contact(message)
+        metrics.incr('task_failure')
+        logger.error('Failed to send message, no contact found: %s', message)
         return
 
     if 'message_id' not in message:
@@ -982,12 +993,7 @@ def fetch_and_send_message():
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
         else:
             logger.error('reclassifying as email %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-            old_mode = message['mode']
-            if (set_target_fallback_mode(message)):
-                update_message_mode(message)
-                auditlog.message_change(
-                    message['message_id'], auditlog.MODE_CHANGE, old_mode, message['mode'],
-                    'Changing mode due to original mode failure')
+            set_target_fallback_mode(message)
             render(message)
             try:
                 success = distributed_send_message(message)

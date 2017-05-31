@@ -155,6 +155,36 @@ def test_fetch_and_send_message(mocker):
     mock_mark_message_sent.assert_called_once()
 
 
+def test_no_valid_modes(mocker):
+    def check_mark_message_sent(m):
+        assert m['message_id'] == fake_message['message_id']
+
+    def mock_set_target_contact(message):
+        return False
+
+    mocker.patch('iris.bin.sender.db')
+    mock_mark_message_no_contact = mocker.patch('iris.bin.sender.mark_message_has_no_contact')
+    mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
+    mock_mark_message_sent.side_effect = check_mark_message_sent
+    mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
+    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
+    mock_iris_client.get.return_value.json.return_value = fake_plan
+    from iris.bin.sender import (
+        fetch_and_send_message, send_queue
+    )
+
+    # drain out send queue
+    while send_queue.qsize() > 0:
+        send_queue.get()
+    send_queue.put(fake_message)
+
+    fetch_and_send_message()
+
+    assert send_queue.qsize() == 0
+    assert not mock_mark_message_sent.called
+    mock_mark_message_no_contact.assert_called_once()
+
+
 def test_handle_api_request_v0_send(mocker):
     from iris.sender.rpc import handle_api_request
     from iris.sender.shared import send_queue
