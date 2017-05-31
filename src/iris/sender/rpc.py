@@ -52,7 +52,7 @@ def send_message_to_slave(message, address):
         return False
 
     if sender_resp == 'OK':
-        logger.info('Successfully passed message (ID %s) to %s for sending', message_id, pretty_address)
+        logger.debug('Successfully passed message (ID %s) to %s for sending', message_id, pretty_address)
         metrics.incr('rpc_message_pass_success_cnt')
         return True
     else:
@@ -142,9 +142,9 @@ def handle_api_notification_request(socket, address, req):
                     notification['application'])
         return
 
-    logger.info('-> %s OK, to %s:%s (%s:%s)',
-                address, role, target, notification['application'],
-                notification.get('priority', notification.get('mode', '?')))
+    logger.debug('-> %s OK, to %s:%s (%s:%s)',
+                 address, role, target, notification['application'],
+                 notification.get('priority', notification.get('mode', '?')))
 
     for _target in expanded_targets:
         temp_notification = notification.copy()
@@ -198,7 +198,7 @@ def handle_api_request(socket, address):
             logger.warning('Couldn\'t get msgpack data from %s', address)
             socket.close()
             return
-        logger.info('%s %s', address, req['endpoint'])
+        logger.debug('%s %s', address, req['endpoint'])
         handler = api_request_handlers.get(req['endpoint'])
         if handler is not None:
             handler(socket, address, req)
@@ -207,7 +207,7 @@ def handle_api_request(socket, address):
             socket.sendall(msgpack.packb('UNKNOWN'))
     except Timeout:
         metrics.incr('api_request_timeout_cnt')
-        logger.info('-> %s timeout', address)
+        logger.warning('-> %s timeout', address)
         socket.sendall(msgpack.packb('TIMEOUT'))
     finally:
         timeout.cancel()
