@@ -906,13 +906,25 @@ class Plan(object):
             raise HTTPBadRequest('Cannot delete this plan as %s incidents have been created using it' % result[0], '')
 
         # Delete all steps
-        cursor.execute('DELETE FROM `plan_notification` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
+        try:
+            cursor.execute('DELETE FROM `plan_notification` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
+        except IntegrityError:
+            connection.close()
+            raise HTTPBadRequest('Failed deleting plan steps', '')
 
         # Purge plan_active
-        cursor.execute('DELETE FROM `plan_active` WHERE `name` = %s', plan_name)
+        try:
+            cursor.execute('DELETE FROM `plan_active` WHERE `name` = %s', plan_name)
+        except IntegrityError:
+            connection.close()
+            raise HTTPBadRequest('Failed deleting plan steps', '')
 
         # Delete all matching plans
-        cursor.execute('DELETE FROM `plan` WHERE `name` = %s', plan_name)
+        try:
+            cursor.execute('DELETE FROM `plan` WHERE `name` = %s', plan_name)
+        except IntegrityError:
+            connection.close()
+            raise HTTPBadRequest('Failed deleting plans. It is likely still in use.', '')
 
         connection.commit()
         connection.close()
