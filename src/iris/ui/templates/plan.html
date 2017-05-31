@@ -25,6 +25,26 @@
   </div>
 </div>
 
+<!-- Modal for deleting this plan -->
+<div class="modal fade" id="delete-plan-modal" tabindex="-1" role="dialog" aria-labelledby="delete-plan-modal-btn">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Test plan</h4>
+      </div>
+      <div class="modal-body">
+        Do you really want to delete this plan? This will only be successful if the plan has not yet been used in incidents or
+        other areas.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="delete-plan">Delete Plan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal for publishing this plan -->
 <div class="modal fade" id="publish-plan-modal" tabindex="-1" role="dialog" aria-labelledby="publish-plan">
   <div class="modal-dialog" role="document">
@@ -73,6 +93,7 @@
     <h3>
       Create a plan <i class="badge" data-active="draft"> </i>
       <button type="button" class="btn btn-primary btn-sm pull-right" data-toggle="modal" data-target="#publish-plan-modal">Publish Plan</button>
+      <button type="button" class="btn btn-danger btn-sm pull-right" data-toggle="modal" data-target="#delete-plan-modal">Delete Plan</button>
     </h3>
     <input type="text" id="plan-name" class="form-control" placeholder="Enter a plan name" value="{{name}}">
     <textarea rows="3" id="plan-desc" class="form-control" placeholder="Briefly describe the plan">{{description}}</textarea>
