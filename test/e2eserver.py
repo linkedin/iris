@@ -11,6 +11,13 @@ from iris.config import load_config
 
 
 if __name__ == '__main__':
+    def clean_exit(a, b):
+        import sys
+        sys.exit(0)
+
+    import signal
+    signal.signal(signal.SIGTERM, clean_exit)
+
     config = load_config(sys.argv[1])
     addr = (config['server']['host'], config['server']['port'])
     print 'Listening on %s...' % (addr,)
