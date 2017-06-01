@@ -14,7 +14,7 @@ docs:
 	make -C docs html
 
 e2e:
-	py.test -vv ./test/e2etest.py
+	py.test -rxs -vv ./test/e2etest.py
 
 unit:
 	py.test -vv test

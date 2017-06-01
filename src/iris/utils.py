@@ -154,6 +154,9 @@ def lookup_username_from_contact(mode, destination, session=None):
 
 
 def claim_incident(incident_id, owner, session=None):
+    '''
+    NOTE: This function closes the given session
+    '''
     if not session:
         session = db.Session()
     active = 0 if owner else 1
