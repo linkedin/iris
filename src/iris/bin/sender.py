@@ -850,7 +850,8 @@ def update_message_sent_status(message, status):
         session.commit()
     except (DataError, IntegrityError):
         logger.exception('Failed setting message sent status for message %s', message)
-    session.close()
+    finally:
+        session.close()
 
 
 def mark_message_has_no_contact(message):

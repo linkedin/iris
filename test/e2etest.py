@@ -74,11 +74,19 @@ def fake_message_id(iris_messages):
 def fake_batch_id():
     '''A sample message batch ID'''
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('SELECT `batch` FROM `message` WHERE NOT ISNULL(`incident_id`) AND NOT ISNULL(`batch`) LIMIT 1')
+        cursor.execute('''SELECT `batch`
+                          FROM `message`
+                          WHERE NOT ISNULL(`incident_id`)
+                              AND NOT ISNULL(`batch`) LIMIT 1''')
         result = cursor.fetchall()
         if not result:
             return None
         return result[0][0]
+
+
+@pytest.fixture(scope='module')
+def fake_iris_number():
+    return '+1 444-444-4444'
 
 
 @pytest.fixture(scope='module')
@@ -219,16 +227,20 @@ def sample_plan_name(sample_application_name):
         return None
 
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('''SELECT `name`
-                          FROM `plan_active` WHERE
-                          EXISTS (
-                              SELECT 1 FROM
-                              `plan_notification`
-                              JOIN `template` ON `template`.`name` = `plan_notification`.`template`
-                              JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
-                              WHERE `plan_notification`.`plan_id` = `plan_active`.`plan_id`
-                              AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = %s)
-                          ) LIMIT 1''', [sample_application_name])
+        cursor.execute(
+            '''SELECT `name`
+               FROM `plan_active` WHERE
+               EXISTS (
+                   SELECT 1
+                   FROM `plan_notification`
+                   JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                   JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                   WHERE `plan_notification`.`plan_id` = `plan_active`.`plan_id`
+                   AND `template_content`.`application_id` = (
+                       SELECT `id` FROM `application` WHERE `name` = %s
+                   )
+               ) LIMIT 1''',
+            [sample_application_name])
         result = cursor.fetchone()
         if result:
             return result[0]
@@ -331,17 +343,17 @@ def test_api_bad_application():
     assert re.status_code == 401
 
 
-def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone):
+def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone, fake_iris_number):
     if not all([fake_message_id, fake_incident_id, sample_phone]):
         pytest.skip('We do not have enough data in DB to do this test')
 
     data = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'To': sample_phone,
         'ToZip': 15108,
         'FromState': 'CA',
         'Digits': 2,
-        'From': '+16504222677'
+        'From': fake_iris_number,
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
@@ -351,17 +363,17 @@ def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone
     assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
 
 
-def test_api_response_batch_phone_call(fake_batch_id, sample_phone):
+def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_number):
     if not all([fake_batch_id, sample_phone]):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     data = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'To': sample_phone,
         'ToZip': 15108,
         'FromState': 'CA',
         'Digits': '2',
-        'From': '+16504222677',
+        'From': fake_iris_number,
     }
 
     re = requests.post(base_url + 'response/twilio/calls', params={
@@ -376,7 +388,7 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     base_body = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'ToZip': 15108,
         'FromState': 'CA',
         'ApiVersion': '2010-04-01',
@@ -412,16 +424,16 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
     assert re.json()['app_response'] == 'Sincerest apologies'
 
 
-def test_api_response_batch_sms(fake_batch_id):
+def test_api_response_batch_sms(fake_batch_id, sample_phone):
     if not fake_batch_id:
         pytest.skip('Failed finding a batch ID to use for tests')
 
     base_body = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'ToZip': 15108,
         'FromState': 'CA',
         'ApiVersion': '2010-04-01',
-        'From': '+14123706122',
+        'From': sample_phone,
     }
 
     data = base_body.copy()
@@ -442,7 +454,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
         pytest.skip('Not enough data for this test')
 
     sms_claim_all_body = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'ToZip': 15108,
         'FromState': 'CA',
         'ApiVersion': '2010-04-01',
@@ -590,7 +602,7 @@ def test_api_response_claim_last(sample_user, sample_phone, sample_application_n
     assert re.json()['active'] == 1
 
     sms_body = {
-        'AccountSid': 'AC18c416864ab02cdd51b8129a7cbaff1e',
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
         'ToZip': 15108,
         'FromState': 'CA',
         'ApiVersion': '2010-04-01',
@@ -2240,16 +2252,28 @@ def test_rename_application(sample_admin_user, sample_application_name, sample_a
     temp_app_name = 'e2e-rename-app'
 
     # Test the sanity checks
-    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name, json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name,
+                      json={},
+                      headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Missing new_name from post body'
+
+    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name,
+                      json={'new_name': temp_app_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'New and old app name are identical'
 
-    re = requests.put(base_url + 'applications/fakeapp123/rename', json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/fakeapp123/rename',
+                      json={'new_name': temp_app_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'No rows changed; old app name incorrect'
 
     # Rename our sample app to the new temp name
-    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name, json={'new_name': temp_app_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name,
+                      json={'new_name': temp_app_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 200
 
     re = requests.get(base_url + 'applications/%s' % temp_app_name)
@@ -2261,14 +2285,18 @@ def test_rename_application(sample_admin_user, sample_application_name, sample_a
     assert re.json()['title'] == 'Application %s not found' % sample_application_name
 
     # Put it back now
-    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name, json={'new_name': sample_application_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/rename' % temp_app_name,
+                      json={'new_name': sample_application_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 200
 
     re = requests.get(base_url + 'applications/%s' % sample_application_name)
     assert re.status_code == 200
 
     # Ensure we can't rename over another app
-    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name, json={'new_name': sample_application_name2}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/rename' % sample_application_name,
+                      json={'new_name': sample_application_name2},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'Destination app name likely already exists'
 
@@ -2366,11 +2394,19 @@ def test_twilio_delivery_update(fake_message_id):
 
 
 def test_configure_email_incidents(sample_application_name, sample_application_name2, sample_plan_name, sample_plan_name2, sample_email, sample_admin_user):
-    if not sample_application_name or not sample_application_name2 or not sample_plan_name or not sample_plan_name2 or not sample_email or not sample_admin_user:
+    if not (sample_application_name and sample_application_name2):
+        pytest.skip('Need at least two applications to do this test')
+    if not (sample_plan_name and sample_plan_name2):
+        pytest.skip('Need at least one plan using each of the sample applications: %s, %s' % (
+            sample_application_name, sample_application_name2
+        ))
+    if not sample_email or not sample_admin_user:
         pytest.skip('We do not have enough data in DB to do this test')
 
     # Test wiping incident email addresses for an app
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name,
+                      json={},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 200
 
     re = requests.get(base_url + 'applications/%s/incident_emails' % sample_application_name)
@@ -2378,14 +2414,18 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
     assert re.json() == {}
 
     # Block trying to set a users email to create an incident
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={sample_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name,
+                      json={sample_email: sample_plan_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'These email addresses are also user\'s email addresses which is not allowed: %s' % sample_email
 
     special_email = 'specialfoo@foomail.com'
 
     # Test setting an email address + plan name combination for an app successfully
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name,
+                      json={special_email: sample_plan_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 200
 
     re = requests.get(base_url + 'applications/%s/incident_emails' % sample_application_name)
@@ -2393,12 +2433,16 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
     assert re.json()[special_email] == sample_plan_name
 
     # Block one application stealing another application's email
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name2, json={special_email: sample_plan_name2}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name2,
+                      json={special_email: sample_plan_name2},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'These email addresses are already in use by another app: %s' % special_email
 
     # Block using an unsupported plan for a specific app
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name2}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name,
+                      json={special_email: sample_plan_name2},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (special_email, sample_plan_name2)
 
@@ -2410,7 +2454,9 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     special_email = 'irisfoobar@fakeemail.com'
 
     # Ensure this email is configured properly.
-    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name, json={special_email: sample_plan_name}, headers=username_header(sample_admin_user))
+    re = requests.put(base_url + 'applications/%s/incident_emails' % sample_application_name,
+                      json={special_email: sample_plan_name},
+                      headers=username_header(sample_admin_user))
     assert re.status_code == 200
 
     email_make_incident_payload = {
@@ -2448,7 +2494,8 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     assert re.status_code == 204
     assert re.headers['X-IRIS-INCIDENT'].isdigit()
 
-    # Also try creating an incident with an an email that's a reply to the thread, which shouldn't work
+    # Also try creating an incident with an an email that's a reply to the
+    # thread, which shouldn't work
     email_make_incident_payload = {
         'body': 'This string should not become an incident',
         'headers': [
@@ -2463,11 +2510,25 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     assert re.status_code == 204
     assert re.headers['X-IRIS-INCIDENT'] == 'Not created (email reply not fresh email)'
 
-    # Also try creating an incident with a plan target'ing an unsupported app, which will cause problems later
+    # Also try creating an incident with a plan target'ing an unsupported app,
+    # which will cause problems later
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('''INSERT INTO `incident_emails` (`email`, `plan_name`, `application_id`) VALUES (%(email)s, %(plan)s, (SELECT `id` FROM `application` WHERE `name` = %(application)s))
-                          ON DUPLICATE KEY UPDATE `application_id` = (SELECT `id` FROM `application` WHERE `name` = %(application)s), `plan_name` = %(plan)s
-                       ''', {'application': sample_application_name, 'plan': sample_plan_name2, 'email': special_email})
+        cursor.execute(
+            '''INSERT INTO `incident_emails` (`email`, `plan_name`, `application_id`)
+               VALUES (
+                   %(email)s,
+                   %(plan)s,
+                   (SELECT `id` FROM `application` WHERE `name` = %(application)s)
+               )
+               ON DUPLICATE KEY UPDATE `application_id` = (
+                       SELECT `id` FROM `application` WHERE `name` = %(application)s
+                    ),
+                    `plan_name` = %(plan)s''',
+            {
+                'application': sample_application_name,
+                'plan': sample_plan_name2,
+                'email': special_email
+            })
         conn.commit()
 
     email_make_incident_payload = {
@@ -2619,7 +2680,9 @@ class TestDelete(object):
     def test_delete_template(self):
         # Test for correct error output
         runner = CliRunner()
-        result = runner.invoke(iris_ctl.template, ['delete', 'foobar', '--config=../configs/config.dev.yaml'], input='y\n')
+        result = runner.invoke(iris_ctl.template,
+                               ['delete', 'foobar', '--config=../configs/config.dev.yaml'],
+                               input='y\n')
         assert result.exit_code == 1
         assert 'messages with ids:\n[1]' in result.output_bytes
         assert 'plans with ids:\n[2]' in result.output_bytes

@@ -37,15 +37,6 @@ UNLOCK TABLES;
 LOCK TABLES `default_application_mode` WRITE;
 UNLOCK TABLES;
 
-LOCK TABLES `incident` WRITE;
-UNLOCK TABLES;
-
-LOCK TABLES `message` WRITE;
-UNLOCK TABLES;
-
-LOCK TABLES `message_changelog` WRITE;
-UNLOCK TABLES;
-
 LOCK TABLES `plan` WRITE;
 INSERT INTO `plan` VALUES
     (1,'demo-test-foo','2017-01-25 23:23:55',1,NULL,'Test plan for e2e test',2,900,10,300,300,NULL,NULL,NULL),
@@ -60,14 +51,16 @@ INSERT INTO `plan` VALUES
     (31,'demo-test-foo','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',2,900,10,300,300,NULL,NULL,NULL),
     (37,'demo-test-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
     (38,'demo-test-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
-    (39,'demo-test-other-app-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL);
+    (39,'demo-test-other-app-incident-post','2017-01-25 23:30:34',1,NULL,'Test plan for e2e test',1,900,10,300,300,NULL,NULL,NULL),
+    (40,'demo-test-bar','2017-01-25 23:25:46',1,NULL,'Test plan for e2e email incident test',1,900,10,300,300,NULL,NULL,NULL);
 UNLOCK TABLES;
 
 LOCK TABLES `plan_active` WRITE;
 INSERT INTO `plan_active` VALUES
     ('demo-test-foo',31),
     ('demo-test-incident-post',38),
-    ('demo-test-other-app-incident-post',39);
+    ('demo-test-other-app-incident-post',39),
+    ('demo-test-bar',40);
 UNLOCK TABLES;
 
 LOCK TABLES `template` WRITE;
@@ -138,7 +131,8 @@ INSERT INTO `plan_notification` VALUES
     (29,37,1,'test_template',4,35,35,0,600),
     (30,37,1,'test_template',4,44,17,1,300),
     (31,38,1,'test_template',4,35,35,0,600),
-    (32,39,1,'test_template_2',4,35,35,0,600);
+    (32,39,1,'test_template_2',4,35,35,0,600),
+    (33,40,1,'test_template',4,35,35,0,600);
 UNLOCK TABLES;
 
 LOCK TABLES `response` WRITE;
@@ -150,9 +144,9 @@ UNLOCK TABLES;
 
 LOCK TABLES `target_contact` WRITE;
 INSERT INTO `target_contact` VALUES
-    (1,8,'+1 407-456-7891'),(1,17,'demo1'),(1,26,'+1 407-456-7891'),(1,35,'demo1@foo.bar'),
-    (2,8,'+1 407-456-7892'),(2,17,'demo2'),(2,26,'+1 407-456-7892'),(2,35,'demo2@foo.bar'),
-    (3,8,'+1 407-456-7893'),(3,17,'demo3'),(3,26,'+1 407-456-7893'),(3,35,'demo3@foo.bar');
+    (1,8,'+1 223-456-7890'),(1,17,'demo1'),(1,26,'+1 223-456-7890'),(1,35,'demo1@foo.bar'),
+    (2,8,'+1 223-456-7891'),(2,17,'demo2'),(2,26,'+1 223-456-7891'),(2,35,'demo2@foo.bar'),
+    (3,8,'+1 223-456-7892'),(3,17,'demo3'),(3,26,'+1 223-456-7892'),(3,35,'demo3@foo.bar');
 UNLOCK TABLES;
 
 LOCK TABLES `target_mode` WRITE;
@@ -172,3 +166,20 @@ LOCK TABLES `user_team` WRITE;
 UNLOCK TABLES;
 
 INSERT IGNORE INTO `application_mode` (`application_id`, `mode_id`) SELECT `application`.`id`, `mode`.`id` FROM `application`, `mode` WHERE `mode`.`name` != 'drop';
+
+LOCK TABLES `incident` WRITE;
+INSERT INTO `incident` VALUES
+    (1, 40, '2017-01-25 23:22:55', '2017-01-25 23:24:55', '{"console_url": "", "fabric": "DC1", "notes": "This is a note", "filename": "dashboard", "zones": ["zone1", "zone2"], "metanodes": [["execution_time.metanode1", "threshold: 72 is greater than the max (65)"]], "nodes": [["execution_time.server1.example.com", "threshold: 72 is greater than the max (65)"]], "graph_image_url": "http://url.example.com/foo", "name":"API Alert"}', 1, 8, 1, 0),
+    (2, 40, '2017-01-25 23:22:55', '2017-01-25 23:24:55', '{"console_url": "", "fabric": "DC1", "notes": "This is a note", "filename": "dashboard", "zones": ["zone1", "zone2"], "metanodes": [["execution_time.metanode1", "threshold: 72 is greater than the max (65)"]], "nodes": [["execution_time.server1.example.com", "threshold: 72 is greater than the max (65)"]], "graph_image_url": "http://url.example.com/foo", "name":"API Alert"}', 1, 8, 1, 0),
+    (3, 40, '2017-01-25 23:22:55', '2017-01-25 23:24:55', '{"console_url": "", "fabric": "DC1", "notes": "This is a note", "filename": "dashboard", "zones": ["zone1", "zone2"], "metanodes": [["execution_time.metanode1", "threshold: 72 is greater than the max (65)"]], "nodes": [["execution_time.server1.example.com", "threshold: 72 is greater than the max (65)"]], "graph_image_url": "http://url.example.com/foo", "name":"API Alert"}', 1, 8, 1, 0);
+UNLOCK TABLES;
+
+LOCK TABLES `message` WRITE;
+INSERT INTO `message` VALUES
+    (1, NULL, '2017-01-25 23:23:55', '2017-01-25 23:24:55', 8, 1, 'demo1@foo.bar', 35, 40, 35, 'email_subject', 'email_body', 1, 33, 0, 13),
+    (2, '10018616db1e4cceba3a9f69177c2343', '2017-01-29 23:23:55', '2017-01-25 23:24:55', 8, 1, 'demo1@foo.bar', 35, 40, 35, 'email_subject', 'email_body', 2, 33, 0, 13),
+    (3, '10018616db1e4cceba3a9f69177c2343', '2017-01-29 23:23:55', '2017-01-25 23:24:55', 8, 1, 'demo1@foo.bar', 35, 40, 35, 'email_subject', 'email_body', 3, 33, 0, 13);
+UNLOCK TABLES;
+
+LOCK TABLES `message_changelog` WRITE;
+UNLOCK TABLES;

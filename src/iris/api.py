@@ -13,6 +13,7 @@ import re
 import os
 import datetime
 import logging
+from contextlib import contextmanager
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
@@ -602,6 +603,26 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     return where
 
 
+@contextmanager
+def guarded_db_session():
+    '''
+    Context manager that will automatically close session on exceptions
+    '''
+    try:
+        session = db.Session()
+        yield session
+    except IrisValidationException as e:
+        session.close()
+        raise HTTPBadRequest('Validation error', str(e))
+    except (HTTPForbidden, HTTPUnauthorized, HTTPNotFound, HTTPBadRequest):
+        session.close()
+        raise
+    except Exception:
+        session.close()
+        logger.exception('SERVER ERROR')
+        raise
+
+
 class HeaderMiddleware(object):
     def process_request(self, req, resp):
         resp.content_type = 'application/json'
@@ -702,7 +723,8 @@ class AuthMiddleware(object):
                     logger.warn('Tried authenticating with nonexistent app, %s', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
-                    logger.warn('Unprivileged application %s tried authenticating %s', app['name'], username_header)
+                    logger.warn('Unprivileged application %s tried authenticating %s',
+                                app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 api_key = str(app['key'])
                 window = int(time.time()) // 5
@@ -831,36 +853,31 @@ class Plan(object):
             raise HTTPNotFound()
 
     def on_post(self, req, resp, plan_id):
-        session = db.Session()
+        post_body = ujson.loads(req.context['body'])
         try:
-            post_body = ujson.loads(req.context['body'])
-            try:
-                active = int(post_body['active'])
-            except KeyError:
-                raise HTTPBadRequest('"active" field required', '')
-            except ValueError:
-                raise HTTPBadRequest('Invalid active field', '')
+            active = int(post_body['active'])
+        except KeyError:
+            raise HTTPBadRequest('"active" field required')
+        except ValueError:
+            raise HTTPBadRequest('Invalid active field')
+        with guarded_db_session() as session:
             if active:
-                session.execute('''INSERT INTO `plan_active` (`name`, `plan_id`)
-                                   VALUES ((SELECT `name` FROM `plan` WHERE `id` = :plan_id), :plan_id)
-                                   ON DUPLICATE KEY UPDATE `plan_id`=:plan_id''',
-                                {'plan_id': plan_id})
+                session.execute(
+                    '''INSERT INTO `plan_active` (`name`, `plan_id`)
+                       VALUES ((SELECT `name` FROM `plan` WHERE `id` = :plan_id), :plan_id)
+                       ON DUPLICATE KEY UPDATE `plan_id`=:plan_id''',
+                    {'plan_id': plan_id})
             else:
-                session.execute('DELETE FROM `plan_active` WHERE `plan_id`=:plan_id', {'plan_id': plan_id})
+                session.execute('DELETE FROM `plan_active` WHERE `plan_id`=:plan_id',
+                                {'plan_id': plan_id})
             session.commit()
             session.close()
-            resp.status = HTTP_200
-            resp.body = ujson.dumps(active)
-        except HTTPBadRequest:
-            raise
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(active)
 
     def on_delete(self, req, resp, plan_id):
         if not req.context['username']:
-            raise HTTPUnauthorized('You must be a logged in user to delete unused plans', '')
+            raise HTTPUnauthorized('You must be a logged in user to delete unused plans')
 
         if plan_id.isdigit():
             query = '''SELECT EXISTS(SELECT 1 FROM `plan` WHERE `id` = %s)'''
@@ -876,14 +893,14 @@ class Plan(object):
 
         if not result[0]:
             connection.close()
-            raise HTTPBadRequest('No plan matched', '')
+            raise HTTPBadRequest('No plan matched')
 
         if not plan_name:
             cursor.execute('SELECT `name` FROM `plan` WHERE `id` = %s', plan_id)
             result = cursor.fetchone()
             if not result:
                 connection.close()
-                raise HTTPBadRequest('Could not resolve this plan_id to name', '')
+                raise HTTPBadRequest('Could not resolve this plan_id to name')
             plan_name = result[0]
 
         # Check if any quota is using these.
@@ -895,7 +912,7 @@ class Plan(object):
 
         if result:
             connection.close()
-            raise HTTPBadRequest('Cannot delete this plan as the application %s is using it for quota' % result[0], '')
+            raise HTTPBadRequest('Cannot delete this plan as the application %s is using it for quota' % result[0])
 
         # Check if any incidents were made with these plan IDs. If they were, fail
         cursor.execute('SELECT COUNT(*) FROM `incident` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
@@ -903,28 +920,28 @@ class Plan(object):
 
         if result[0]:
             connection.close()
-            raise HTTPBadRequest('Cannot delete this plan as %s incidents have been created using it' % result[0], '')
+            raise HTTPBadRequest('Cannot delete this plan as %s incidents have been created using it' % result[0])
 
         # Delete all steps
         try:
             cursor.execute('DELETE FROM `plan_notification` WHERE `plan_id` IN (SELECT `id` FROM `plan` WHERE `name` = %s)', plan_name)
         except IntegrityError:
             connection.close()
-            raise HTTPBadRequest('Failed deleting plan steps', '')
+            raise HTTPBadRequest('Failed deleting plan steps')
 
         # Purge plan_active
         try:
             cursor.execute('DELETE FROM `plan_active` WHERE `name` = %s', plan_name)
         except IntegrityError:
             connection.close()
-            raise HTTPBadRequest('Failed deleting plan steps', '')
+            raise HTTPBadRequest('Failed deleting plan steps')
 
         # Delete all matching plans
         try:
             cursor.execute('DELETE FROM `plan` WHERE `name` = %s', plan_name)
         except IntegrityError:
             connection.close()
-            raise HTTPBadRequest('Failed deleting plans. It is likely still in use.', '')
+            raise HTTPBadRequest('Failed deleting plans. It is likely still in use.')
 
         connection.commit()
         connection.close()
@@ -1012,46 +1029,50 @@ class Plans(object):
 
     def on_post(self, req, resp):
         plan_params = ujson.loads(req.context['body'])
-        session = db.Session()
         try:
             run_validation('plan', plan_params)
-            now = datetime.datetime.utcnow()
-            plan_name = plan_params['name'].strip()
+        except IrisValidationException as e:
+            raise HTTPBadRequest('Validation error', str(e))
 
-            if not plan_name:
-                raise HTTPBadRequest('Invalid plan', 'Empty plan name')
+        plan_name = plan_params['name'].strip()
 
-            if plan_name.isdigit():
-                raise HTTPBadRequest('Invalid plan', 'Plan name cannot be a number')
+        if not plan_name:
+            raise HTTPBadRequest('Invalid plan', 'Empty plan name')
 
-            # FIXME: catch creator not exist error
+        if plan_name.isdigit():
+            raise HTTPBadRequest('Invalid plan', 'Plan name cannot be a number')
 
-            tracking_key = plan_params.get('tracking_key')
-            tracking_type = plan_params.get('tracking_type')
-            tracking_template = plan_params.get('tracking_template')
-            is_valid, err_msg = is_valid_tracking_settings(tracking_type, tracking_key, tracking_template)
-            if not is_valid:
-                raise HTTPBadRequest('Invalid tracking template', err_msg)
+        # FIXME: catch creator not exist error
 
-            if tracking_template:
-                tracking_template = ujson.dumps(tracking_template)
-            else:
-                tracking_template = None  # in case tracking_template is an empty dict
-            plan_dict = {
-                'creator': plan_params['creator'],
-                'name': plan_name,
-                'created': now,
-                'description': plan_params['description'],
-                'step_count': len(plan_params['steps']),
-                'threshold_window': plan_params['threshold_window'],
-                'threshold_count': plan_params['threshold_count'],
-                'aggregation_window': plan_params['aggregation_window'],
-                'aggregation_reset': plan_params['aggregation_reset'],
-                'tracking_key': tracking_key,
-                'tracking_type': tracking_type,
-                'tracking_template': tracking_template,
-            }
+        tracking_key = plan_params.get('tracking_key')
+        tracking_type = plan_params.get('tracking_type')
+        tracking_template = plan_params.get('tracking_template')
+        is_valid, err_msg = is_valid_tracking_settings(tracking_type, tracking_key, tracking_template)
+        if not is_valid:
+            raise HTTPBadRequest('Invalid tracking template', err_msg)
 
+        if tracking_template:
+            tracking_template = ujson.dumps(tracking_template)
+        else:
+            tracking_template = None  # in case tracking_template is an empty dict
+
+        now = datetime.datetime.utcnow()
+        plan_dict = {
+            'creator': plan_params['creator'],
+            'name': plan_name,
+            'created': now,
+            'description': plan_params['description'],
+            'step_count': len(plan_params['steps']),
+            'threshold_window': plan_params['threshold_window'],
+            'threshold_count': plan_params['threshold_count'],
+            'aggregation_window': plan_params['aggregation_window'],
+            'aggregation_reset': plan_params['aggregation_reset'],
+            'tracking_key': tracking_key,
+            'tracking_type': tracking_type,
+            'tracking_template': tracking_template,
+        }
+
+        with guarded_db_session() as session:
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
 
             for index, steps in enumerate(plan_params['steps'], start=1):
@@ -1064,7 +1085,8 @@ class Plans(object):
                     if priority:
                         step['priority_id'] = priority['id']
                     else:
-                        raise HTTPBadRequest('Invalid plan', 'Priority not found for step %s' % index)
+                        raise HTTPBadRequest('Invalid plan',
+                                             'Priority not found for step %s' % index)
                     if role:
                         step['role_id'] = role
                     else:
@@ -1073,16 +1095,21 @@ class Plans(object):
                     allowed_roles = {row[0] for row in session.execute(get_allowed_roles_query, step)}
 
                     if not allowed_roles:
-                        raise HTTPBadRequest('Invalid plan', 'Target %s not found for step %s' % (step['target'], index))
+                        raise HTTPBadRequest(
+                            'Invalid plan',
+                            'Target %s not found for step %s' % (step['target'], index))
 
                     if role not in allowed_roles:
-                        raise HTTPBadRequest('Invalid role', 'Role %s is not appropriate for target %s in step %s' % (
-                                             step['role'], step['target'], index))
+                        raise HTTPBadRequest(
+                            'Invalid role',
+                            'Role %s is not appropriate for target %s in step %s' % (
+                                step['role'], step['target'], index))
 
                     try:
                         session.execute(insert_plan_step_query, step)
                     except IntegrityError:
-                        raise HTTPBadRequest('Invalid plan', 'Target not found for step %s' % index)
+                        raise HTTPBadRequest('Invalid plan',
+                                             'Target not found for step %s' % index)
 
             session.execute('INSERT INTO `plan_active` (`name`, `plan_id`) '
                             'VALUES (:name, :plan_id) ON DUPLICATE KEY UPDATE `plan_id`=:plan_id',
@@ -1090,19 +1117,9 @@ class Plans(object):
 
             session.commit()
             session.close()
-            resp.status = HTTP_201
-            resp.body = ujson.dumps(plan_id)
-            resp.set_header('Location', '/plans/%s' % plan_id)
-        except IrisValidationException as e:
-            session.close()
-            raise HTTPBadRequest('Validation error', str(e))
-        except HTTPBadRequest:
-            session.close()
-            raise
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_201
+        resp.body = ujson.dumps(plan_id)
+        resp.set_header('Location', '/plans/%s' % plan_id)
 
 
 class Incidents(object):
@@ -1185,36 +1202,35 @@ class Incidents(object):
         - context json blob is longer than 655355 bytes
         - none of the templates used in the plan supports the given application
         '''
-        session = db.Session()
         incident_params = ujson.loads(req.context['body'])
         if 'plan' not in incident_params:
-            session.close()
-            raise HTTPBadRequest('missing plan name attribute', '')
+            raise HTTPBadRequest('missing plan name attribute')
 
-        plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
-                                  {'plan': incident_params['plan']}).scalar()
-        if not plan_id:
-            logger.warn('Plan "%s" not found.', incident_params['plan'])
-            session.close()
-            raise HTTPNotFound()
+        with guarded_db_session() as session:
+            plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
+                                      {'plan': incident_params['plan']}).scalar()
+            if not plan_id:
+                logger.warn('Plan "%s" not found.', incident_params['plan'])
+                raise HTTPNotFound()
 
-        app = req.context['app']
+            app = req.context['app']
 
-        if 'application' in incident_params:
-            if not req.context['app']['allow_other_app_incidents']:
-                raise HTTPForbidden('This application %s does not allow creating incidents as other applications' % req.context['app']['name'], '')
+            if 'application' in incident_params:
+                if not req.context['app']['allow_other_app_incidents']:
+                    raise HTTPForbidden(
+                        ('This application %s does not allow creating incidents as '
+                         'other applications') % req.context['app']['name'])
 
-            app = cache.applications.get(incident_params['application'])
+                app = cache.applications.get(incident_params['application'])
 
-            if not app:
-                raise HTTPBadRequest('Invalid application', '')
+                if not app:
+                    raise HTTPBadRequest('Invalid application')
 
-        try:
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
                                            for variable in app['variables']})
             if len(context_json_str) > 65535:
-                raise HTTPBadRequest('Context too long', '')
+                raise HTTPBadRequest('Context too long')
 
             app_template_count = session.execute('''
                 SELECT EXISTS (
@@ -1228,7 +1244,7 @@ class Incidents(object):
             ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
-                raise HTTPBadRequest('No plan template actions exist for this app', '')
+                raise HTTPBadRequest('No plan template actions exist for this app')
 
             data = {
                 'plan_id': plan_id,
@@ -1240,21 +1256,16 @@ class Incidents(object):
             }
 
             incident_id = session.execute(
-                '''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                           `current_step`, `active`, `application_id`)
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
                 data).lastrowid
 
             session.commit()
             session.close()
-            resp.status = HTTP_201
-            resp.set_header('Location', '/incidents/%s' % incident_id)
-            resp.body = ujson.dumps(incident_id)
-        except HTTPBadRequest:
-            raise
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_201
+        resp.set_header('Location', '/incidents/%s' % incident_id)
+        resp.body = ujson.dumps(incident_id)
 
 
 class Incident(object):
@@ -1308,7 +1319,7 @@ class Incident(object):
         try:
             cursor.execute(single_incident_query, int(incident_id))
         except ValueError:
-            raise HTTPBadRequest('Invalid incident id', '')
+            raise HTTPBadRequest('Invalid incident id')
         incident = cursor.fetchone()
 
         if incident:
@@ -1330,19 +1341,15 @@ class Incident(object):
         try:
             owner = incident_params['owner']
         except KeyError:
-            raise HTTPBadRequest('"owner" field required', '')
+            raise HTTPBadRequest('"owner" field required')
 
-        session = db.Session()
-        try:
+        with guarded_db_session() as session:
+            # claim_incident will close the session
             is_active = utils.claim_incident(incident_id, owner, session)
-            resp.status = HTTP_200
-            resp.body = ujson.dumps({'incident_id': int(incident_id),
-                                     'owner': owner,
-                                     'active': is_active})
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'incident_id': int(incident_id),
+                                 'owner': owner,
+                                 'active': is_active})
 
 
 class Message(object):
@@ -1552,26 +1559,27 @@ class Notifications(object):
             message['mode_id'] = mode_id
         else:
             raise HTTPBadRequest(
-                'Both priority and mode are missing, at least one of it is required', '')
+                'Both priority and mode are missing, at least one of it is required')
 
         # Avoid problems down the line if we have no way of creating the
         # message body, which happens if both body and template are not
         # specified, or if we don't have email_html
         if 'template' in message:
             if not isinstance(message['template'], basestring):
-                raise HTTPBadRequest('template needs to be a string', '')
+                raise HTTPBadRequest('template needs to be a string')
         elif 'body' in message:
             if not isinstance(message['body'], basestring):
-                raise HTTPBadRequest('body needs to be a string', '')
+                raise HTTPBadRequest('body needs to be a string')
         elif 'email_html' in message:
             if not isinstance(message['email_html'], basestring):
-                raise HTTPBadRequest('email_html needs to be a string', '')
+                raise HTTPBadRequest('email_html needs to be a string')
             # Handle the edge-case where someone is only specifying email_html
             # and not the others. Avoid KeyError's later on in sender
             if message.get('body') is None:
                 message['body'] = ''
         else:
-            raise HTTPBadRequest('body, template, and email_html are missing, so we cannot construct message.', '')
+            raise HTTPBadRequest(
+                'body, template, and email_html are missing, so we cannot construct message.')
 
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
@@ -1625,33 +1633,28 @@ class Template(object):
             resp.body = payload
 
     def on_post(self, req, resp, template_id):
-        session = db.Session()
         template_params = ujson.loads(req.context['body'])
         try:
-            try:
-                active = int(template_params['active'])
-            except ValueError:
-                raise HTTPBadRequest('Invalid active argument', 'active must be an int')
-            except KeyError:
-                raise HTTPBadRequest('Missing active argument', '')
+            active = int(template_params['active'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid active argument', 'active must be an int')
+        except KeyError:
+            raise HTTPBadRequest('Missing active argument')
+        with guarded_db_session() as session:
             if active:
-                session.execute('''INSERT INTO `template_active` (`name`, `template_id`)
-                                   VALUES ((SELECT `name` FROM `template` WHERE `id` = :template_id), :template_id)
-                                   ON DUPLICATE KEY UPDATE `template_id`=:template_id''',
-                                {'template_id': template_id})
+                session.execute(
+                    '''INSERT INTO `template_active` (`name`, `template_id`)
+                       VALUES ((SELECT `name` FROM `template` WHERE `id` = :template_id),
+                               :template_id)
+                       ON DUPLICATE KEY UPDATE `template_id`=:template_id''',
+                    {'template_id': template_id})
             else:
                 session.execute('DELETE FROM `template_active` WHERE `template_id`=:template_id',
                                 {'template_id': template_id})
             session.commit()
             session.close()
-            resp.status = HTTP_200
-            resp.body = ujson.dumps(active)
-        except HTTPBadRequest:
-            raise
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(active)
 
 
 class Templates(object):
@@ -1695,15 +1698,14 @@ class Templates(object):
         resp.body = payload
 
     def on_post(self, req, resp):
-        session = db.Session()
         try:
             template_params = ujson.loads(req.context['body'])
             if 'content' not in template_params:
-                raise HTTPBadRequest('content argument missing', '')
+                raise HTTPBadRequest('content argument missing')
             if 'name' not in template_params:
-                raise HTTPBadRequest('name argument missing', '')
+                raise HTTPBadRequest('name argument missing')
             if 'creator' not in template_params:
-                raise HTTPBadRequest('creator argument missing', '')
+                raise HTTPBadRequest('creator argument missing')
 
             content = template_params.pop('content')
             contents = []
@@ -1719,20 +1721,35 @@ class Templates(object):
                         logger.exception('Invalid jinja syntax')
                         raise HTTPBadRequest('Invalid jinja template', str(e))
                     contents.append(_content)
+        except HTTPBadRequest:
+            raise
+        except Exception:
+            logger.exception('SERVER ERROR')
+            raise
 
-            template_id = session.execute('''INSERT INTO `template` (`name`, `created`, `user_id`)
-                                             VALUES (:name, now(), (SELECT `id` from `target` where `name` = :creator AND `type_id` = (
-                                                        SELECT `id` FROM `target_type` WHERE `name` = 'user'
-                                                      )))''', template_params).lastrowid
+        with guarded_db_session() as session:
+            template_id = session.execute(
+                '''INSERT INTO `template` (`name`, `created`, `user_id`)
+                   VALUES (
+                       :name,
+                       now(),
+                       (SELECT `id` FROM `target`
+                        WHERE `name` = :creator
+                            AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+                   )''',
+                template_params).lastrowid
 
             for _content in contents:
                 _content.update({'template_id': template_id})
-                session.execute('''INSERT INTO `template_content` (`template_id`, `subject`, `body`, `application_id`, `mode_id`)
-                                   VALUES (
-                                     :template_id, :subject, :body,
-                                     (SELECT `id` FROM `application` WHERE `name` = :application),
-                                     (SELECT `id` FROM `mode` WHERE `name` = :mode)
-                                   )''', _content)
+                session.execute(
+                    '''INSERT INTO `template_content` (
+                           `template_id`, `subject`, `body`, `application_id`, `mode_id`)
+                       VALUES (
+                           :template_id, :subject, :body,
+                           (SELECT `id` FROM `application` WHERE `name` = :application),
+                           (SELECT `id` FROM `mode` WHERE `name` = :mode)
+                       )''',
+                    _content)
 
             session.execute('''INSERT INTO `template_active` (`name`, `template_id`)
                                VALUES (:name, :template_id)
@@ -1740,12 +1757,6 @@ class Templates(object):
                             {'name': template_params['name'], 'template_id': template_id})
             session.commit()
             session.close()
-        except HTTPBadRequest:
-            raise
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
 
         resp.status = HTTP_201
         resp.set_header('Location', '/templates/%s' % template_id)
@@ -1757,8 +1768,7 @@ class UserModes(object):
     enforce_user = True
 
     def on_get(self, req, resp, username):
-        session = db.Session()
-        try:
+        with guarded_db_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
             modes = {name: 'default' for (name, ) in results}
 
@@ -1766,22 +1776,17 @@ class UserModes(object):
             if app is None:
                 result = session.execute(get_user_modes_query, {'username': username})
             else:
-                result = session.execute(get_target_application_modes_query, {'username': username, 'app': app})
+                result = session.execute(
+                    get_target_application_modes_query, {'username': username, 'app': app})
             modes.update(list(result))
-
             session.close()
-            resp.status = HTTP_200
-            resp.body = ujson.dumps(modes)
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(modes)
 
     # TODO (dewang): change to PUT for consistency with oncall
     def on_post(self, req, resp, username):
-        session = db.Session()
         mode_params = ujson.loads(req.context['body'])
-        try:
+        with guarded_db_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
             modes = {name: 'default' for (name, ) in results}
 
@@ -1797,7 +1802,8 @@ class UserModes(object):
                     else:
                         session.execute(delete_target_application_modes_query,
                                         {'name': username, 'priority': p, 'app': app})
-                result = session.execute(get_target_application_modes_query, {'username': username, 'app': app})
+                result = session.execute(get_target_application_modes_query,
+                                         {'username': username, 'app': app})
 
             # Configure priority -> mode for multiple applications in one call (avoid MySQL deadlocks)
             elif multiple_apps is not None:
@@ -1814,29 +1820,28 @@ class UserModes(object):
                 for p in mode_params.viewkeys() & modes.viewkeys():
                     m = mode_params[p]
                     if m != 'default':
-                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                        session.execute(insert_user_modes_query,
+                                        {'name': username, 'priority': p, 'mode': m})
                     else:
                         session.execute(delete_user_modes_query, {'name': username, 'priority': p})
                 result = session.execute(get_user_modes_query, {'username': username})
 
-            # Configure user's global priority -> mode which covers all applications that don't have defaults set
+            # Configure user's global priority -> mode which covers all
+            # applications that don't have defaults set
             else:
                 for p, m in mode_params.iteritems():
                     if m != 'default':
-                        session.execute(insert_user_modes_query, {'name': username, 'priority': p, 'mode': m})
+                        session.execute(insert_user_modes_query,
+                                        {'name': username, 'priority': p, 'mode': m})
                     else:
                         session.execute(delete_user_modes_query, {'name': username, 'priority': p})
                 result = session.execute(get_user_modes_query, {'username': username})
-
-            modes.update(list(result))
             session.commit()
+            modes.update(list(result))
             session.close()
-            resp.status = HTTP_200
-            resp.body = ujson.dumps(modes)
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(modes)
 
 
 class TargetRoles(object):
@@ -1870,79 +1875,62 @@ class TargetRoles(object):
                }
            ]
         '''
-        session = db.Session()
-        try:
+        with guarded_db_session() as session:
             sql = '''SELECT `target_role`.`name` AS `name`, `target_type`.`name` AS `type`
                      FROM `target_role`
                      JOIN `target_type` on `target_role`.`type_id` = `target_type`.`id`'''
             results = session.execute(sql)
             payload = ujson.dumps([{'name': row[0], 'type': row[1]} for row in results])
             session.close()
-            resp.status = HTTP_200
-            resp.body = payload
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+
+        resp.status = HTTP_200
+        resp.body = payload
 
 
 class Targets(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp):
-        session = db.Session()
-        filters_sql = []
-        try:
-            if 'startswith' in req.params:
-                req.params['startswith'] = req.params['startswith'] + '%'
-                filters_sql.append('`name` like :startswith')
+        sql = 'SELECT DISTINCT `name` FROM `target`'
+        if 'startswith' in req.params:
+            req.params['startswith'] = req.params['startswith'] + '%'
+            sql += ' WHERE `name` like :startswith'
 
-            sql = '''SELECT DISTINCT `name` FROM `target`'''
-
-            if filters_sql:
-                sql += ' WHERE %s' % ' AND '.join(filters_sql)
-
+        with guarded_db_session() as session:
             results = session.execute(sql, req.params)
-
             payload = ujson.dumps([row for (row,) in results])
             session.close()
-            resp.status = HTTP_200
-            resp.body = payload
-        except Exception:
-            session.close()
-            logger.exception('Failed getting targets')
-            raise
+
+        resp.status = HTTP_200
+        resp.body = payload
 
 
 class Target(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
-        session = db.Session()
+        if target_type not in cache.target_types:
+            raise HTTPBadRequest('Target type %s not found' % target_type)
+
         filters_sql = []
-        try:
-            req.params['type_id'] = cache.target_types[target_type]
-            filters_sql.append('`type_id` = :type_id')
+        req.params['type_id'] = cache.target_types[target_type]
+        filters_sql.append('`type_id` = :type_id')
 
-            if 'startswith' in req.params:
-                req.params['startswith'] = req.params['startswith'] + '%'
-                filters_sql.append('`name` like :startswith')
+        if 'startswith' in req.params:
+            req.params['startswith'] = req.params['startswith'] + '%'
+            filters_sql.append('`name` like :startswith')
 
-            sql = '''SELECT `name` FROM `target`'''
+        sql = 'SELECT `name` FROM `target`'
+        if filters_sql:
+            sql += ' WHERE %s' % ' AND '.join(filters_sql)
 
-            if filters_sql:
-                sql += ' WHERE %s' % ' AND '.join(filters_sql)
-
+        with guarded_db_session() as session:
             results = session.execute(sql, req.params)
-
             payload = ujson.dumps([row for (row,) in results])
             session.close()
-            resp.status = HTTP_200
-            resp.body = payload
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
+
+        resp.status = HTTP_200
+        resp.body = payload
 
 
 class Application(object):
@@ -1957,7 +1945,7 @@ class Application(object):
         if not app:
             cursor.close()
             connection.close()
-            raise HTTPBadRequest('Application %s not found' % app_name, '')
+            raise HTTPBadRequest('Application %s not found' % app_name)
 
         cursor.execute(get_vars_query, app['id'])
         app['variables'] = []
@@ -1988,188 +1976,242 @@ class Application(object):
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:
-            raise HTTPBadRequest('Invalid json in post body', '')
+            raise HTTPBadRequest('Invalid json in post body')
 
-        session = db.Session()
+        with guarded_db_session() as session:
+            app = session.execute(get_applications_query + ' AND `application`.`name` = :app_name',
+                                  {'app_name': app_name}).fetchone()
+            if not app:
+                raise HTTPBadRequest('Application %s not found' % app_name)
 
-        app = session.execute(get_applications_query + ' AND `application`.`name` = :app_name', {'app_name': app_name}).fetchone()
-        if not app:
-            session.close()
-            raise HTTPBadRequest('Application %s not found' % app_name, '')
+            # Only admins and application owners can change app settings
+            is_owner = bool(session.execute(check_application_ownership_query,
+                                            {'application_id': app['id'],
+                                             'username': req.context['username']}).scalar())
+            if not is_owner and not req.context['is_admin']:
+                raise HTTPUnauthorized(
+                    'Only admins and app owners can change this app\'s settings.')
 
-        # Only admins and application owners can change app settings
-        is_owner = bool(session.execute(check_application_ownership_query, {'application_id': app['id'], 'username': req.context['username']}).scalar())
-        if not is_owner and not req.context['is_admin']:
-            session.close()
-            raise HTTPUnauthorized('Only admins and app owners can change this app\'s settings.', '')
+            try:
+                ujson.loads(data['sample_context'])
+            except (KeyError, ValueError):
+                raise HTTPBadRequest('sample_context must be valid json')
 
-        try:
-            ujson.loads(data['sample_context'])
-        except (KeyError, ValueError):
-            raise HTTPBadRequest('sample_context must be valid json', '')
+            if 'context_template' not in data:
+                raise HTTPBadRequest('context_template must be specified')
 
-        if 'context_template' not in data:
-            raise HTTPBadRequest('context_template must be specified', '')
+            if 'summary_template' not in data:
+                raise HTTPBadRequest('summary_template must be specified')
 
-        if 'summary_template' not in data:
-            raise HTTPBadRequest('summary_template must be specified', '')
+            new_variables = data.get('variables')
+            if not isinstance(new_variables, list):
+                raise HTTPBadRequest('variables must be specified and be a list')
+            new_variables = set(new_variables)
 
-        new_variables = data.get('variables')
-        if not isinstance(new_variables, list):
-            raise HTTPBadRequest('variables must be specified and be a list', '')
-        new_variables = set(new_variables)
+            existing_variables = {
+                row[0] for row in session.execute(
+                    'SELECT `name` FROM `template_variable` WHERE `application_id` = :application_id',
+                    {'application_id': app['id']})
+            }
 
-        existing_variables = {row[0] for row in session.execute('SELECT `name` FROM `template_variable` WHERE `application_id` = :application_id',
-                                                                {'application_id': app['id']})}
+            kill_variables = existing_variables - new_variables
 
-        kill_variables = existing_variables - new_variables
+            for variable in new_variables - existing_variables:
+                session.execute('''INSERT INTO `template_variable` (`application_id`, `name`)
+                                VALUES (:application_id, :variable)''',
+                                {'application_id': app['id'], 'variable': variable})
 
-        for variable in new_variables - existing_variables:
-            session.execute('INSERT INTO `template_variable` (`application_id`, `name`) VALUES (:application_id, :variable)',
-                            {'application_id': app['id'], 'variable': variable})
+            if kill_variables:
+                session.execute('''DELETE FROM `template_variable`
+                                WHERE `application_id` = :application_id AND `name` IN :variables''',
+                                {'application_id': app['id'], 'variables': tuple(kill_variables)})
 
-        if kill_variables:
-            session.execute('DELETE FROM `template_variable` WHERE `application_id` = :application_id AND `name` IN :variables',
-                            {'application_id': app['id'], 'variables': tuple(kill_variables)})
+            # Only owners can (optionally) change owners
+            new_owners = data.get('owners')
+            if new_owners is not None:
+                if not isinstance(new_owners, list):
+                    raise HTTPBadRequest('To change owners, you must pass a list of strings')
 
-        # Only owners can (optionally) change owners
-        new_owners = data.get('owners')
-        if new_owners is not None:
-            if not isinstance(new_owners, list):
-                raise HTTPBadRequest('To change owners, you must pass a list of strings', '')
+                new_owners = set(new_owners)
 
-            new_owners = set(new_owners)
+                # Make it impossible for the current user to remove themselves as
+                # an owner, unless they're an admin
+                if is_owner and not req.context['is_admin']:
+                    new_owners.add(req.context['username'])
 
-            # Make it impossible for the current user to remove themselves as an owner, unless they're an admin
-            if is_owner and not req.context['is_admin']:
-                new_owners.add(req.context['username'])
+                existing_owners = {
+                    row[0] for row in session.execute(
+                        '''SELECT `target`.`name`
+                           FROM `target`
+                           JOIN `application_owner` ON `target`.`id` = `application_owner`.`user_id`
+                           WHERE `application_owner`.`application_id` = :application_id''',
+                        {'application_id': app['id']})
+                }
+                kill_owners = existing_owners - new_owners
+                add_owners = new_owners - existing_owners
 
-            existing_owners = {row[0] for row in session.execute('''SELECT `target`.`name`
-                                                                    FROM `target`
-                                                                    JOIN `application_owner` ON `target`.`id` = `application_owner`.`user_id`
-                                                                    WHERE `application_owner`.`application_id` = :application_id''', {'application_id': app['id']})}
-            kill_owners = existing_owners - new_owners
-            add_owners = new_owners - existing_owners
+                for owner in add_owners:
+                    try:
+                        session.execute(
+                            '''INSERT INTO `application_owner` (`application_id`, `user_id`)
+                               VALUES (:application_id,
+                                       (SELECT `user`.`target_id` FROM `user`
+                                        JOIN `target` on `target`.`id` = `user`.`target_id`
+                                        WHERE `target`.`name` = :owner))''',
+                            {'application_id': app['id'], 'owner': owner})
+                    except IntegrityError:
+                        logger.exception(
+                            'Integrity error whilst adding user %s as an owner to app %s',
+                            owner, app_name)
 
-            for owner in add_owners:
-                try:
-                    session.execute('''INSERT INTO `application_owner` (`application_id`, `user_id`)
-                                       VALUES (:application_id, (SELECT `user`.`target_id` FROM `user`
-                                                                 JOIN `target` on `target`.`id` = `user`.`target_id`
-                                                                 WHERE `target`.`name` = :owner))''', {'application_id': app['id'], 'owner': owner})
-                except IntegrityError:
-                    logger.exception('Integrity error whilst adding user %s as an owner to app %s', owner, app_name)
+                if kill_owners:
+                    session.execute(
+                        '''DELETE FROM `application_owner`
+                           WHERE `application_id` = :application_id
+                           AND `user_id` IN (SELECT `user`.`target_id` FROM `user`
+                                             JOIN `target` on `target`.`id` = `user`.`target_id`
+                                             WHERE `target`.`name` IN :owners)''',
+                        {'application_id': app['id'], 'owners': tuple(kill_owners)})
 
-            if kill_owners:
-                session.execute('''DELETE FROM `application_owner`
-                                   WHERE `application_id` = :application_id
-                                   AND `user_id` IN (SELECT `user`.`target_id` FROM `user`
-                                                     JOIN `target` on `target`.`id` = `user`.`target_id`
-                                                     WHERE `target`.`name` IN :owners)''', {'application_id': app['id'], 'owners': tuple(kill_owners)})
+                if kill_owners or add_owners:
+                    logger.info('User %s has changed owners for app %s to: %s',
+                                req.context['username'], app_name, ', '.join(new_owners))
 
-            if kill_owners or add_owners:
-                logger.info('User %s has changed owners for app %s to: %s', req.context['username'], app_name, ', '.join(new_owners))
+            # Only admins can (optionally) change supported modes
+            new_modes = data.get('supported_modes')
+            if req.context['is_admin'] and new_modes is not None:
+                if not isinstance(new_modes, list):
+                    raise HTTPBadRequest('To change modes, you must pass a list of strings')
 
-        # Only admins can (optionally) change supported modes
-        new_modes = data.get('supported_modes')
-        if req.context['is_admin'] and new_modes is not None:
-            if not isinstance(new_modes, list):
-                raise HTTPBadRequest('To change modes, you must pass a list of strings', '')
+                new_modes = set(new_modes)
+                result = session.execute(
+                    '''SELECT `mode`.`name`
+                       FROM `mode`
+                       JOIN `application_mode` ON `application_mode`.`mode_id` = `mode`.`id`
+                       WHERE `application_mode`.`application_id` = :application_id''',
+                    {'application_id': app['id']})
+                existing_modes = {row[0] for row in result}
+                kill_modes = existing_modes - new_modes
+                add_modes = new_modes - existing_modes
 
-            new_modes = set(new_modes)
-            existing_modes = {row[0] for row in session.execute('''SELECT `mode`.`name`
-                                                                   FROM `mode`
-                                                                   JOIN `application_mode` ON `application_mode`.`mode_id` = `mode`.`id`
-                                                                   WHERE `application_mode`.`application_id` = :application_id''', {'application_id': app['id']})}
-            kill_modes = existing_modes - new_modes
-            add_modes = new_modes - existing_modes
+                for mode in add_modes:
+                    try:
+                        session.execute(
+                            '''INSERT INTO `application_mode` (`application_id`, `mode_id`)
+                               VALUES (:application_id,
+                                       (SELECT `mode`.`id` FROM `mode`
+                                        WHERE `mode`.`name` = :mode))''',
+                            {'application_id': app['id'], 'mode': mode})
+                    except IntegrityError:
+                        logger.exception(
+                            'Integrity error whilst adding  %s as an mode to app %s',
+                            mode, app_name)
 
-            for mode in add_modes:
-                try:
-                    session.execute('''INSERT INTO `application_mode` (`application_id`, `mode_id`)
-                                       VALUES (:application_id, (SELECT `mode`.`id` FROM `mode`
-                                                                 WHERE `mode`.`name` = :mode))''', {'application_id': app['id'], 'mode': mode})
-                except IntegrityError:
-                    logger.exception('Integrity error whilst adding  %s as an mode to app %s', mode, app_name)
+                if kill_modes:
+                    delete_args = {
+                        'application_id': app['id'],
+                        'modes': tuple(kill_modes)
+                    }
+                    session.execute(
+                        '''DELETE FROM `application_mode`
+                           WHERE `application_id` = :application_id
+                           AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
+                                             WHERE `mode`.`name` IN :modes)''',
+                        delete_args)
+                    session.execute(
+                        '''DELETE FROM `default_application_mode`
+                           WHERE `application_id` = :application_id
+                           AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
+                                             WHERE `mode`.`name` IN :modes)''',
+                        delete_args)
+                session.commit()
 
-            if kill_modes:
-                session.execute('''DELETE FROM `application_mode`
-                                   WHERE `application_id` = :application_id
-                                   AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
-                                                     WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
+                if kill_modes or add_modes:
+                    logger.info('User %s has changed supported_modes for app %s to: %s',
+                                req.context['username'], app_name, ', '.join(new_modes))
 
-                session.execute('''DELETE FROM `default_application_mode`
-                                   WHERE `application_id` = :application_id
-                                   AND `mode_id` IN (SELECT `mode`.`id` FROM `mode`
-                                                     WHERE `mode`.`name` IN :modes)''', {'application_id': app['id'], 'modes': tuple(kill_modes)})
+            # Also support changing the default modes per priority per app,
+            # adhering to ones that are allowed for said app.
+            default_modes = data.get('default_modes')
+            if isinstance(default_modes, dict):
+                existing_priorities = {row[0] for row in session.execute(
+                    '''SELECT `priority`.`name`
+                       FROM `default_application_mode`
+                       JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
+                       WHERE `default_application_mode`.`application_id` = :application_id''',
+                    {'application_id': app['id']})}
+                kill_priorities = existing_priorities - default_modes.viewkeys()
+                for priority, mode in default_modes.iteritems():
+                    # If we disabled this mode for this app in the code block
+                    # above, avoid the expected integrity error here by bailing
+                    # early
+                    if new_modes is not None and mode not in new_modes:
+                        logger.warn(('Not setting default priority %s to mode %s for app %s '
+                                     'as this mode was disabled as part of this app update'),
+                                    priority, mode, app_name)
+                        continue
+
+                    try:
+                        session.execute(
+                            '''INSERT INTO `default_application_mode` (
+                                   `application_id`, `priority_id`, `mode_id`
+                               ) VALUES (
+                                   :application_id,
+                                   (SELECT `id` FROM `priority` WHERE `name` = :priority),
+                                   (SELECT `id` FROM `mode`
+                                    JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
+                                        AND `application_mode`.`mode_id` = `mode`.`id`
+                                    WHERE `mode`.`name` = :mode)
+                               )
+                               ON DUPLICATE KEY UPDATE `mode_id` = (
+                                   SELECT `id` FROM `mode`
+                                   JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
+                                       AND `application_mode`.`mode_id` = `mode`.`id`
+                                   WHERE `mode`.`name` = :mode)''',
+                            {'application_id': app['id'], 'priority': priority, 'mode': mode})
+                        session.commit()
+                    except IntegrityError:
+                        logger.exception(('Integrity error whilst setting default priority %s '
+                                          'to mod %s for app %s'),
+                                         priority, mode, app_name)
+
+                if kill_priorities:
+                    session.execute(
+                        '''DELETE FROM `default_application_mode`
+                           WHERE `application_id` = :application_id
+                               AND `priority_id` IN (
+                                   SELECT `id` FROM `priority`  WHERE `name` in :priorities
+                               )''',
+                        {'application_id': app['id'], 'priorities': tuple(kill_priorities)})
+
+            data['application_id'] = app['id']
+            session.execute(
+                '''UPDATE `application`
+                   SET `context_template` = :context_template,
+                       `summary_template` = :summary_template,
+                       `sample_context` = :sample_context
+                   WHERE `id` = :application_id LIMIT 1''',
+                data)
             session.commit()
+            session.close()
 
-            if kill_modes or add_modes:
-                logger.info('User %s has changed supported_modes for app %s to: %s', req.context['username'], app_name, ', '.join(new_modes))
-
-        # Also support changing the default modes per priority per app, adhering to ones that are allowed for said app.
-        default_modes = data.get('default_modes')
-        if isinstance(default_modes, dict):
-            existing_priorities = {row[0] for row in session.execute('''SELECT `priority`.`name`
-                                                                        FROM `default_application_mode`
-                                                                        JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
-                                                                        WHERE `default_application_mode`.`application_id` = :application_id''', {'application_id': app['id']})}
-            kill_priorities = existing_priorities - default_modes.viewkeys()
-            for priority, mode in default_modes.iteritems():
-
-                # If we disabled this mode for this app in the code block above, avoid the expected integrity error here by bailing early
-                if new_modes is not None and mode not in new_modes:
-                    logger.warn('Not setting default priority %s to mode %s for app %s as this mode was disabled as part of this app update', priority, mode, app_name)
-                    continue
-
-                try:
-                    session.execute('''INSERT INTO `default_application_mode` (`application_id`, `priority_id`, `mode_id`)
-                                       VALUES (:application_id, (SELECT `id` FROM `priority` WHERE `name` = :priority),
-                                               (SELECT `id` FROM `mode`
-                                                JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
-                                                AND `application_mode`.`mode_id` = `mode`.`id`
-                                                WHERE `mode`.`name` = :mode))
-                                       ON DUPLICATE KEY UPDATE `mode_id` = (SELECT `id` FROM `mode`
-                                                JOIN `application_mode` ON `application_mode`.`application_id` = :application_id
-                                                AND `application_mode`.`mode_id` = `mode`.`id`
-                                                WHERE `mode`.`name` = :mode)''', {'application_id': app['id'], 'priority': priority, 'mode': mode})
-                    session.commit()
-                except IntegrityError:
-                    logger.exception('Integrity error whilst setting default priority %s to mod %s for app %s', priority, mode, app_name)
-
-            if kill_priorities:
-                session.execute('''DELETE FROM `default_application_mode` WHERE `application_id` = :application_id
-                                   AND `priority_id` IN ( SELECT `id` FROM `priority`  WHERE `name` in :priorities) ''', {'application_id': app['id'], 'priorities': tuple(kill_priorities)})
-
-        data['application_id'] = app['id']
-
-        session.execute('''UPDATE `application`
-                          SET `context_template` = :context_template, `summary_template` = :summary_template,
-                              `sample_context` = :sample_context
-                          WHERE `id` = :application_id LIMIT 1''', data)
-
-        session.commit()
-        session.close()
-
-        resp.body = '{}'
+            resp.body = '[]'
 
     def on_delete(self, req, resp, app_name):
         if not req.context['is_admin']:
-            raise HTTPUnauthorized('Only admins can remove apps', '')
+            raise HTTPUnauthorized('Only admins can remove apps')
 
-        session = db.Session()
-
-        try:
-            affected = session.execute('''DELETE FROM `application` WHERE `name` = :app_name''', {'app_name': app_name}).rowcount
-            session.commit()
-        except IntegrityError:
-            raise HTTPBadRequest('Cannot remove app. It has likely already in use.', '')
-        finally:
-            session.close()
-
+        affected = False
+        with guarded_db_session() as session:
+            try:
+                affected = session.execute('DELETE FROM `application` WHERE `name` = :app_name',
+                                           {'app_name': app_name}).rowcount
+                session.commit()
+                session.close()
+            except IntegrityError:
+                raise HTTPBadRequest('Cannot remove app. It has likely already in use.')
         if not affected:
-            raise HTTPBadRequest('No rows changed; app name probably already deleted', '')
-
+            raise HTTPBadRequest('No rows changed; app name probably already deleted')
         resp.body = '[]'
 
 
@@ -2194,75 +2236,81 @@ class ApplicationQuota(object):
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:
-            raise HTTPBadRequest('Invalid json in post body', '')
+            raise HTTPBadRequest('Invalid json in post body')
 
         if data.viewkeys() != required_quota_keys:
-            raise HTTPBadRequest('Missing required keys in post body', '')
+            raise HTTPBadRequest('Missing required keys in post body')
 
         try:
             for key in quota_int_keys:
                 if int(data[key]) < 1:
-                    raise HTTPBadRequest('All int keys must be over 0', '')
+                    raise HTTPBadRequest('All int keys must be over 0')
         except ValueError:
-            raise HTTPBadRequest('Some int keys are not integers', '')
+            raise HTTPBadRequest('Some int keys are not integers')
 
         if data['hard_quota_threshold'] <= data['soft_quota_threshold']:
-            raise HTTPBadRequest('Hard threshold must be bigger than soft threshold', '')
+            raise HTTPBadRequest('Hard threshold must be bigger than soft threshold')
 
-        session = db.Session()
+        with guarded_db_session() as session:
+            application_id = session.execute(
+                'SELECT `id` FROM `application` WHERE `name` = :app_name',
+                {'app_name': app_name}).scalar()
 
-        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+            if not application_id:
+                raise HTTPBadRequest('No ID found for that application')
 
-        if not application_id:
+            # Only admins and application owners can change quota settings
+            if not req.context['is_admin']:
+                has_ownership = session.execute(
+                    check_application_ownership_query,
+                    {'application_id': application_id, 'username': req.context['username']}
+                ).scalar()
+                if not has_ownership:
+                    raise HTTPUnauthorized(
+                        'You don\'t have permissions to update this app\'s quota.')
+
+            is_active = session.execute(
+                'SELECT 1 FROM `plan_active` WHERE `name` = :plan_name', data).scalar()
+            if not is_active:
+                raise HTTPBadRequest('No active ID found for that plan')
+
+            target_id = session.execute(
+                'SELECT `id` FROM `target` WHERE `name` = :target_name', data).scalar()
+            if not target_id:
+                raise HTTPBadRequest('No ID found for that target')
+
+            data['application_id'] = application_id
+            data['target_id'] = target_id
+
+            session.execute(insert_application_quota_query, data)
+            session.commit()
             session.close()
-            raise HTTPBadRequest('No ID found for that application', '')
-
-        # Only admins and application owners can change quota settings
-        if not req.context['is_admin']:
-            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
-                session.close()
-                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
-
-        if not session.execute('SELECT 1 FROM `plan_active` WHERE `name` = :plan_name', data).scalar():
-            session.close()
-            raise HTTPBadRequest('No active ID found for that plan', '')
-
-        target_id = session.execute('SELECT `id` FROM `target` WHERE `name` = :target_name', data).scalar()
-
-        if not target_id:
-            session.close()
-            raise HTTPBadRequest('No ID found for that target', '')
-
-        data['application_id'] = application_id
-        data['target_id'] = target_id
-
-        session.execute(insert_application_quota_query, data)
-        session.commit()
-        session.close()
 
         resp.status = HTTP_201
-        resp.body = '{}'
+        resp.body = '[]'
 
     def on_delete(self, req, resp, app_name):
-        session = db.Session()
+        with guarded_db_session() as session:
+            application_id = session.execute(
+                'SELECT `id` FROM `application` WHERE `name` = :app_name',
+                {'app_name': app_name}).scalar()
 
-        application_id = session.execute('SELECT `id` FROM `application` WHERE `name` = :app_name', {'app_name': app_name}).scalar()
+            if not application_id:
+                raise HTTPBadRequest('No ID found for that application')
 
-        if not application_id:
+            if not req.context['is_admin']:
+                if not session.execute(check_application_ownership_query,
+                                       {'application_id': application_id,
+                                        'username': req.context['username']}).scalar():
+                    raise HTTPUnauthorized(
+                        'You don\'t have permissions to update this app\'s quota.')
+
+            session.execute(
+                'DELETE FROM `application_quota` WHERE `application_id` = :application_id',
+                {'application_id': application_id})
+            session.commit()
             session.close()
-            raise HTTPBadRequest('No ID found for that application', '')
-
-        if not req.context['is_admin']:
-            if not session.execute(check_application_ownership_query, {'application_id': application_id, 'username': req.context['username']}).scalar():
-                session.close()
-                raise HTTPUnauthorized('You don\'t have permissions to update this app\'s quota.', '')
-
-        session.execute('DELETE FROM `application_quota` WHERE `application_id` = :application_id', {'application_id': application_id})
-        session.commit()
-        session.close()
-
         resp.status = HTTP_204
-        resp.body = '{}'
 
 
 class ApplicationKey(object):
@@ -2270,27 +2318,29 @@ class ApplicationKey(object):
 
     def on_get(self, req, resp, app_name):
         if not req.context['username']:
-            raise HTTPUnauthorized('You must be a logged in user to view this app\'s key', '')
+            raise HTTPUnauthorized('You must be a logged in user to view this app\'s key')
 
-        session = db.Session()
+        with guarded_db_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to view this app\'s key.')
 
-        if not req.context['is_admin']:
-            if not session.execute('''SELECT 1
-                                      FROM `application_owner`
-                                      JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                                      JOIN `application` on `application`.`id` = `application_owner`.`application_id`
-                                      WHERE `target`.`name` = :username
-                                      AND `application`.`name` = :app_name''', {'app_name': app_name, 'username': req.context['username']}).scalar():
-                session.close()
-                raise HTTPForbidden('You don\'t have permissions to view this app\'s key.', '')
+            key = session.execute(
+                'SELECT `key` FROM `application` WHERE `name` = :app_name LIMIT 1',
+                {'app_name': app_name}).scalar()
 
-        key = session.execute('''SELECT `key` FROM `application` WHERE `name` = :app_name LIMIT 1''', {'app_name': app_name}).scalar()
+            if not key:
+                raise HTTPBadRequest('Key for this application not found')
 
-        if not key:
             session.close()
-            raise HTTPBadRequest('Key for this application not found', '')
-
-        session.close()
 
         resp.body = ujson.dumps({'key': key})
 
@@ -2300,23 +2350,25 @@ class ApplicationReKey(object):
 
     def on_post(self, req, resp, app_name):
         if not req.context['is_admin']:
-            raise HTTPUnauthorized('You must be an admin to rekey an app', '')
+            raise HTTPUnauthorized('You must be an admin to rekey an app')
 
         data = {
             'app_name': app_name,
             'new_key': hashlib.sha256(os.urandom(32)).hexdigest()
         }
 
-        session = db.Session()
-        affected = session.execute('''UPDATE `application` SET `key` = :new_key WHERE `name` = :app_name''', data).rowcount
-        session.commit()
-        session.close()
+        affected = False
+        with guarded_db_session() as session:
+            affected = session.execute(
+                'UPDATE `application` SET `key` = :new_key WHERE `name` = :app_name',
+                data).rowcount
+            session.commit()
+            session.close()
 
         if not affected:
-            raise HTTPBadRequest('No rows changed; app name likely incorrect', '')
+            raise HTTPBadRequest('No rows changed; app name likely incorrect')
 
         logger.info('Admin user %s has re-key\'d app %s', req.context['username'], app_name)
-
         resp.body = '[]'
 
 
@@ -2359,83 +2411,115 @@ class ApplicationEmailIncidents(object):
 
     def on_put(self, req, resp, app_name):
         if not req.context['username']:
-            raise HTTPUnauthorized('You must be a logged in user to change this application\'s email incident settings', '')
-
-        session = db.Session()
-
-        if not req.context['is_admin']:
-            if not session.execute('''SELECT 1
-                                      FROM `application_owner`
-                                      JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                                      JOIN `application` on `application`.`id` = `application_owner`.`application_id`
-                                      WHERE `target`.`name` = :username
-                                      AND `application`.`name` = :app_name''', {'app_name': app_name, 'username': req.context['username']}).scalar():
-                session.close()
-                raise HTTPForbidden('You don\'t have permissions to change this application\'s email incident settings.', '')
-
+            raise HTTPUnauthorized(('You must be a logged in user to change this '
+                                    'application\'s email incident settings'))
         try:
             email_to_plans = ujson.loads(req.context['body'])
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
 
-        if email_to_plans:
-            email_addresses = tuple(email_to_plans.keys())
+        with guarded_db_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden(('You don\'t have permissions to change this '
+                                         'application\'s email incident settings.'))
 
-            # If we're trying to configure email addresses which are members contacts, block this
-            check_users_emails = session.execute('''SELECT `target_contact`.`destination`
-                                                    FROM `target_contact`
-                                                    WHERE `target_contact`.`destination` IN :email_addresses
-                                                    ''', {'email_addresses': email_addresses}).fetchall()
-            if check_users_emails:
-                session.close()
-                raise HTTPBadRequest('These email addresses are also user\'s email addresses which is not allowed: %s' % ', '.join(row[0] for row in check_users_emails))
+            if email_to_plans:
+                email_addresses = tuple(email_to_plans.keys())
 
-            # If we're trying to configure email addresses currently in use by other apps, block this
-            check_other_apps_emails = session.execute('''SELECT `incident_emails`.`email`
-                                                         FROM `incident_emails`
-                                                         WHERE `incident_emails`.`application_id` != (SELECT `id` FROM `application` WHERE `name` = :app_name)
-                                                         AND `incident_emails`.`email` in :email_addresses''', {'app_name': app_name, 'email_addresses': email_addresses}).fetchall()
-            if check_other_apps_emails:
-                session.close()
-                raise HTTPBadRequest('These email addresses are already in use by another app: %s' % ', '.join(row[0] for row in check_other_apps_emails))
+                # If we're trying to configure email addresses which are members contacts, block this
+                check_users_emails = session.execute(
+                    '''SELECT `target_contact`.`destination`
+                       FROM `target_contact`
+                       WHERE `target_contact`.`destination` IN :email_addresses''',
+                    {'email_addresses': email_addresses}).fetchall()
+                if check_users_emails:
+                    user_emails_list = ', '.join(row[0] for row in check_users_emails)
+                    raise HTTPBadRequest(('These email addresses are also user\'s email '
+                                          'addresses which is not allowed: %s') % user_emails_list)
 
-            # Delete all email -> plan configurations which are not present in this, for this app
-            session.execute('''DELETE FROM `incident_emails`
-                               WHERE `incident_emails`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)
-                               AND `incident_emails`.`email` NOT IN :email_addresses''', {'app_name': app_name, 'email_addresses': email_addresses})
+                # If we're trying to configure email addresses currently in use
+                # by other apps, block this
+                check_other_apps_emails = session.execute(
+                    '''SELECT `incident_emails`.`email`
+                       FROM `incident_emails`
+                       WHERE `incident_emails`.`application_id` != (
+                               SELECT `id` FROM `application` WHERE `name` = :app_name
+                           )
+                           AND `incident_emails`.`email` in :email_addresses''',
+                    {'app_name': app_name, 'email_addresses': email_addresses}).fetchall()
+                if check_other_apps_emails:
+                    other_apps_email_list = ', '.join(row[0] for row in check_other_apps_emails)
+                    raise HTTPBadRequest(('These email addresses are already in use by another '
+                                          'app: %s') % other_apps_email_list)
 
-            # Configure new/existing ones
-            for email_address, plan_name in email_to_plans.iteritems():
+                # Delete all email -> plan configurations which are not present in this, for this app
+                session.execute(
+                    '''DELETE FROM `incident_emails`
+                       WHERE `incident_emails`.`application_id` = (
+                           SELECT `id` FROM `application` WHERE `name` = :app_name
+                       )
+                       AND `incident_emails`.`email` NOT IN :email_addresses''',
+                    {'app_name': app_name, 'email_addresses': email_addresses})
 
-                # If this plan does not have steps that support this app, block this
-                app_template_count = session.execute('''
-                    SELECT EXISTS (
-                        SELECT 1 FROM
-                        `plan_notification`
-                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
-                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
-                        WHERE `plan_notification`.`plan_id` = (SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name)
-                        AND `template_content`.`application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)
-                    )
-                ''', {'app_name': app_name, 'plan_name': plan_name}).scalar()
+                # Configure new/existing ones
+                for email_address, plan_name in email_to_plans.iteritems():
+                    # If this plan does not have steps that support this app, block this
+                    app_template_count = session.execute('''
+                        SELECT EXISTS (
+                            SELECT 1 FROM
+                            `plan_notification`
+                            JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                            JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                            WHERE `plan_notification`.`plan_id` = (
+                                    SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name
+                                )
+                                AND `template_content`.`application_id` = (
+                                    SELECT `id` FROM `application` WHERE `name` = :app_name
+                                )
+                        )
+                    ''', {'app_name': app_name, 'plan_name': plan_name}).scalar()
+                    if not app_template_count:
+                        raise HTTPBadRequest(
+                            ('Failed adding %s -> %s combination. This plan does not have any '
+                             'templates which support this app.') % (email_address, plan_name))
 
-                if not app_template_count:
-                    session.close()
-                    raise HTTPBadRequest('Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (email_address, plan_name))
-
-                try:
-                    session.execute('''INSERT INTO `incident_emails` (`application_id`, `email`, `plan_name`)
-                                       VALUES ((SELECT `id` FROM `application` WHERE `name` = :app_name), :email_address, :plan_name)
-                                       ON DUPLICATE KEY UPDATE `plan_name` = :plan_name ''', {'app_name': app_name, 'email_address': email_address, 'plan_name': plan_name})
-                except IntegrityError:
-                    session.close()
-                    raise HTTPBadRequest('Failed adding %s -> %s combination. Is your plan name correct?' % (email_address, plan_name))
-        else:
-            session.execute('''DELETE FROM `incident_emails` WHERE `application_id` = (SELECT `id` FROM `application` WHERE `name` = :app_name)''', {'app_name': app_name})
-
-        session.commit()
-        session.close()
-
+                    try:
+                        session.execute(
+                            '''INSERT INTO `incident_emails` (`application_id`, `email`, `plan_name`)
+                               VALUES (
+                                   (SELECT `id` FROM `application` WHERE `name` = :app_name),
+                                   :email_address,
+                                   :plan_name
+                               )
+                               ON DUPLICATE KEY UPDATE `plan_name` = :plan_name ''',
+                            {
+                                'app_name': app_name,
+                                'email_address': email_address,
+                                'plan_name': plan_name
+                            })
+                    except IntegrityError:
+                        # FIXME: test this
+                        raise HTTPBadRequest(('Failed adding %s -> %s combination. Is your '
+                                              'plan name correct?') % (email_address, plan_name))
+            else:
+                # if not email_to_plans
+                session.execute(
+                    '''DELETE FROM `incident_emails`
+                       WHERE `application_id` = (
+                           SELECT `id` FROM `application` WHERE `name` = :app_name
+                       )''',
+                    {'app_name': app_name})
+            session.commit()
+            session.close()
         resp.body = '[]'
         resp.status = HTTP_200
 
@@ -2445,38 +2529,40 @@ class ApplicationRename(object):
 
     def on_put(self, req, resp, app_name):
         if not req.context['is_admin']:
-            raise HTTPUnauthorized('Only admins can rename apps', '')
+            raise HTTPUnauthorized('Only admins can rename apps')
 
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:
-            raise HTTPBadRequest('Invalid json in post body', '')
+            raise HTTPBadRequest('Invalid json in post body')
 
         new_name = data.get('new_name', '').strip()
 
         if new_name == '':
-            raise HTTPBadRequest('Missing new_name from post body', '')
+            raise HTTPBadRequest('Missing new_name from post body')
 
         if new_name == app_name:
-            raise HTTPBadRequest('New and old app name are identical', '')
-
-        session = db.Session()
+            raise HTTPBadRequest('New and old app name are identical')
 
         data = {
             'new_name': new_name,
             'old_name': app_name
         }
 
-        try:
-            affected = session.execute('''UPDATE `application` SET `name` = :new_name WHERE `name` = :old_name''', data).rowcount
-            session.commit()
-        except IntegrityError:
-            raise HTTPBadRequest('Destination app name likely already exists', '')
-        finally:
-            session.close()
+        affected = False
+        with guarded_db_session() as session:
+            try:
+                affected = session.execute(
+                    'UPDATE `application` SET `name` = :new_name WHERE `name` = :old_name',
+                    data).rowcount
+                session.commit()
+            except IntegrityError:
+                raise HTTPBadRequest('Destination app name likely already exists')
+            finally:
+                session.close()
 
         if not affected:
-            raise HTTPBadRequest('No rows changed; old app name incorrect', '')
+            raise HTTPBadRequest('No rows changed; old app name incorrect')
 
         resp.body = '[]'
 
@@ -2588,43 +2674,45 @@ class Applications(object):
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:
-            raise HTTPBadRequest('Invalid json in post body', '')
+            raise HTTPBadRequest('Invalid json in post body')
 
         app_name = data.get('name', '').strip()
 
         if app_name == '':
-            raise HTTPBadRequest('Missing app name', '')
+            raise HTTPBadRequest('Missing app name')
 
         # Only iris super admins can create apps
         if not req.context['is_admin']:
-            raise HTTPUnauthorized('Only admins can create apps', '')
+            raise HTTPUnauthorized('Only admins can create apps')
 
         new_app_data = {
             'name': app_name,
             'key': hashlib.sha256(os.urandom(32)).hexdigest()
         }
 
-        session = db.Session()
+        with guarded_db_session() as session:
+            try:
+                app_id = session.execute(
+                    'INSERT INTO `application` (`name`, `key`) VALUES (:name, :key)',
+                    new_app_data).lastrowid
+                session.commit()
+            except IntegrityError:
+                raise HTTPBadRequest('This app already exists')
 
-        try:
-            app_id = session.execute('''INSERT INTO `application` (`name`, `key`) VALUES (:name, :key)''', new_app_data).lastrowid
-            session.commit()
-        except IntegrityError:
-            session.close()
-            raise HTTPBadRequest('This app already exists', '')
-
-        # Enable all modes for this app except for "drop" by default
-        try:
-            session.execute('''INSERT INTO `application_mode` (`application_id`, `mode_id`)
-                               SELECT :app_id, `mode`.`id` FROM `mode` WHERE `mode`.`name` != 'drop' ''', {'app_id': app_id})
-            session.commit()
-        except IntegrityError:
-            logger.error('Failed configuring supported modes for newly created app %s', app_name)
-        finally:
-            session.close()
+            # Enable all modes for this app except for "drop" by default
+            try:
+                session.execute(
+                    '''INSERT INTO `application_mode` (`application_id`, `mode_id`)
+                       SELECT :app_id, `mode`.`id` FROM `mode` WHERE `mode`.`name` != 'drop' ''',
+                    {'app_id': app_id})
+                session.commit()
+            except IntegrityError:
+                logger.error('Failed configuring supported modes for newly created app %s',
+                             app_name)
+            finally:
+                session.close()
 
         logger.info('Created application "%s" with id %s', app_name, app_id)
-
         resp.status = HTTP_201
         resp.body = ujson.dumps({'id': app_id})
 
@@ -2754,24 +2842,18 @@ class ResponseMixin(object):
         """
         Return the result of the insert
         """
-        session = db.Session()
-        try:
-            response_dict = {
-                'source': source,
-                'message_id': msg_id,
-                'content': content,
-            }
-            result = session.execute('''
-              INSERT INTO `response` (`source`, `message_id`, `content`, `created`)
-              VALUES (:source, :message_id, :content, now())
-            ''', response_dict)
+        with guarded_db_session() as session:
+            result = session.execute(
+                '''INSERT INTO `response` (`source`, `message_id`, `content`, `created`)
+                   VALUES (:source, :message_id, :content, now())''',
+                {
+                    'source': source,
+                    'message_id': msg_id,
+                    'content': content,
+                })
+            session.close()
             session.commit()
-            session.close()
             return result
-        except Exception as e:
-            session.close()
-            logger.exception('Failed to create response', e)
-            raise
 
     def create_email_message(self, application, dest, subject, body):
         if application not in cache.applications:
@@ -2779,20 +2861,29 @@ class ResponseMixin(object):
 
         app = cache.applications[application]
 
-        session = db.Session()
-        try:
-
+        with guarded_db_session() as session:
             sql = '''SELECT `target`.`id` FROM `target`
                      JOIN `target_contact` on `target_contact`.`target_id` = `target`.`id`
                      JOIN `mode` on `mode`.`id` = `target_contact`.`mode_id`
                      WHERE `mode`.`name` = 'email' AND `target_contact`.`destination` = :destination'''
             target_id = session.execute(sql, {'destination': dest}).scalar()
             if not target_id:
-                session.close()
                 msg = 'Failed to lookup target from destination: %s' % dest
                 logger.warn(msg)
                 raise HTTPBadRequest('Invalid request', msg)
 
+            sql = '''INSERT INTO `message` (`created`, `application_id`, `subject`, `target_id`,
+                                            `body`, `destination`, `mode_id`, `priority_id`)
+                     VALUES (
+                         :created,
+                         :application_id,
+                         :subject,
+                         :target_id,
+                         :body,
+                         :destination,
+                         (SELECT `id` FROM `mode` WHERE `name` = 'email'),
+                         (SELECT `id` FROM `priority` WHERE `name` = 'low')
+                     )'''
             data = {
                 'created': datetime.datetime.utcnow(),
                 'application_id': app['id'],
@@ -2801,21 +2892,10 @@ class ResponseMixin(object):
                 'body': body,
                 'destination': dest
             }
-
-            sql = '''INSERT INTO `message` (`created`, `application_id`, `subject`, `target_id`, `body`, `destination`, `mode_id`, `priority_id`)
-                     VALUES (:created, :application_id, :subject, :target_id, :body, :destination,
-                      (SELECT `id` FROM `mode` WHERE `name` = 'email'),
-                      (SELECT `id` FROM `priority` WHERE `name` = 'low')
-                     )'''
             message_id = session.execute(sql, data).lastrowid
-
             session.commit()
             session.close()
             return True, message_id
-        except Exception:
-            session.close()
-            logger.exception('ERROR')
-            raise
 
     def handle_user_response(self, mode, msg_id, source, content):
         '''
@@ -2838,62 +2918,69 @@ class ResponseMixin(object):
             if not app:
                 msg = "Invalid message({0}): no application found.".format(msg_id)
                 logger.exception(msg)
-                raise HTTPBadRequest(msg, msg)
+                raise HTTPBadRequest(msg)
 
-        session = db.Session()
-        is_batch = False
-        is_claim_all = False
-        if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
-            # FIXME: return error if message not found for id
-            app = get_app_from_msg_id(session, msg_id)
-            validate_app(app)
-            self.create_response(msg_id, source, content)
-        elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
-            # msg id is not pure digit, might be a batch id
-            sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
-            results = session.execute(sql, {'batch_id': msg_id})
-            mid_lst = [row[0] for row in results]
-            if len(mid_lst) < 1:
+        with guarded_db_session() as session:
+            is_batch = False
+            is_claim_all = False
+            if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
+                # FIXME: return error if message not found for id
+                app = get_app_from_msg_id(session, msg_id)
+                validate_app(app)
+                self.create_response(msg_id, source, content)
+            elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
+                # msg id is not pure digit, might be a batch id
+                sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
+                results = session.execute(sql, {'batch_id': msg_id})
+                mid_lst = [row[0] for row in results]
+                if len(mid_lst) < 1:
+                    raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id)
+
+                # assuming message batching is also keyed on app, so they are from
+                # the same app
+                app = get_app_from_msg_id(session, mid_lst[0])
+                validate_app(app)
+                for mid in mid_lst:
+                    self.create_response(mid, source, content)
+                is_batch = True
+            elif isinstance(msg_id, list) and content == 'claim_all':
+                # Claim all functionality.
+                if not msg_id:
+                    return self.iris_sender_app, 'No incidents to claim'
+                is_claim_all = True
+                apps_to_message = defaultdict(list)
+                for mid in msg_id:
+                    msg_app = get_app_from_msg_id(session, mid)
+                    if msg_app not in apps_to_message:
+                        validate_app(msg_app)
+                    self.create_response(mid, source, content)
+                    apps_to_message[msg_app].append(mid)
+
+            # Case where we want to give back a custom message as there was nothing to claim
+            elif msg_id is None and isinstance(content, basestring):
+                session.close()
+                return '', content
+            else:
                 raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id)
-
-            # assuming message batching is also keyed on app, so they are from
-            # the same app
-            app = get_app_from_msg_id(session, mid_lst[0])
-            validate_app(app)
-            for mid in mid_lst:
-                self.create_response(mid, source, content)
-            is_batch = True
-        elif isinstance(msg_id, list) and content == 'claim_all':
-            # Claim all functionality.
-            if not msg_id:
-                return self.iris_sender_app, 'No incidents to claim'
-            is_claim_all = True
-            apps_to_message = defaultdict(list)
-            for mid in msg_id:
-                msg_app = get_app_from_msg_id(session, mid)
-                if msg_app not in apps_to_message:
-                    validate_app(msg_app)
-                self.create_response(mid, source, content)
-                apps_to_message[msg_app].append(mid)
-
-        # Case where we want to give back a custom message as there was nothing to claim
-        elif msg_id is None and isinstance(content, basestring):
-            return '', content
-        else:
-            raise HTTPBadRequest('Invalid message id', 'invalid message id: %s' % msg_id)
-        session.close()
+            session.close()
 
         # Handle claim all differently as we might have messages from different applications
         if is_claim_all:
             try:
-                plugin_output = {app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
-                                 for app, msg_ids in apps_to_message.iteritems()}
+                plugin_output = {
+                    app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
+                    for app, msg_ids in apps_to_message.iteritems()
+                }
             except Exception as e:
-                logger.exception('Failed to handle %s response for mode %s for apps %s during claim all', content, mode, apps_to_message.keys())
-                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+                logger.exception(
+                    'Failed to handle %s response for mode %s for apps %s during claim all',
+                    content, mode, apps_to_message.keys())
+                raise HTTPBadRequest('Failed to handle response',
+                                     'failed to handle response: %s' % str(e))
 
             if len(plugin_output) > 1:
-                return plugin_output, '\n'.join('%s: %s' % (app, output) for app, output in plugin_output.iteritems())
+                return plugin_output, '\n'.join('%s: %s' % (app, output)
+                                                for app, output in plugin_output.iteritems())
             else:
                 return plugin_output, '\n'.join(plugin_output.itervalues())
 
@@ -2902,8 +2989,10 @@ class ResponseMixin(object):
                 resp = find_plugin(app).handle_response(
                     mode, msg_id, source, content, batch=is_batch)
             except Exception as e:
-                logger.exception('Failed to handle %s response for mode %s for app %s', content, mode, app)
-                raise HTTPBadRequest('Failed to handle response', 'failed to handle response: %s' % str(e))
+                logger.exception('Failed to handle %s response for mode %s for app %s',
+                                 content, mode, app)
+                raise HTTPBadRequest('Failed to handle response',
+                                     'failed to handle response: %s' % str(e))
             return app, resp
 
 
@@ -2925,53 +3014,68 @@ class ResponseGmail(ResponseMixin):
         # Some people want to use emails to create iris incidents. Facilitate this.
         if to:
             to = to.split(' ')[-1].strip('<>')
-            session = db.Session()
-            email_check_result = session.execute('''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
-                                                    FROM `incident_emails`
-                                                    JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                                                    WHERE `email` = :email
-                                                    AND `email` NOT IN (SELECT `destination` FROM `target_contact` WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email'))''', {'email': to}).fetchone()
-            if email_check_result:
+            with guarded_db_session() as session:
+                email_check_result = session.execute(
+                    '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                       FROM `incident_emails`
+                       JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
+                       WHERE `email` = :email
+                       AND `email` NOT IN (
+                           SELECT `destination`
+                           FROM `target_contact`
+                           WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                       )''',
+                    {'email': to}).fetchone()
+                if email_check_result:
+                    if 'In-Reply-To' in email_headers:
+                        logger.warning(('Not creating incident for email %s as this '
+                                        'is an email reply, rather than a fresh email.'),
+                                       to)
+                        resp.status = HTTP_204
+                        resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
+                        return
 
-                if 'In-Reply-To' in email_headers:
-                    logger.warning('Not creating incident for email %s as this is an email reply, rather than a fresh email.', to)
-                    resp.status = HTTP_204
-                    resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
-                    return
+                    app_template_count = session.execute('''
+                        SELECT EXISTS (
+                            SELECT 1 FROM
+                            `plan_notification`
+                            JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                            JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                            WHERE `plan_notification`.`plan_id` = :plan_id
+                            AND `template_content`.`application_id` = :app_id
+                        )
+                    ''', {'app_id': email_check_result['application_id'],
+                          'plan_id': email_check_result['plan_id']}).scalar()
 
-                app_template_count = session.execute('''
-                    SELECT EXISTS (
-                        SELECT 1 FROM
-                        `plan_notification`
-                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
-                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
-                        WHERE `plan_notification`.`plan_id` = :plan_id
-                        AND `template_content`.`application_id` = :app_id
-                    )
-                ''', {'app_id': email_check_result['application_id'], 'plan_id': email_check_result['plan_id']}).scalar()
+                    if not app_template_count:
+                        session.close()
+                        logger.warning(('Not creating incident for email %s as no template '
+                                        'actions for this app.'),
+                                       to)
+                        resp.status = HTTP_204
+                        resp.set_header('X-IRIS-INCIDENT',
+                                        'Not created (no template actions for this app)')
+                        return
 
-                if not app_template_count:
+                    incident_info = {
+                        'application_id': email_check_result['application_id'],
+                        'created': datetime.datetime.utcnow(),
+                        'plan_id': email_check_result['plan_id'],
+                        'context': ujson.dumps({'body': content, 'email': to})
+                    }
+                    incident_id = session.execute(
+                        '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                                `current_step`, `active`, `application_id`)
+                        VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''',
+                        incident_info).lastrowid
+                    session.commit()
                     session.close()
-                    logger.warning('Not creating incident for email %s as no template actions for this app.', to)
                     resp.status = HTTP_204
-                    resp.set_header('X-IRIS-INCIDENT', 'Not created (no template actions for this app)')
+                    # Pass the new incident id back through a header so we can test this
+                    resp.set_header('X-IRIS-INCIDENT', incident_id)
                     return
 
-                incident_info = {
-                    'application_id': email_check_result['application_id'],
-                    'created': datetime.datetime.utcnow(),
-                    'plan_id': email_check_result['plan_id'],
-                    'context': ujson.dumps({'body': content, 'email': to})
-                }
-                incident_id = session.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
-                                                 VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''', incident_info).lastrowid
-                session.commit()
                 session.close()
-                resp.status = HTTP_204
-                resp.set_header('X-IRIS-INCIDENT', incident_id)  # Pass the new incident id back through a header so we can test this
-                return
-
-            session.close()
 
         # only parse first line of email content for now
         first_line = content.split('\n', 1)[0].strip()
@@ -2985,22 +3089,23 @@ class ResponseGmail(ResponseMixin):
         except Exception:
             logger.exception('Failed to handle email response: %s' % first_line)
             raise
-        else:
-            # When processing a claim all scenario, the first item returned by handle_user_response
-            # will be a dict mapping the app to its plugin output.
-            if isinstance(app, dict):
-                for app_name, app_response in app.iteritems():
-                    app_response = '%s: %s' % (app_name, app_response)
-                    success, re = self.create_email_message(app_name, source, 'Re: %s' % subject, app_response)
-                    if not success:
-                        logger.error('Failed to send user response email: %s' % re)
-                        raise HTTPBadRequest('Failed to send user response email', re)
-            else:
-                success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
+
+        # When processing a claim all scenario, the first item returned by handle_user_response
+        # will be a dict mapping the app to its plugin output.
+        if isinstance(app, dict):
+            for app_name, app_response in app.iteritems():
+                app_response = '%s: %s' % (app_name, app_response)
+                success, re = self.create_email_message(
+                    app_name, source, 'Re: %s' % subject, app_response)
                 if not success:
                     logger.error('Failed to send user response email: %s' % re)
                     raise HTTPBadRequest('Failed to send user response email', re)
-            resp.status = HTTP_204
+        else:
+            success, re = self.create_email_message(app, source, 'Re: %s' % subject, response)
+            if not success:
+                logger.error('Failed to send user response email: %s' % re)
+                raise HTTPBadRequest('Failed to send user response email', re)
+        resp.status = HTTP_204
 
 
 class ResponseGmailOneClick(ResponseMixin):
@@ -3012,10 +3117,10 @@ class ResponseGmailOneClick(ResponseMixin):
             email_address = gmail_params['email_address']
             cmd = gmail_params['cmd']
         except (ValueError, KeyError):
-            raise HTTPBadRequest('Post body missing required key or key of wrong type', '')
+            raise HTTPBadRequest('Post body missing required key or key of wrong type')
 
         if cmd != 'claim':
-            raise HTTPBadRequest('GmailOneClick only supports claiming individual messages', '')
+            raise HTTPBadRequest('GmailOneClick only supports claiming individual messages')
 
         try:
             app, response = self.handle_user_response('email', msg_id, email_address, cmd)
@@ -3036,11 +3141,11 @@ class ResponseTwilioCalls(ResponseMixin):
 
         msg_id = req.get_param('message_id', required=True)
         if 'Digits' not in post_dict:
-            raise HTTPBadRequest('Digits argument not found', '')
+            raise HTTPBadRequest('Digits argument not found')
         # For phone call callbacks, To argument is the target and From is the
         # twilio number
         if 'To' not in post_dict:
-            raise HTTPBadRequest('To argument not found', '')
+            raise HTTPBadRequest('To argument not found')
         digits = post_dict['Digits'][0]
         source = post_dict['To'][0]
 
@@ -3087,7 +3192,7 @@ class ResponseSlack(ResponseMixin):
             source = slack_params['source']
             content = slack_params['content']
         except KeyError:
-            raise HTTPBadRequest('Post body missing required key', '')
+            raise HTTPBadRequest('Post body missing required key')
         try:
             _, response = self.handle_user_response('slack', msg_id, source, content)
         except Exception:
@@ -3109,14 +3214,17 @@ class TwilioDeliveryUpdate(object):
 
         if not sid or not status:
             logger.exception('Invalid twilio delivery update request. Payload: %s', post_dict)
-            raise HTTPBadRequest('Invalid keys in payload', '')
+            raise HTTPBadRequest('Invalid keys in payload')
 
-        session = db.Session()
-        affected = session.execute('''UPDATE `twilio_delivery_status`
-                                      SET `status` = :status
-                                      WHERE `twilio_sid` = :sid''', {'sid': sid, 'status': status}).rowcount
-        session.commit()
-        session.close()
+        affected = False
+        with guarded_db_session() as session:
+            affected = session.execute(
+                '''UPDATE `twilio_delivery_status`
+                   SET `status` = :status
+                   WHERE `twilio_sid` = :sid''',
+                {'sid': sid, 'status': status}).rowcount
+            session.commit()
+            session.close()
 
         if not affected:
             logger.warn('No rows changed when updating delivery status for twilio sid: %s', sid)
@@ -3180,16 +3288,16 @@ class Reprioritization(object):
             raise HTTPBadRequest(msg, msg)
         cursor.close()
 
-        session = db.Session()
-        session.execute(update_reprioritization_settings_query, {
-            'target': username,
-            'src_mode_id': src_mode_id,
-            'dst_mode_id': dst_mode_id,
-            'count': count,
-            'duration': duration,
-        })
-        session.commit()
-        session.close()
+        with guarded_db_session() as session:
+            session.execute(update_reprioritization_settings_query, {
+                'target': username,
+                'src_mode_id': src_mode_id,
+                'dst_mode_id': dst_mode_id,
+                'count': count,
+                'duration': duration,
+            })
+            session.commit()
+            session.close()
         resp.status = HTTP_200
         resp.body = '[]'
 
@@ -3217,16 +3325,15 @@ class ReprioritizationMode(object):
 
            []
         '''
-        session = db.Session()
-        affected_rows = session.execute(delete_reprioritization_settings_query, {
-            'target_name': username,
-            'mode_name': src_mode_name,
-        }).rowcount
-        session.commit()
-        session.close()
-
-        if affected_rows == 0:
-            raise HTTPNotFound()
+        with guarded_db_session() as session:
+            affected_rows = session.execute(delete_reprioritization_settings_query, {
+                'target_name': username,
+                'mode_name': src_mode_name,
+            }).rowcount
+            if affected_rows == 0:
+                raise HTTPNotFound()
+            session.commit()
+            session.close()
 
         resp.status = HTTP_200
         resp.body = '[]'
