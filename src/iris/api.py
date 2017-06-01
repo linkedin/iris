@@ -1016,7 +1016,14 @@ class Plans(object):
         try:
             run_validation('plan', plan_params)
             now = datetime.datetime.utcnow()
-            plan_name = plan_params['name']
+            plan_name = plan_params['name'].strip()
+
+            if not plan_name:
+                raise HTTPBadRequest('Invalid plan', 'Empty plan name')
+
+            if plan_name.isdigit():
+                raise HTTPBadRequest('Invalid plan', 'Plan name cannot be a number')
+
             # FIXME: catch creator not exist error
 
             tracking_key = plan_params.get('tracking_key')
