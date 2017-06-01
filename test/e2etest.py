@@ -742,6 +742,14 @@ def test_plan_routing():
 
 
 def test_post_plan(sample_user, sample_team, sample_template_name):
+    re = requests.post(base_url + 'plans', json={'name': ' '})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'Empty plan name'
+
+    re = requests.post(base_url + 'plans', json={'name': '1234'})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'Plan name cannot be a number'
+
     data = {
         "creator": sample_user,
         "name": sample_user + "-test-foo",
