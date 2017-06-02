@@ -3,6 +3,7 @@
 
 from __future__ import absolute_import
 
+import os
 from gevent import Timeout, socket
 from gevent.server import StreamServer
 from itertools import cycle
@@ -14,6 +15,7 @@ from iris import metrics
 
 import logging
 logger = logging.getLogger(__name__)
+access_logger = logging.getLogger('RPC:access')
 
 
 sender_slaves = None
@@ -47,43 +49,21 @@ def send_message_to_slave(message, address):
         sender_resp = msgpack_unpack_msg_from_socket(s)
         s.close()
     except socket.error:
-        logging.exception('Failed connecting to %s to send message (ID %s)', pretty_address, message_id)
+        logging.exception('Failed connecting to %s to send message (ID %s)',
+                          pretty_address, message_id)
         metrics.incr('rpc_message_pass_fail_cnt')
         return False
 
     if sender_resp == 'OK':
-        logger.debug('Successfully passed message (ID %s) to %s for sending', message_id, pretty_address)
+        access_logger.info('Successfully passed message (ID %s) to %s for sending',
+                           message_id, pretty_address)
         metrics.incr('rpc_message_pass_success_cnt')
         return True
     else:
-        logger.error('Failed sending message (ID %s) through %s: %s', message_id, pretty_address, sender_resp)
+        logger.error('Failed sending message (ID %s) through %s: %s',
+                     message_id, pretty_address, sender_resp)
         metrics.incr('rpc_message_pass_fail_cnt')
         return False
-
-
-def init(sender_config, _send_funcs):
-    global sender_slaves, num_slaves, rpc_timeout
-
-    send_funcs.update(_send_funcs)
-
-    default_rpc_timeout = 20
-    try:
-        rpc_timeout = int(sender_config.get('rpc_timeout', default_rpc_timeout))
-    except ValueError:
-        logger.exception('Failed parsing rpc_timeout in config')
-        rpc_timeout = default_rpc_timeout
-    logger.info('RPC timeout is set to %s seconds', rpc_timeout)
-
-    if not sender_config.get('is_master'):
-        return
-
-    slave_configs = sender_config.get('slaves', [])
-    if slave_configs:
-        logger.info('Sender configured with slaves: %s', ', '.join(['%(host)s:%(port)s' % slave for slave in slave_configs]))
-        sender_slaves = cycle([(slave['host'], slave['port']) for slave in slave_configs])
-        num_slaves = len(slave_configs)
-    else:
-        logger.info('Sender configured with no slaves')
 
 
 def reject_api_request(socket, address, err_msg):
@@ -142,9 +122,9 @@ def handle_api_notification_request(socket, address, req):
                     notification['application'])
         return
 
-    logger.debug('-> %s OK, to %s:%s (%s:%s)',
-                 address, role, target, notification['application'],
-                 notification.get('priority', notification.get('mode', '?')))
+    access_logger.info('-> %s OK, to %s:%s (%s:%s)',
+                       address, role, target, notification['application'],
+                       notification.get('priority', notification.get('mode', '?')))
 
     for _target in expanded_targets:
         temp_notification = notification.copy()
@@ -168,12 +148,14 @@ def handle_slave_send(socket, address, req):
 
         if runtime is not None:
             response = 'OK'
-            logger.info('Message (ID %s) from master %s sent successfully', message_id, address)
+            access_logger.info('Message (ID %s) from master %s sent successfully',
+                               message_id, address)
             metrics.incr('slave_message_send_success_cnt')
         else:
             response = 'FAIL'
-            logger.error('Got falsy value from send_message for message (ID %s) from master %s: %s',
-                         message_id, address, runtime)
+            access_logger.error(
+                'Got falsy value from send_message for message (ID %s) from master %s: %s',
+                message_id, address, runtime)
             metrics.incr('slave_message_send_fail_cnt')
     except Exception:
         response = 'FAIL'
@@ -198,7 +180,7 @@ def handle_api_request(socket, address):
             logger.warning('Couldn\'t get msgpack data from %s', address)
             socket.close()
             return
-        logger.debug('%s %s', address, req['endpoint'])
+        access_logger.info('%s %s', address, req['endpoint'])
         handler = api_request_handlers.get(req['endpoint'])
         if handler is not None:
             handler(socket, address, req)
@@ -217,3 +199,47 @@ def handle_api_request(socket, address):
 def run(sender_config):
     StreamServer((sender_config['host'], sender_config['port']),
                  handle_api_request).start()
+
+
+def init(sender_config, _send_funcs):
+    global sender_slaves, num_slaves, rpc_timeout
+
+    send_funcs.update(_send_funcs)
+
+    default_rpc_timeout = 20
+    try:
+        rpc_timeout = int(sender_config.get('rpc_timeout', default_rpc_timeout))
+    except ValueError:
+        logger.exception('Failed parsing rpc_timeout in config')
+        rpc_timeout = default_rpc_timeout
+    logger.info('RPC timeout is set to %s seconds', rpc_timeout)
+
+    if not sender_config.get('is_master'):
+        return
+
+    slave_configs = sender_config.get('slaves', [])
+    if slave_configs:
+        logger.info('Sender configured with slaves: %s',
+                    ', '.join(['%(host)s:%(port)s' % slave for slave in slave_configs]))
+        sender_slaves = cycle([(slave['host'], slave['port']) for slave in slave_configs])
+        num_slaves = len(slave_configs)
+    else:
+        logger.info('Sender configured with no slaves')
+
+    access_log_cfg = {
+        'filename': './access.log',
+        'mode': 'a',
+        'maxBytes': 104857600,
+        'backupCount': 20,
+    }
+    access_log_cfg.update(sender_config.get('access_log', {}))
+
+    log_dir = os.path.dirname(access_log_cfg['filename'])
+    if not os.path.exists(log_dir):
+        os.mkdir(log_dir)
+
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    log_hdl = logging.handlers.RotatingFileHandler(**access_log_cfg)
+    log_hdl.setFormatter(formatter)
+    access_logger.propagate = False
+    access_logger.addHandler(log_hdl)

@@ -69,6 +69,10 @@ sender:
 
   # App used for sending notification messages + incidents
   sender_app: iris
+  # RPC access log
+  access_log:
+    maxBytes: 10485760
+    filename: './logs/sender_rpc.access.log'
 
 #  slaves:
 #    - host: 127.0.0.1
