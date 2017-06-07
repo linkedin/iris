@@ -6,6 +6,9 @@ serve:
 sender:
 	iris-sender configs/config.dev.yaml
 
+owa-sync:
+	iris-owa-sync configs/config.dev.yaml
+
 test:
 	make unit
 	make e2e

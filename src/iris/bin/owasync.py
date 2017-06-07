@@ -3,7 +3,7 @@ monkey.patch_all()  # NOQA
 
 from iris import metrics
 from iris.config import load_config
-from iris.sender.cache import IrisClient
+from iris.client import IrisClient
 from exchangelib import DELEGATE, Account, Credentials
 from exchangelib.errors import EWSError
 import sys
@@ -30,7 +30,8 @@ default_metrics = {
     'message_relay_success': 0,
     'message_relay_failure': 0,
     'total_inbox_count': 0,
-    'unread_inbox_count': 0
+    'unread_inbox_count': 0,
+    'message_process_count': 0
 }
 
 
@@ -43,8 +44,11 @@ def poll(account, iris_client):
         logger.exception('Failed to gather inbox counts from OWA API')
         metrics.incr('owa_api_failure')
 
+    processed_messages = 0
+
     try:
         for message in account.inbox.filter(is_read=False).order_by('-datetime_received'):
+            processed_messages += 1
             if relay(message, iris_client):
                 message.is_read = True
                 try:
@@ -55,6 +59,9 @@ def poll(account, iris_client):
     except EWSError:
         logger.exception('Failed to iterate through inbox')
         metrics.incr('owa_api_failure')
+
+    metrics.set('message_process_count', processed_messages)
+    return processed_messages
 
 
 def relay(message, iris_client):
@@ -69,11 +76,10 @@ def relay(message, iris_client):
     data = {'headers': headers, 'body': message.text_body.strip()}
 
     try:
-        # TODO: add POST method and HMAC functionality to irisclient
-        iris_client.post('v0/response/email', json=data)
+        iris_client.post('response/email', json=data).raise_for_status()
         metrics.incr('message_relay_success')
         return True
-    except (requests.exceptions.RequestException):
+    except requests.exceptions.RequestException:
         metrics.incr('message_relay_failure')
         logger.exception('Failed posting message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
         return False
@@ -90,6 +96,11 @@ def main():
         logger.critical('Missing OWA configs')
         sys.exit(1)
 
+    api_host = owaconfig.get('api_host', 'http://localhost:16649')
+    iris_client = IrisClient(api_host, 0, owaconfig['iris_app'], owaconfig['iris_app_key'])
+
+    spawn(metrics.emit_forever)
+
     creds = Credentials(**owaconfig['credentials'])
 
     account = Account(
@@ -99,16 +110,14 @@ def main():
         access_type=DELEGATE)
     logger.info('Receiving mail on behalf of %s', owaconfig['smtp_address'])
 
-    nap_time = 60
-
-    api_host = config.get('sender', {}).get('api_host', 'http://localhost:16649')
-    iris_client = IrisClient(api_host)
-
-    spawn(metrics.emit_forever)
+    try:
+        nap_time = int(owaconfig.get('sleep_interval', 60))
+    except ValueError:
+        nap_time = 60
 
     while True:
         start_time = time.time()
-        poll(account, iris_client)
+        message_count = poll(account, iris_client)
         run_time = time.time() - start_time
-        logger.info('Last run took %2.f seconds. Waiting %s seconds until next poll..', run_time, nap_time)
+        logger.info('Last run took %2.f seconds and processed %s messages. Waiting %s seconds until next poll..', run_time, message_count, nap_time)
         sleep(nap_time)

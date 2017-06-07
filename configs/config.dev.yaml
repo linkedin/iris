@@ -139,3 +139,8 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 #    username: ''
 #    password: ''
 #  smtp_address: 'foouser@foocompany.onmicrosoft.com'
+#  # need a valid iris application for for owa script to connect to api to relay emails
+#  iris_app: ''
+#  iris_app_key: ''
+#  api_host: http://localhost:16649
+#  sleep_interval: 60
