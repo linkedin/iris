@@ -38,7 +38,8 @@ setuptools.setup(
         'pycrypto==2.6.1',
         'beaker==1.8.0',
         'webassets==0.12.0',
-        'python-ldap==2.4.9'
+        'python-ldap==2.4.9',
+        'exchangelib==1.9.3'
     ],
     extras_require={
         # plugin deps
@@ -50,6 +51,7 @@ setuptools.setup(
             'iris-dev = iris.bin.run_server:main',
             'iris = iris.bin.run_server:main',
             'iris-sender = iris.bin.sender:main',
+            'iris-owa-sync = iris.bin.owasync:main',
             'iris-sync-targets = iris.bin.sync_targets:main',
             'iris_ctl = iris.bin.iris_ctl:main',
             'build_assets = iris.bin.ui_build_assets:main',

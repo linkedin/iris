@@ -132,3 +132,10 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 #  # Every $n users, stop inserting into mysql to avoid crashing it. Comment these out to disable.
 #  user_add_pause_interval: 500
 #  user_add_pause_duration: 1
+
+# Optionally, you can run iris-owa-sync to sync mails from OWA365:
+#owa:
+#  credentials:
+#    username: ''
+#    password: ''
+#  smtp_address: 'foouser@foocompany.onmicrosoft.com'

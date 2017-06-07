@@ -2996,7 +2996,7 @@ class ResponseMixin(object):
             return app, resp
 
 
-class ResponseGmail(ResponseMixin):
+class ResponseEmail(ResponseMixin):
     def on_post(self, req, resp):
         gmail_params = ujson.loads(req.context['body'])
         email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
@@ -3622,7 +3622,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/priorities', Priorities())
 
-    api.add_route('/v0/response/gmail', ResponseGmail(iris_sender_app))
+    api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
+    api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
     api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
     api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
     api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))

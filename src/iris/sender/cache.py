@@ -42,6 +42,9 @@ class IrisClient(requests.Session):
     def get(self, path, *args, **kwargs):
         return super(IrisClient, self).get(self.url + path, *args, **kwargs)
 
+    def post(self, path, *args, **kwargs):
+        return super(IrisClient, self).post(self.url + path, *args, **kwargs)
+
 
 class Cache():
     def __init__(self, engine, sql, active):
