@@ -4,7 +4,6 @@
 from __future__ import absolute_import
 
 from collections import deque
-import requests
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from gevent import spawn, sleep
@@ -13,10 +12,10 @@ from .message import update_message_mode
 from .. import db
 from ..role_lookup import get_role_lookups
 from . import auditlog
+from ..client import IrisClient
 
 import logging
 logger = logging.getLogger(__name__)
-logging.getLogger('requests').setLevel(logging.WARNING)
 
 
 iris_client = None
@@ -29,21 +28,6 @@ plan_notifications = None
 target_reprioritization = None
 target_names = None
 targets_for_role = None
-
-
-class IrisClient(requests.Session):
-    def __init__(self, base, version=0):
-        super(IrisClient, self).__init__()
-        self.url = base + '/v%d/' % version
-        adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
-        self.mount('http://', adapter)
-        self.mount('https://', adapter)
-
-    def get(self, path, *args, **kwargs):
-        return super(IrisClient, self).get(self.url + path, *args, **kwargs)
-
-    def post(self, path, *args, **kwargs):
-        return super(IrisClient, self).post(self.url + path, *args, **kwargs)
 
 
 class Cache():
