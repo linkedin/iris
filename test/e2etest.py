@@ -2477,6 +2477,7 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
     data = re.json()
     assert data['context']['body'] == email_make_incident_payload['body']
     assert data['context']['email'] == special_email
+    assert data['context']['subject'] == 'fooject'
     assert data['application'] == sample_application_name
     assert data['plan'] == sample_plan_name
 
