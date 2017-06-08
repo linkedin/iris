@@ -26,12 +26,13 @@ class iris_smtp(object):
         }
         self.mx_sorted = []
 
-        if self.config.get('smtp_server'):
+        self.smtp_timeout = config('timeout', 10)
+        if config.get('smtp_server'):
             # mock mx record
-            self.mx_sorted.append((0, self.config['smtp_server']))
-        elif self.config.get('smtp_gateway'):
+            self.mx_sorted.append((0, config['smtp_server']))
+        elif config.get('smtp_gateway'):
             try:
-                mx_hosts = dns.resolver.query(self.config['smtp_gateway'], 'MX')
+                mx_hosts = dns.resolver.query(config['smtp_gateway'], 'MX')
             except dns.exception.DNSException as e:
                 mx_hosts = []
                 raise Exception('MX error: %s' % e)
@@ -44,11 +45,11 @@ class iris_smtp(object):
 
     def send_email(self, message):
         md = markdown.Markdown()
-        from_ = self.config['from']
+        from_address = self.config['from']
 
         start = time.time()
         m = MIMEMultipart('alternative')
-        m['from'] = from_
+        m['from'] = from_address
         m['to'] = message['destination']
         if message.get('noreply'):
             m['reply-to'] = m['to']
@@ -96,7 +97,7 @@ class iris_smtp(object):
 
         for mx in self.mx_sorted:
             try:
-                smtp = SMTP()
+                smtp = SMTP(timeout=self.smtp_timeout)
                 smtp.connect(mx[1], 25)
                 conn = smtp
                 break
@@ -105,7 +106,7 @@ class iris_smtp(object):
 
         if not conn:
             raise Exception('Failed to get smtp connection.')
-        conn.sendmail([from_], [message['destination']], m.as_string())
+        conn.sendmail([from_address], [message['destination']], m.as_string())
         conn.quit()
 
         return time.time() - start
