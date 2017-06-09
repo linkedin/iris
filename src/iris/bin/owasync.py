@@ -26,13 +26,27 @@ logger.setLevel(logging.INFO)
 logger.addHandler(ch)
 
 default_metrics = {
-    'owa_api_failure': 0,
-    'message_relay_success': 0,
-    'message_relay_failure': 0,
+    'owa_api_failure_count': 0,
+    'message_relay_success_count': 0,
+    'message_relay_failure_count': 0,
     'total_inbox_count': 0,
     'unread_inbox_count': 0,
-    'message_process_count': 0
+    'message_process_count': 0,
+    'message_ignore_count': 0,
 }
+
+
+email_headers_to_ignore = frozenset([('X-Autoreply', 'yes'),
+                                     ('Auto-Submitted', 'auto-replied'),
+                                     ('Precedence', 'bulk')])
+
+
+def is_pointless_message(headers):
+    for header in email_headers_to_ignore:
+        if {'name': header[0], 'value': header[1]} in headers:
+            logger.warning('Filtering out message due to header combination %s: %s', *header)
+            return True
+    return False
 
 
 def poll(account, iris_client):
@@ -42,23 +56,33 @@ def poll(account, iris_client):
         metrics.set('unread_inbox_count', account.inbox.unread_count)
     except EWSError:
         logger.exception('Failed to gather inbox counts from OWA API')
-        metrics.incr('owa_api_failure')
+        metrics.incr('owa_api_failure_count')
 
     processed_messages = 0
+    messages_to_mark_read = []
 
     try:
         for message in account.inbox.filter(is_read=False).order_by('-datetime_received'):
             processed_messages += 1
-            if relay(message, iris_client):
-                message.is_read = True
-                try:
-                    message.save()
-                except EWSError:
-                    logger.exception('Failed to update read status')
-                    metrics.incr('owa_api_failure')
+
+            relay(message, iris_client)
+
+            # Mark it as read in bulk later. (This syntax isn't documented)
+            message.is_read = True
+            messages_to_mark_read.append((message, ('is_read', )))
+
     except EWSError:
         logger.exception('Failed to iterate through inbox')
-        metrics.incr('owa_api_failure')
+        metrics.incr('owa_api_failure_count')
+
+    if messages_to_mark_read:
+        bulk_update_count = len(messages_to_mark_read)
+        logger.info('will mark %s messages as read', bulk_update_count)
+        try:
+            account.bulk_update(items=messages_to_mark_read)
+        except EWSError:
+            logger.exception('Failed to update read status on %s messages in bulk', bulk_update_count)
+            metrics.incr('owa_api_failure_count')
 
     metrics.set('message_process_count', processed_messages)
     return processed_messages
@@ -67,6 +91,12 @@ def poll(account, iris_client):
 def relay(message, iris_client):
     # Get headers into the format the iris expects from gmail
     headers = [{'name': header.name, 'value': header.value} for header in message.headers]
+
+    # If this is a bulk message or an auto reply or something else, don't bother sending it to iris-api
+    if is_pointless_message(headers):
+        logger.info('Not relaying pointless message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
+        metrics.incr('message_ignore_count')
+        return
 
     # To and From headers are strangely missing
     if message.to_recipients:
@@ -77,12 +107,10 @@ def relay(message, iris_client):
 
     try:
         iris_client.post('response/email', json=data).raise_for_status()
-        metrics.incr('message_relay_success')
-        return True
+        metrics.incr('message_relay_success_count')
     except requests.exceptions.RequestException:
-        metrics.incr('message_relay_failure')
+        metrics.incr('message_relay_failure_count')
         logger.exception('Failed posting message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
-        return False
 
 
 def main():
