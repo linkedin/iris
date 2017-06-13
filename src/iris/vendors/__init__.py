@@ -19,7 +19,20 @@ class IrisVendorException(Exception):
 
 
 def init_vendors(vendors, application_vendors):
-    applications = {application_cls.name: application_cls for application_cls in (import_custom_module('iris.applications', application) for application in application_vendors)}
+    applications = {}
+
+    for application in application_vendors:
+        try:
+            application_cls = import_custom_module('iris.applications', application)
+        except ImportError:
+            logger.exception('Failed importing application %s', application)
+            continue
+
+        try:
+            applications[application_cls.name] = application_cls
+        except AttributeError:
+            logger.exception('Failed loading name of custom application %s', application)
+            continue
 
     vendor_instances = defaultdict(list)
     app_vendor_instances = defaultdict(lambda: defaultdict(list))
