@@ -1097,6 +1097,8 @@ def main():
     init_plugins(config.get('plugins', {}))
     init_vendors(config.get('vendors', []), config.get('applications', []))
 
+    metrics.set('is_master_sender', int(is_master))
+
     send_task = spawn(send)
     worker_tasks = [spawn(worker) for x in xrange(100)]
     if is_master:
