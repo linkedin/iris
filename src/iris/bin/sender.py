@@ -8,6 +8,7 @@ import logging
 import time
 import ujson
 import os
+import socket
 
 from collections import defaultdict
 from iris.plugins import init_plugins
@@ -23,6 +24,7 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
+from iris.sender.coordinator import Coordinator
 from pymysql import DataError, IntegrityError
 # queue for sending messages
 from iris.sender.shared import send_queue, add_mode_stat
@@ -210,6 +212,10 @@ message_queue = queue.Queue()
 
 # Quota object used for rate limiting
 quota = None
+
+# Coordinator object for sender master election
+coordinator = None
+
 
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
@@ -884,13 +890,18 @@ def mark_message_has_no_contact(message):
 
 
 def distributed_send_message(message):
-    if rpc.num_slaves and rpc.sender_slaves:
-        for i, address in enumerate(rpc.sender_slaves):
-            if i >= rpc.num_slaves:
-                logger.error('Failed using all configured slaves; resorting to local send_message')
-                break
-            if rpc.send_message_to_slave(message, address):
-                return True
+    # If I am the master, attempt sending my messages through my slaves.
+    if coordinator.am_i_master():
+        try:
+            if coordinator.slave_count and coordinator.slaves:
+                for i, address in enumerate(coordinator.slaves):
+                    if i >= coordinator.slave_count:
+                        logger.error('Failed using all configured slaves; resorting to local send_message')
+                        break
+                    if rpc.send_message_to_slave(message, address):
+                        return True
+        except StopIteration:
+            logger.warning('No more slaves. Sending locally.')
 
     logger.info('Sending message (ID %s) locally', message.get('message_id', '?'))
 
@@ -1022,6 +1033,10 @@ def gwatch_renewer():
     gmail_config = config['gmail']
     gcli = Gmail(gmail_config, config.get('gmail_proxy'))
     while True:
+        # If we stop being master, bail out of this
+        if coordinator is not None and not coordinator.am_i_master():
+            return
+
         logger.info('[-] start gmail watcher loop...')
         logger.info('renewing gmail watcher...')
         re = gcli.watch(gmail_config['project'], gmail_config['topic'])
@@ -1041,12 +1056,21 @@ def gwatch_renewer():
 
 def prune_old_audit_logs_worker():
     while True:
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor()
-        cursor.execute(PRUNE_OLD_AUDIT_LOGS_SQL)
-        connection.commit()
-        cursor.close()
-        connection.close()
+        # If we stop being master, bail out of this
+        if coordinator is not None and not coordinator.am_i_master():
+            return
+
+        try:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(PRUNE_OLD_AUDIT_LOGS_SQL)
+            connection.commit()
+            cursor.close()
+        except Exception:
+            logger.exception('Failed pruning old audit logs')
+        finally:
+            connection.close()
+
         logger.info('Ran task to prune old audit logs. Waiting 4 hours until next run.')
         sleep(60 * 60 * 4)
 
@@ -1086,30 +1110,29 @@ def init_sender(config):
     global quota
     quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
 
+    global coordinator
+    coordinator = Coordinator(socket.gethostname(), config['sender'].get('port', 2321))
+
 
 def main():
     global config
     config = load_config()
 
-    is_master = config['sender'].get('is_master', False)
-    logger.info('[-] bootstraping sender (master: %s)...', is_master)
+    logger.info('[-] bootstraping sender...')
     init_sender(config)
     init_plugins(config.get('plugins', {}))
     init_vendors(config.get('vendors', []), config.get('applications', []))
 
-    metrics.set('is_master_sender', int(is_master))
-
     send_task = spawn(send)
     worker_tasks = [spawn(worker) for x in xrange(100)]
-    if is_master:
-        if should_mock_gwatch_renewer:
-            spawn(mock_gwatch_renewer)
-        else:
-            spawn(gwatch_renewer)
-        spawn(prune_old_audit_logs_worker)
 
     rpc.init(config['sender'], dict(send_message=send_message))
     rpc.run(config['sender'])
+
+    spawn(coordinator.update_forever)
+
+    gwatch_renewer_task = None
+    prune_audit_logs_task = None
 
     interval = 60
     logger.info('[*] sender bootstrapped')
@@ -1120,7 +1143,18 @@ def main():
         cache.refresh()
         cache.purge()
 
-        if is_master:
+        # If we're currently a master, ensure our master-greenlets are running
+        # and we're doing the master duties
+        if coordinator.am_i_master():
+            if not bool(gwatch_renewer_task):
+                if should_mock_gwatch_renewer:
+                    gwatch_renewer_task = spawn(mock_gwatch_renewer)
+                else:
+                    gwatch_renewer_task = spawn(gwatch_renewer)
+
+            if not bool(prune_audit_logs_task):
+                prune_audit_logs_task = spawn(prune_old_audit_logs_worker)
+
             try:
                 escalate()
                 deactivate()
@@ -1129,6 +1163,22 @@ def main():
             except Exception:
                 metrics.incr('task_failure')
                 logger.exception("Exception occured in main loop.")
+
+        # If we're not master, don't do the master tasks and make sure those other
+        # greenlets are stopped if they're running
+        else:
+            logger.info('I am not the master so I am not doing master sender tasks.')
+
+            # Stop these task greenlets if they're running. Technically this should
+            # never happen because if we're the master, we'll likely only stop being the
+            # master if our process exits, which would kill these greenlets anyway.
+            if bool(gwatch_renewer_task):
+                logger.info('I am not master anymore so stopping the gwatch renewer')
+                gwatch_renewer_task.kill()
+
+            if bool(prune_audit_logs_task):
+                logger.info('I am not master anymore so stopping the audit logs worker')
+                prune_audit_logs_task.kill()
 
         # check status for all background greenlets and respawn if necessary
         if not bool(send_task):

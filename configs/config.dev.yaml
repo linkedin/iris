@@ -58,9 +58,8 @@ sender:
   debug: True
   host: 127.0.0.1
   port: 2321
-  is_master: True
 
-  # Sender that iris's notifications endpoint sends to
+  # Default sender to reach out to if we can't determine one programmatically
   master_sender:
     host: 127.0.0.1
     port: 2321

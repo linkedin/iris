@@ -692,6 +692,23 @@ CREATE TABLE `mailing_list_membership` (
   CONSTRAINT `mailing_list_membership_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+--
+-- Table structure for table `sender_election`
+--
+
+CREATE TABLE `sender_master_election` (
+  `anchor` tinyint(3) unsigned NOT NULL,
+  `sender_address` varchar(128) NOT NULL,
+  `last_seen_active` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`anchor`)
+) ENGINE=InnoDB;
+
+CREATE TABLE `sender_instances` (
+  `sender_address` varchar(128) NOT NULL,
+  `last_seen` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`sender_address`)
+) ENGINE=InnoDB;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
