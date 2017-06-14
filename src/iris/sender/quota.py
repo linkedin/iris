@@ -54,6 +54,8 @@ required_quota_keys = frozenset(['hard_quota_threshold', 'soft_quota_threshold',
 quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
                   'hard_quota_duration', 'soft_quota_duration', 'wait_time')
 
+soft_quota_notification_interval = 600
+
 
 class ApplicationQuota(object):
 
@@ -72,6 +74,7 @@ class ApplicationQuota(object):
 
         self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
         self.last_incidents = {}  # application: (incident_id, time())
+        self.last_soft_quota_notification_time = {}  # application: time()
         metrics.add_new_metrics({'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0})
         spawn(self.refresh)
 
@@ -231,6 +234,16 @@ class ApplicationQuota(object):
             logger.error('Application %s breached soft quota. Cannot notify owner as they aren\'t set (may have been deleted).', application)
             return
 
+        last_notification_time = self.last_soft_quota_notification_time.get(application)
+
+        now = time()
+        if last_notification_time is not None and (now - last_notification_time) < soft_quota_notification_interval:
+            logger.warning('Application %s breached soft quota. Will NOT notify %s:%s as they will only get a notification once every %s seconds.',
+                           application, target_role, target_name, soft_quota_notification_interval)
+            return
+
+        self.last_soft_quota_notification_time[application] = now
+
         logger.warning('Application %s breached soft quota. Will notify %s:%s', application, target_role, target_name)
 
         targets = self.expand_targets(target_role, target_name)
@@ -239,15 +252,17 @@ class ApplicationQuota(object):
             logger.error('Failed resolving %s:%s to notify soft quota breach.', target_role, target_name)
             return
 
-        priority = iris.cache.priorities.get('low')
+        mode_id = iris.cache.modes.get('email')
 
-        if not priority:
-            logger.error('Failed resolving low priority to notify soft quota breach')
+        if not mode_id:
+            logger.error('Failed resolving email mode to notify soft quota breach for application %s', application)
+            return
 
         for username in targets:
             message = {
                 'application': self.iris_application['name'],
-                'priority_id': priority['id'],
+                'mode_id': mode_id,
+                'mode': 'email',
                 'target': username,
                 'subject': 'Application %s exceeding message quota' % application,
                 'body': ('Hi %s\n\nYour application %s is currently exceeding its soft quota of %s messages per %s minutes.\n\n'
