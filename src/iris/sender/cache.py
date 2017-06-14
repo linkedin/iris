@@ -390,7 +390,7 @@ class RoleTargets():
     def initialize_active_targets(self):
         connection = self.engine.raw_connection()
         cursor = connection.cursor()
-        cursor.execute('SELECT `name` FROM `target` WHERE `active` = TRUE')
+        cursor.execute('SELECT `name` FROM `target` WHERE `active` = TRUE AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user")')
         self.active_targets = {row[0] for row in cursor}
         cursor.close()
         connection.close()
