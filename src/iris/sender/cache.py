@@ -14,6 +14,7 @@ from ..role_lookup import get_role_lookups
 from . import auditlog
 from ..client import IrisClient
 
+import requests
 import logging
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,11 @@ class Templates():
     def refresh(self):
         logger.info('refreshing templates')
 
-        templates_response = iris_client.get('templates/?active=1&fields=id&fields=name').json()
+        try:
+            templates_response = iris_client.get('templates/?active=1&fields=id&fields=name').json()
+        except (requests.exceptions.RequestException, ValueError):
+            logger.exception('Failed to hit api to get active templates')
+            return
 
         active = {item['id']: item['name'] for item in templates_response}
 
@@ -177,7 +182,13 @@ class Plans():
         except KeyError:
             fields = ['threshold_window', 'threshold_count', 'aggregation_window', 'creator',
                       'aggregation_reset', 'name', 'tracking_type', 'tracking_key', 'tracking_template']
-            plan = iris_client.get('plans/%s/' % key, params={'fields': fields}).json()
+
+            try:
+                plan = iris_client.get('plans/%s/' % key, params={'fields': fields}).json()
+            except (requests.exceptions.RequestException, ValueError):
+                logger.exception('Failed to hit api to get plan %s', key)
+                return None
+
             logger.debug('[+] adding plan: %s', key)
 
             steps = {}
@@ -207,7 +218,11 @@ class Plans():
     def refresh(self):
         logger.info('refreshing plans')
 
-        plans_response = iris_client.get('plans/?active=1&fields=id&fields=name').json()
+        try:
+            plans_response = iris_client.get('plans/?active=1&fields=id&fields=name').json()
+        except (requests.exceptions.RequestException, ValueError):
+            logger.exception('Failed to hit api to refresh plans')
+            return
 
         active = {item['id']: item['name'] for item in plans_response}
 
