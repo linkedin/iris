@@ -33,7 +33,8 @@ class Coordinator(object):
     def __init__(self, hostname, port):
         self.me = '%s:%s' % (hostname, port)
         self.is_master = None
-        self.master = None
+        self.slaves = cycle([])
+        self.slave_count = 0
 
     def am_i_master(self):
         return self.is_master
@@ -55,29 +56,29 @@ class Coordinator(object):
     def update_status(self):
         session = db.Session()
 
-        # Try setting us to the master otherwise do nothing
         session.execute(UPDATE_MASTER_QUERY, {'me': self.me, 'timeout': SENDER_ALIVE_TIMEOUT})
         session.commit()
 
-        # Also keep track of us in the list of online senders
-        session.execute(UPDATE_INSTANCES_QUERY, {'me': self.me})
-        session.commit()
+        self.is_master = session.execute(GET_MASTER_QUERY).scalar() == self.me
 
-        # Keep track of the actual master locally
-        self.master = session.execute(GET_MASTER_QUERY).scalar()
+        # Keep track of slaves if we're master
+        if self.is_master:
+            slaves = []
+            for row in session.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT}):
+                address = self.address_to_tuple(row[0])
+                if address:
+                    slaves.append(address)
 
-        # Record locally whether we're the master or not
-        self.is_master = self.master == self.me
+            self.slaves = cycle(slaves)
+            self.slave_count = len(slaves)
 
-        # Keep track of the list of slaves (senders online that are not the master) locally
-        slaves = []
-        for row in session.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT}):
-            address = self.address_to_tuple(row[0])
-            if address:
-                slaves.append(address)
+        # If we're slave make sure we're kept track of for master
+        else:
+            session.execute(UPDATE_INSTANCES_QUERY, {'me': self.me})
+            session.commit()
 
-        self.slaves = cycle(slaves)
-        self.slave_count = len(slaves)
+            self.slave_count = 0
+            self.slaves = cycle([])
 
         session.close()
 
@@ -88,19 +89,16 @@ class Coordinator(object):
             new_status = self.is_master
 
             if old_status != new_status:
-                if new_status:
-                    logger.info('I am now the sender master!')
-                else:
-                    logger.info('I am not the sender master. The current master is %s', self.master)
+                log = logger.info
             else:
-                logger.debug('I %s the master sender.', 'AM' if self.is_master else 'AM NOT')
+                log = logger.debug
 
-            logger.debug('I am aware of %s slaves in this cluster', self.slave_count)
+            if new_status:
+                log('I am the sender master.')
+            else:
+                log('I am not the sender master.')
 
-            # Only one node in the cluster should ever emit this as 1
-            metrics.set('is_master_sender', int(self.is_master))
-
-            # Every node in the cluster will end up being aware of the slaves
             metrics.set('slave_instance_count', self.slave_count)
+            metrics.set('is_master_sender', int(self.is_master))
 
             sleep(UPDATE_FREQUENCY)
