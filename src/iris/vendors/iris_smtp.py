@@ -26,7 +26,7 @@ class iris_smtp(object):
         }
         self.mx_sorted = []
 
-        self.smtp_timeout = config('timeout', 10)
+        self.smtp_timeout = config.get('timeout', 10)
         if config.get('smtp_server'):
             # mock mx record
             self.mx_sorted.append((0, config['smtp_server']))
