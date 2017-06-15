@@ -18,7 +18,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
-from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, API
+from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, HTTPInternalServerError, API
 from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 import falcon.uri
@@ -1582,6 +1582,8 @@ class Notifications(object):
             raise HTTPBadRequest(
                 'body, template, and email_html are missing, so we cannot construct message.')
 
+        message['application'] = req.context['app']['name']
+
         sender_addr = self.coordination.get_current_master()
         if sender_addr:
             logger.info('Relaying message to current master sender: %s', sender_addr)
@@ -1589,9 +1591,27 @@ class Notifications(object):
             sender_addr = self.default_sender_addr
             logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
 
-        message['application'] = req.context['app']['name']
+        s = None
 
-        s = socket.create_connection(sender_addr)
+        # First try master
+        try:
+            s = socket.create_connection(sender_addr)
+
+        # Then try slaves
+        except:
+            logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
+            for slave_address in self.coordination.get_current_slaves():
+                try:
+                    logger.info('Trying slave %s..', slave_address)
+                    s = socket.create_connection(slave_address)
+                    break
+                except:
+                    logger.exception('Failed reaching slave %s', slave_address)
+
+        # If none of that works, bail
+        if not s:
+            logger.error('Failed reaching any slaves. Bailing.')
+            raise HTTPInternalServerError('Failed reaching any senders')
 
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))
         sender_resp = utils.msgpack_unpack_msg_from_socket(s)

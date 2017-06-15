@@ -1118,6 +1118,8 @@ def main():
     global config
     config = load_config()
 
+    start_time = time.time()
+
     logger.info('[-] bootstraping sender...')
     init_sender(config)
     init_plugins(config.get('plugins', {}))
@@ -1194,9 +1196,11 @@ def main():
         for i in bad_workers:
             worker_tasks[i] = spawn(worker)
 
+        now = time.time()
+        metrics.set('sender_uptime', int(now - start_time))
+
         spawn(metrics.emit)
 
-        now = time.time()
         elapsed_time = now - runtime
         nap_time = max(0, interval - elapsed_time)
         logger.info('--> sender loop finished in %s seconds - sleeping %s seconds',
