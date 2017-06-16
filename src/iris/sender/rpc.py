@@ -8,7 +8,7 @@ from gevent import Timeout, socket
 from gevent.server import StreamServer
 from itertools import cycle
 import msgpack
-from ..utils import msgpack_unpack_msg_from_socket
+from ..utils import msgpack_unpack_msg_from_socket, sanitize_unicode_dict
 from . import cache
 from .shared import send_queue, add_mode_stat
 from iris import metrics
@@ -98,6 +98,8 @@ def handle_api_notification_request(socket, address, req):
         logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
                     role, target, notification['application'])
         return
+
+    sanitize_unicode_dict(notification)
 
     # If we're rendering this using templates+context instead of body, fill in the
     # needed iris key.

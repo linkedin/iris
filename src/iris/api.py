@@ -1581,6 +1581,8 @@ class Notifications(object):
             raise HTTPBadRequest(
                 'body, template, and email_html are missing, so we cannot construct message.')
 
+        utils.sanitize_unicode_dict(message)
+
         message['application'] = req.context['app']['name']
         s = socket.create_connection(self.sender_addr)
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))

@@ -439,3 +439,19 @@ def test_handle_api_notification_request_invalid_message(mocker):
     # drain out send queue
     while send_queue.qsize() > 0:
         send_queue.get()
+
+
+def test_sanitize_unicode_dict():
+    import pytest
+    from jinja2.sandbox import SandboxedEnvironment
+    from iris.utils import sanitize_unicode_dict
+
+    # Use jinja the same way as in sender
+    env = SandboxedEnvironment(autoescape=False)
+    template = env.from_string('{{var}} {{var2}}')
+    bad_context = {'var': '\xe2\x80\x99', 'var2': 2}
+
+    with pytest.raises(UnicodeDecodeError):
+        template.render(**bad_context)
+
+    template.render(**sanitize_unicode_dict(bad_context))

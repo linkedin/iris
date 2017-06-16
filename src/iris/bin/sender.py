@@ -18,6 +18,7 @@ from uuid import uuid4
 from iris.gmail import Gmail
 from iris import db
 from iris.api import load_config
+from iris.utils import sanitize_unicode_dict
 from iris.sender import rpc, cache
 from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
@@ -746,11 +747,17 @@ def render(message):
                     # When we want to "render" a dropped message, treat it as if it's an email
                     mode_template = application_template['email' if message['mode'] == 'drop' else message['mode']]
                     try:
-                        message['subject'] = mode_template['subject'].render(**message['context'])
+                        try:
+                            message['subject'] = mode_template['subject'].render(**message['context'])
+                        except UnicodeDecodeError:
+                            message['subject'] = mode_template['subject'].render(**sanitize_unicode_dict(message['context']))
                     except Exception as e:
                         error = 'template %(template)s - %(application)s - %(mode)s - subject failed to render: ' + str(e)
                     try:
-                        message['body'] += mode_template['body'].render(**message['context'])
+                        try:
+                            message['body'] += mode_template['body'].render(**message['context'])
+                        except UnicodeDecodeError:
+                            message['subject'] = mode_template['body'].render(**sanitize_unicode_dict(message['context']))
                     except Exception as e:
                         error = 'template %(template)s - %(application)s - %(mode)s - body failed to render: ' + str(e)
                     message['template_id'] = template['id']
