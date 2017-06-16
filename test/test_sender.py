@@ -448,8 +448,8 @@ def test_sanitize_unicode_dict():
 
     # Use jinja the same way as in sender
     env = SandboxedEnvironment(autoescape=False)
-    template = env.from_string('{{var}} {{var2}}')
-    bad_context = {'var': '\xe2\x80\x99', 'var2': 2}
+    template = env.from_string('{{var}} {{var2}} {{nested.nest}}')
+    bad_context = {'var': '\xe2\x80\x99', 'var2': 2, 'nested': {'nest': '\xe2\x80\x99'}}
 
     with pytest.raises(UnicodeDecodeError):
         template.render(**bad_context)

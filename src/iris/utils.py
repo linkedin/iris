@@ -248,4 +248,6 @@ def sanitize_unicode_dict(d):
                 d[key] = value.decode('utf-8')
             except UnicodeError:
                 pass
+        elif isinstance(value, dict):
+            d[key] = sanitize_unicode_dict(value)
     return d
