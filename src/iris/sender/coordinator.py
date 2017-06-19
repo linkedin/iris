@@ -14,26 +14,26 @@ REMOVE_OLD_INSTANCES_TIMEOUT = 60
 GET_MASTER_QUERY = '''SELECT `sender_address` FROM `sender_master_election` WHERE `anchor` = 1'''
 
 GET_SLAVES_QUERY = '''
-  SELECT `sender_address`
+  SELECT `sender_instances`.`sender_address`
   FROM `sender_instances`
-  WHERE `last_seen` > NOW() - INTERVAL CAST(:timeout AS UNSIGNED) SECOND
-  AND `sender_address` NOT IN (%s)''' % GET_MASTER_QUERY
+  JOIN `sender_master_election` ON `sender_master_election`.`sender_address` != `sender_instances`.`sender_address`
+  WHERE `sender_instances`.`last_seen` > NOW() - INTERVAL CAST(%(timeout)s AS UNSIGNED) SECOND'''
 
 UPDATE_MASTER_QUERY = '''
   INSERT IGNORE INTO `sender_master_election` (`anchor`, `sender_address`, `last_seen_active`) VALUES (
-    1, :me, NOW()
+    1, %(me)s, NOW()
   ) ON DUPLICATE KEY UPDATE
-    `sender_address` = if(`last_seen_active` < NOW() - INTERVAL CAST(:timeout AS UNSIGNED) SECOND, VALUES(`sender_address`), `sender_address`),
+    `sender_address` = if(`last_seen_active` < NOW() - INTERVAL CAST(%(timeout)s AS UNSIGNED) SECOND, VALUES(`sender_address`), `sender_address`),
     `last_seen_active` = if(`sender_address` = VALUES(`sender_address`), VALUES(`last_seen_active`), `last_seen_active`)
 '''
 
 UPDATE_INSTANCES_QUERY = '''
-  INSERT INTO `sender_instances` (`sender_address`, `last_seen`) VALUES(:me, now())
+  INSERT INTO `sender_instances` (`sender_address`, `last_seen`) VALUES(%(me)s, now())
   ON DUPLICATE KEY UPDATE `last_seen` = NOW()'''
 
 REMOVE_OLD_INSTANCES_QUERY = '''
   DELETE FROM `sender_instances`
-  WHERE `last_seen` < NOW() - INTERVAL CAST(:old_instances_timeout AS UNSIGNED) SECOND
+  WHERE `last_seen` < NOW() - INTERVAL CAST(%(old_instances_timeout)s AS UNSIGNED) SECOND
 '''
 
 
@@ -51,45 +51,68 @@ class Coordinator(object):
 
     # Used for API to get the current master
     def get_current_master(self):
-        session = db.Session()
-        master = session.execute(GET_MASTER_QUERY).scalar()
-        session.close()
-        return self.address_to_tuple(master)
+        connection = None
+        try:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(GET_MASTER_QUERY)
+            master = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            return self.address_to_tuple(master)
+        except Exception:
+            logger.exception('Failed getting current master')
+            if connection:
+                connection.close()
+            return None
 
     # Used for API to get the current slaves if master can't be reached
     def get_current_slaves(self):
-        session = db.Session()
         slaves = []
-        for row in session.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT}):
-            address = self.address_to_tuple(row[0])
-            if address:
-                slaves.append(address)
-        session.close()
+        connection = None
+        try:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT})
+            for row in cursor:
+                address = self.address_to_tuple(row[0])
+                if address:
+                    slaves.append(address)
+            cursor.close()
+            connection.close()
+        except Exception:
+            logger.exception('Failed getting slaves')
+            if connection:
+                connection.close()
         return slaves
 
     def address_to_tuple(self, address):
         try:
-            host, port = address.split(':', 1)
+            host, port = address.split(':')
             return host, int(port)
         except (IndexError, ValueError):
             logger.error('Failed getting address tuple from %s', address)
             return None
 
     def update_status(self):
-        session = db.Session()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
 
         try:
-            session.execute(UPDATE_MASTER_QUERY, {'me': self.me, 'timeout': SENDER_ALIVE_TIMEOUT})
-            session.commit()
+            cursor.execute(UPDATE_MASTER_QUERY, {'me': self.me, 'timeout': SENDER_ALIVE_TIMEOUT})
+            connection.commit()
         except:
             logger.exception('Failed updating master status')
 
-        self.is_master = session.execute(GET_MASTER_QUERY).scalar() == self.me
+        cursor.execute(GET_MASTER_QUERY)
+        result = cursor.fetchone()
+        self.is_master = result and result[0] == self.me
 
         # Keep track of slaves if we're master
         if self.is_master:
             slaves = []
-            for row in session.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT}):
+            cursor.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT})
+            for row in cursor:
                 address = self.address_to_tuple(row[0])
                 if address:
                     slaves.append(address)
@@ -100,15 +123,16 @@ class Coordinator(object):
         # If we're slave make sure we're kept track of for master
         else:
             try:
-                session.execute(UPDATE_INSTANCES_QUERY, {'me': self.me})
-                session.commit()
+                cursor.execute(UPDATE_INSTANCES_QUERY, {'me': self.me})
+                connection.commit()
             except:
                 logger.exception('Failed updating slave status')
 
             self.slave_count = 0
             self.slaves = cycle([])
 
-        session.close()
+        cursor.close()
+        connection.close()
 
     def update_forever(self):
         while True:
@@ -121,7 +145,7 @@ class Coordinator(object):
             else:
                 log = logger.debug
 
-            if new_status:
+            if self.is_master:
                 log('I am the sender master.')
             else:
                 log('I am not the sender master.')
@@ -144,15 +168,18 @@ class Coordinator(object):
         while True:
             logger.info('Purging any old instances')
 
+            connection = None
+
             try:
-                session = db.Session()
-                session.execute(REMOVE_OLD_INSTANCES_QUERY, {'old_instances_timeout': REMOVE_OLD_INSTANCES_TIMEOUT})
-                session.commit()
-                session.close()
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor()
+                cursor.execute(REMOVE_OLD_INSTANCES_QUERY, {'old_instances_timeout': REMOVE_OLD_INSTANCES_TIMEOUT})
+                connection.commit()
+                cursor.close()
+                connection.close()
             except Exception:
                 logger.exception('Failed purging old instances')
-            finally:
-                if session:
-                    session.close()
+                if connection:
+                    connection.close()
 
             sleep(REMOVE_OLD_INSTANCES_FREQUENCY)
