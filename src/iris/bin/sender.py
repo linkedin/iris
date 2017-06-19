@@ -19,6 +19,7 @@ from uuid import uuid4
 from iris.gmail import Gmail
 from iris import db
 from iris.api import load_config
+from iris.utils import sanitize_unicode_dict
 from iris.sender import rpc, cache
 from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
@@ -571,7 +572,7 @@ def fetch_and_prepare_message():
             # initialize aggregation indicator
             aggregation[key] = now
             # TODO: also render message content here?
-            audit_msg = 'Aggregated with key (%r, %r, %r, %r)' % key
+            audit_msg = 'Aggregated with key (%s, %s, %s, %s)' % key
             spawn(auditlog.message_change, m['message_id'], auditlog.SENT_CHANGE, '', '', audit_msg)
         else:
             # cleared for immediate sending
@@ -920,6 +921,7 @@ def distributed_send_message(message):
 
 def fetch_and_send_message():
     message = send_queue.get()
+    sanitize_unicode_dict(message)
 
     has_contact = set_target_contact(message)
     if not has_contact:

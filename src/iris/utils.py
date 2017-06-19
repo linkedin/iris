@@ -238,3 +238,16 @@ def msgpack_unpack_msg_from_socket(socket):
             pass
         else:
             return item
+
+
+def sanitize_unicode_dict(d):
+    '''Properly decode unicode strings in d to avoid breaking jinja2 renderer'''
+    for key, value in d.iteritems():
+        if isinstance(value, basestring):
+            try:
+                d[key] = value.decode('utf-8')
+            except UnicodeError:
+                pass
+        elif isinstance(value, dict):
+            d[key] = sanitize_unicode_dict(value)
+    return d

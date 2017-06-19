@@ -1582,6 +1582,8 @@ class Notifications(object):
             raise HTTPBadRequest(
                 'body, template, and email_html are missing, so we cannot construct message.')
 
+        utils.sanitize_unicode_dict(message)
+
         message['application'] = req.context['app']['name']
 
         sender_addr = self.coordination.get_current_master()
