@@ -6,7 +6,6 @@ from __future__ import absolute_import
 import os
 from gevent import Timeout, socket
 from gevent.server import StreamServer
-from itertools import cycle
 import msgpack
 from ..utils import msgpack_unpack_msg_from_socket
 from . import cache
@@ -18,8 +17,6 @@ logger = logging.getLogger(__name__)
 access_logger = logging.getLogger('RPC:access')
 
 
-sender_slaves = None
-num_slaves = 0
 send_funcs = {}
 rpc_timeout = None
 
@@ -202,7 +199,7 @@ def run(sender_config):
 
 
 def init(sender_config, _send_funcs):
-    global sender_slaves, num_slaves, rpc_timeout
+    global rpc_timeout
 
     send_funcs.update(_send_funcs)
 
@@ -213,18 +210,6 @@ def init(sender_config, _send_funcs):
         logger.exception('Failed parsing rpc_timeout in config')
         rpc_timeout = default_rpc_timeout
     logger.info('RPC timeout is set to %s seconds', rpc_timeout)
-
-    if not sender_config.get('is_master'):
-        return
-
-    slave_configs = sender_config.get('slaves', [])
-    if slave_configs:
-        logger.info('Sender configured with slaves: %s',
-                    ', '.join(['%(host)s:%(port)s' % slave for slave in slave_configs]))
-        sender_slaves = cycle([(slave['host'], slave['port']) for slave in slave_configs])
-        num_slaves = len(slave_configs)
-    else:
-        logger.info('Sender configured with no slaves')
 
     access_log_cfg = {
         'filename': './access.log',

@@ -18,7 +18,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
-from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, API
+from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, HTTPInternalServerError, API
 from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 import falcon.uri
@@ -35,6 +35,7 @@ from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
 
+from iris.sender.coordinator import Coordinator
 from gevent import spawn, sleep
 
 
@@ -1476,9 +1477,9 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, sender_addr):
-        self.sender_addr = sender_addr
-        logger.info('Sender used for notifications: %s:%s', *self.sender_addr)
+    def __init__(self, default_sender_addr):
+        self.default_sender_addr = default_sender_addr
+        self.coordination = Coordinator(None, None)
 
     def on_post(self, req, resp):
         '''
@@ -1582,7 +1583,36 @@ class Notifications(object):
                 'body, template, and email_html are missing, so we cannot construct message.')
 
         message['application'] = req.context['app']['name']
-        s = socket.create_connection(self.sender_addr)
+
+        sender_addr = self.coordination.get_current_master()
+        if sender_addr:
+            logger.info('Relaying message to current master sender: %s', sender_addr)
+        else:
+            sender_addr = self.default_sender_addr
+            logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
+
+        s = None
+
+        # First try master
+        try:
+            s = socket.create_connection(sender_addr)
+
+        # Then try slaves
+        except:
+            logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
+            for slave_address in self.coordination.get_current_slaves():
+                try:
+                    logger.info('Trying slave %s..', slave_address)
+                    s = socket.create_connection(slave_address)
+                    break
+                except:
+                    logger.exception('Failed reaching slave %s', slave_address)
+
+        # If none of that works, bail
+        if not s:
+            logger.error('Failed reaching any slaves. Bailing.')
+            raise HTTPInternalServerError('Failed reaching any senders')
+
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))
         sender_resp = utils.msgpack_unpack_msg_from_socket(s)
         s.close()
