@@ -360,7 +360,7 @@ def test_aggregate_audit_msg(mocker):
         auditlog.SENT_CHANGE,
         '',
         '',
-        "Aggregated with key (19546, 'test-app', 'high', 'test-user')")
+        "Aggregated with key (19546, test-app, high, test-user)")
 
 
 def test_handle_api_notification_request_invalid_message(mocker):
