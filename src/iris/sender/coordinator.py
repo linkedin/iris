@@ -106,7 +106,7 @@ class Coordinator(object):
 
         cursor.execute(GET_MASTER_QUERY)
         result = cursor.fetchone()
-        self.is_master = result and result[0] == self.me
+        self.is_master = result == (self.me, )
 
         # Keep track of slaves if we're master
         if self.is_master:
