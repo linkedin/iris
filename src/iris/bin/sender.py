@@ -747,17 +747,11 @@ def render(message):
                     # When we want to "render" a dropped message, treat it as if it's an email
                     mode_template = application_template['email' if message['mode'] == 'drop' else message['mode']]
                     try:
-                        try:
-                            message['subject'] = mode_template['subject'].render(**message['context'])
-                        except UnicodeDecodeError:
-                            message['subject'] = mode_template['subject'].render(**sanitize_unicode_dict(message['context']))
+                        message['subject'] = mode_template['subject'].render(**message['context'])
                     except Exception as e:
                         error = 'template %(template)s - %(application)s - %(mode)s - subject failed to render: ' + str(e)
                     try:
-                        try:
-                            message['body'] += mode_template['body'].render(**message['context'])
-                        except UnicodeDecodeError:
-                            message['subject'] = mode_template['body'].render(**sanitize_unicode_dict(message['context']))
+                        message['body'] += mode_template['body'].render(**message['context'])
                     except Exception as e:
                         error = 'template %(template)s - %(application)s - %(mode)s - body failed to render: ' + str(e)
                     message['template_id'] = template['id']
@@ -916,6 +910,7 @@ def distributed_send_message(message):
 
 def fetch_and_send_message():
     message = send_queue.get()
+    sanitize_unicode_dict(message)
 
     has_contact = set_target_contact(message)
     if not has_contact:
