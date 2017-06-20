@@ -36,12 +36,27 @@ def test_atttachments_construction_for_incident():
         'callback_id': fake_msg['message_id'],
         'color': 'danger',
         'title_link': 'http://foo.bar/incidents/%d' % fake_msg['incident_id'],
-        'actions': [{
-            'name': 'claim',
-            'text': 'Claim Incident',
-            'type': 'button',
-            'value': 'claimed',
-        }]
+        'actions': [
+            {
+                'name': 'claim',
+                'text': 'Claim Incident',
+                'type': 'button',
+                'value': 'claimed'
+            },
+            {
+                'name': 'claim all',
+                'text': 'Claim All',
+                'style': 'danger',
+                'type': 'button',
+                'value': 'claimed all',
+                "confirm": {
+                    "title": "Are you sure?",
+                    "text": "This will claim all active incidents targeting you.",
+                    "ok_text": "Yes",
+                    "dismiss_text": "No"
+                }
+            }
+        ]
     }]
 
 

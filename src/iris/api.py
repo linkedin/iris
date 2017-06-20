@@ -3225,6 +3225,10 @@ class ResponseSlack(ResponseMixin):
             content = slack_params['content']
         except KeyError:
             raise HTTPBadRequest('Post body missing required key')
+        # Process claim all with parse_response. Not needed for claim, since message id is
+        # already known in this case.
+        if content == 'claim all':
+            msg_id, content = utils.parse_response(content, 'slack', source)
         try:
             _, response = self.handle_user_response('slack', msg_id, source, content)
         except Exception:

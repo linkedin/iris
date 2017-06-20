@@ -40,12 +40,27 @@ class iris_slack(object):
             'color': 'danger',
             'title_link': '%s/%s' % (
                 self.config['iris_incident_url'], message['incident_id']),
-            'actions': [{
-                'name': 'claim',
-                'text': 'Claim Incident',
-                'type': 'button',
-                'value': 'claimed'
-            }]
+            'actions': [
+                {
+                    'name': 'claim',
+                    'text': 'Claim Incident',
+                    'type': 'button',
+                    'value': 'claimed'
+                },
+                {
+                    'name': 'claim all',
+                    'text': 'Claim All',
+                    'style': 'danger',
+                    'type': 'button',
+                    'value': 'claimed all',
+                    "confirm": {
+                        "title": "Are you sure?",
+                        "text": "This will claim all active incidents targeting you.",
+                        "ok_text": "Yes",
+                        "dismiss_text": "No"
+                    }
+                }
+            ]
         }
         return ujson.dumps([att_json])
 
