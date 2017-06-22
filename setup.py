@@ -39,7 +39,8 @@ setuptools.setup(
         'beaker==1.8.0',
         'webassets==0.12.0',
         'python-ldap==2.4.9',
-        'exchangelib==1.9.3'
+        'exchangelib==1.9.3',
+        'kazoo==2.3.1'
     ],
     extras_require={
         # plugin deps
