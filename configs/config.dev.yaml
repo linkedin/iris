@@ -73,6 +73,14 @@ sender:
     maxBytes: 10485760
     filename: './logs/sender_rpc.access.log'
 
+  # Optionally, use zookeeper for sender high availability.
+  #zookeeper_cluster: localhost:2181
+
+  # If you're not using zookeeper, the following determines
+  # whether this sender is a master and you hard code in
+  # slaves to be cycled through
+  is_master: True
+
 #  slaves:
 #    - host: 127.0.0.1
 #      port: 2322
