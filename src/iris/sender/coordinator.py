@@ -1,90 +1,56 @@
+from kazoo.client import KazooClient, KazooState
+from kazoo.handlers.gevent import SequentialGeventHandler
+from kazoo.recipe.party import Party
+import kazoo.exceptions
 import logging
-from iris import db, metrics
-from gevent import sleep, spawn
+from iris import metrics
+from gevent import sleep
 from itertools import cycle
 
 logger = logging.getLogger(__name__)
 
 UPDATE_FREQUENCY = 3
-SENDER_ALIVE_TIMEOUT = 10
-
-REMOVE_OLD_INSTANCES_FREQUENCY = 3600
-REMOVE_OLD_INSTANCES_TIMEOUT = 60
-
-GET_MASTER_QUERY = '''SELECT `sender_address` FROM `sender_master_election` WHERE `anchor` = 1'''
-
-GET_SLAVES_QUERY = '''
-  SELECT `sender_instances`.`sender_address`
-  FROM `sender_instances`
-  JOIN `sender_master_election` ON `sender_master_election`.`sender_address` != `sender_instances`.`sender_address`
-  WHERE `sender_instances`.`last_seen` > NOW() - INTERVAL CAST(%(timeout)s AS UNSIGNED) SECOND'''
-
-UPDATE_MASTER_QUERY = '''
-  INSERT IGNORE INTO `sender_master_election` (`anchor`, `sender_address`, `last_seen_active`) VALUES (
-    1, %(me)s, NOW()
-  ) ON DUPLICATE KEY UPDATE
-    `sender_address` = if(`last_seen_active` < NOW() - INTERVAL CAST(%(timeout)s AS UNSIGNED) SECOND, VALUES(`sender_address`), `sender_address`),
-    `last_seen_active` = if(`sender_address` = VALUES(`sender_address`), VALUES(`last_seen_active`), `last_seen_active`)
-'''
-
-UPDATE_INSTANCES_QUERY = '''
-  INSERT INTO `sender_instances` (`sender_address`, `last_seen`) VALUES(%(me)s, now())
-  ON DUPLICATE KEY UPDATE `last_seen` = NOW()'''
-
-REMOVE_OLD_INSTANCES_QUERY = '''
-  DELETE FROM `sender_instances`
-  WHERE `last_seen` < NOW() - INTERVAL CAST(%(old_instances_timeout)s AS UNSIGNED) SECOND
-'''
 
 
 class Coordinator(object):
-    def __init__(self, hostname, port):
+    def __init__(self, zk_hosts, hostname, port, join_cluster=True):
         self.me = '%s:%s' % (hostname, port)
         self.is_master = None
         self.slaves = cycle([])
         self.slave_count = 0
+        self.started_shutdown = False
 
-        self.prune_old_instances_task = None
+        self.zk = KazooClient(hosts=zk_hosts, handler=SequentialGeventHandler(), read_only=bool(join_cluster))
+        event = self.zk.start_async()
+        event.wait(timeout=5)
+
+        self.lock = self.zk.Lock(path='/iris/sender_master', identifier=self.me)
+
+        # Used to keep track of slaves / senders present in cluster
+        self.party = Party(client=self.zk, path='/iris/sender_nodes', identifier=self.me)
+
+        if join_cluster:
+            self.party.join()
 
     def am_i_master(self):
         return self.is_master
 
     # Used for API to get the current master
     def get_current_master(self):
-        connection = None
         try:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute(GET_MASTER_QUERY)
-            master = cursor.fetchone()[0]
-            cursor.close()
-            connection.close()
-            return self.address_to_tuple(master)
-        except Exception:
-            logger.exception('Failed getting current master')
-            if connection:
-                connection.close()
+            contenders = self.lock.contenders()
+        except kazoo.exceptions.KazooException:
+            logger.exception('Failed getting contenders')
+            return None
+
+        if contenders:
+            return self.address_to_tuple(contenders[0])
+        else:
             return None
 
     # Used for API to get the current slaves if master can't be reached
     def get_current_slaves(self):
-        slaves = []
-        connection = None
-        try:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT})
-            for row in cursor:
-                address = self.address_to_tuple(row[0])
-                if address:
-                    slaves.append(address)
-            cursor.close()
-            connection.close()
-        except Exception:
-            logger.exception('Failed getting slaves')
-            if connection:
-                connection.close()
-        return slaves
+        return [self.address_to_tuple(host) for host in self.party]
 
     def address_to_tuple(self, address):
         try:
@@ -95,47 +61,38 @@ class Coordinator(object):
             return None
 
     def update_status(self):
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor()
+        if self.started_shutdown:
+            return
 
-        try:
-            cursor.execute(UPDATE_MASTER_QUERY, {'me': self.me, 'timeout': SENDER_ALIVE_TIMEOUT})
-            connection.commit()
-        except:
-            logger.exception('Failed updating master status')
-
-        cursor.execute(GET_MASTER_QUERY)
-        result = cursor.fetchone()
-        self.is_master = result == (self.me, )
-
-        # Keep track of slaves if we're master
-        if self.is_master:
-            slaves = []
-            cursor.execute(GET_SLAVES_QUERY, {'timeout': SENDER_ALIVE_TIMEOUT})
-            for row in cursor:
-                address = self.address_to_tuple(row[0])
-                if address:
-                    slaves.append(address)
-
-            self.slaves = cycle(slaves)
-            self.slave_count = len(slaves)
-
-        # If we're slave make sure we're kept track of for master
+        if self.zk.state == KazooState.CONNECTED:
+            if self.is_master:
+                self.is_master = self.lock.is_acquired
+            else:
+                try:
+                    self.is_master = self.lock.acquire(blocking=False, timeout=2)
+                except kazoo.exceptions.LockTimeout:
+                    self.is_master = False
+                    logger.exception('Failed trying to acquire lock (shouldn\'t happen as we\'re using nonblocking locks)')
+                except kazoo.exceptions.KazooException:
+                    self.is_master = False
+                    logger.exception('ZK problem while Failed trying to acquire lock')
         else:
-            try:
-                cursor.execute(UPDATE_INSTANCES_QUERY, {'me': self.me})
-                connection.commit()
-            except:
-                logger.exception('Failed updating slave status')
+            logger.error('ZK connection is not in connected state')
+            self.is_master = False
 
-            self.slave_count = 0
+        if self.is_master:
+            slaves = [self.address_to_tuple(host) for host in self.party if host != self.me]
+            self.slave_count = len(slaves)
+            self.slaves = cycle(slaves)
+        else:
             self.slaves = cycle([])
-
-        cursor.close()
-        connection.close()
+            self.slave_count = 0
 
     def update_forever(self):
         while True:
+            if self.started_shutdown:
+                return
+
             old_status = self.is_master
             self.update_status()
             new_status = self.is_master
@@ -146,40 +103,41 @@ class Coordinator(object):
                 log = logger.debug
 
             if self.is_master:
-                log('I am the sender master.')
+                log('I am the master sender')
             else:
-                log('I am not the sender master.')
+                log('I am a slave sender')
 
             metrics.set('slave_instance_count', self.slave_count)
             metrics.set('is_master_sender', int(self.is_master))
 
-            # keep track of task to purge old slave instances if i'm master; kill
-            # it otherwise
-            if self.is_master:
-                if not bool(self.prune_old_instances_task):
-                    self.prune_old_instances_task = spawn(self.prune_old_instances)
-            else:
-                if bool(self.prune_old_instances_task):
-                    self.prune_old_instances_task.kill()
-
             sleep(UPDATE_FREQUENCY)
 
-    def prune_old_instances(self):
-        while True:
-            logger.info('Purging any old instances')
+    def leave_cluster(self):
+        self.started_shutdown = True
+        if self.party and self.party.participating:
+            logger.info('Leaving party')
+            self.party.leave()
+        if self.lock and self.lock.is_acquired:
+            logger.info('Releasing lock')
+            self.lock.release()
 
-            connection = None
 
-            try:
-                connection = db.engine.raw_connection()
-                cursor = connection.cursor()
-                cursor.execute(REMOVE_OLD_INSTANCES_QUERY, {'old_instances_timeout': REMOVE_OLD_INSTANCES_TIMEOUT})
-                connection.commit()
-                cursor.close()
-                connection.close()
-            except Exception:
-                logger.exception('Failed purging old instances')
-                if connection:
-                    connection.close()
+class NonClusterCoordinator():
+    def __init__(self, is_master, slaves=[]):
+        self.is_master = is_master
+        if is_master:
+            logger.info('I am the master sender')
+        else:
+            logger.info('I am a slave sender')
 
-            sleep(REMOVE_OLD_INSTANCES_FREQUENCY)
+        self.slaves = cycle((slave['host'], slave['port']) for slave in slaves)
+        self.slave_count = len(slaves)
+
+    def update_forever(self):
+        pass
+
+    def leave_cluster(self):
+        pass
+
+    def am_i_master(self):
+        return self.is_master
