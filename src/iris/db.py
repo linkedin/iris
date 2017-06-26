@@ -3,6 +3,13 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
+from .validators import IrisValidationException
+from falcon import HTTPBadRequest, HTTPNotFound, HTTPForbidden, HTTPUnauthorized
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 Session = None
 dict_cursor = None
@@ -18,3 +25,23 @@ def init(config):
                            **config['db']['kwargs'])
     dict_cursor = engine.dialect.dbapi.cursors.DictCursor
     Session = sessionmaker(bind=engine)
+
+
+@contextmanager
+def guarded_session():
+    '''
+    Context manager that will automatically close session on exceptions
+    '''
+    try:
+        session = Session()
+        yield session
+    except IrisValidationException as e:
+        session.close()
+        raise HTTPBadRequest('Validation error', str(e))
+    except (HTTPForbidden, HTTPUnauthorized, HTTPNotFound, HTTPBadRequest):
+        session.close()
+        raise
+    except Exception:
+        session.close()
+        logger.exception('SERVER ERROR')
+        raise
