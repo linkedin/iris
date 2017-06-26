@@ -52,34 +52,34 @@ def parse_response(response, mode, source):
         return msg_id, ' '.join([cmd] + args)
 
     if re.match('claim\s+last', response, re.IGNORECASE):
-        session = db.Session()
-        target_name = lookup_username_from_contact(mode, source, session=session)
-        if not target_name:
-            logger.error('Failed resolving %s:%s to target name', mode, source)
-            return None, 'claim'
-        msg_id = session.execute('''SELECT `message`.`id` from `message`
-                                    JOIN `target` on `target`.`id` = `message`.`target_id`
-                                    JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
-                                    WHERE `target`.`name` = :target_name
-                                    AND `target_type`.`name` = 'user'
-                                    ORDER BY `message`.`id` DESC
-                                    LIMIT 1''', {'target_name': target_name}).scalar()
-        session.close()
+        with db.guarded_session() as session:
+            target_name = lookup_username_from_contact(mode, source, session=session)
+            if not target_name:
+                logger.error('Failed resolving %s:%s to target name', mode, source)
+                return None, 'claim'
+            msg_id = session.execute('''SELECT `message`.`id` from `message`
+                                        JOIN `target` on `target`.`id` = `message`.`target_id`
+                                        JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
+                                        WHERE `target`.`name` = :target_name
+                                        AND `target_type`.`name` = 'user'
+                                        ORDER BY `message`.`id` DESC
+                                        LIMIT 1''', {'target_name': target_name}).scalar()
+            session.close()
         return msg_id, 'claim'
     elif re.match('claim\s+all', response, re.IGNORECASE):
-        session = db.Session()
-        target_name = lookup_username_from_contact(mode, source, session=session)
-        if not target_name:
-            logger.error('Failed resolving %s:%s to target name', mode, source)
-            return None, 'claim_all'
-        msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
-                                                        JOIN `target` on `target`.`id` = `message`.`target_id`
-                                                        JOIN `incident` on `incident`.`id` = `message`.`incident_id`
-                                                        JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
-                                                        WHERE `target`.`name` = :target_name
-                                                        AND `target_type`.`name` = 'user'
-                                                        AND `incident`.`active` = TRUE''', {'target_name': target_name})]
-        session.close()
+        with db.guarded_session() as session:
+            target_name = lookup_username_from_contact(mode, source, session=session)
+            if not target_name:
+                logger.error('Failed resolving %s:%s to target name', mode, source)
+                return None, 'claim_all'
+            msg_ids = [row[0] for row in session.execute('''SELECT `message`.`id` from `message`
+                                                            JOIN `target` on `target`.`id` = `message`.`target_id`
+                                                            JOIN `incident` on `incident`.`id` = `message`.`incident_id`
+                                                            JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
+                                                            WHERE `target`.`name` = :target_name
+                                                            AND `target_type`.`name` = 'user'
+                                                            AND `incident`.`active` = TRUE''', {'target_name': target_name})]
+            session.close()
         return msg_ids, 'claim_all'
 
     return halves
@@ -95,29 +95,35 @@ def parse_email_response(first_line, subject, source):
 
 def get_incident_id_from_message_id(msg_id):
     sql = 'SELECT `message`.`incident_id` FROM `message` WHERE `message`.`id` = :msg_id'
-    return db.Session().execute(sql, {'msg_id': msg_id}).scalar()
+    with db.guarded_session() as session:
+        ret = session.execute(sql, {'msg_id': msg_id}).scalar()
+        session.close()
+    return ret
 
 
 def get_incident_ids_from_message_ids(msg_ids):
     sql = 'SELECT DISTINCT `message`.`incident_id` FROM `message` WHERE `message`.`id` in :msg_ids'
-    return [row[0] for row in db.Session().execute(sql, {'msg_ids': tuple(msg_ids)})]
+    with db.guarded_session() as session:
+        ret = [row[0] for row in session.execute(sql, {'msg_ids': tuple(msg_ids)})]
+        session.close()
+    return ret
 
 
 def get_incident_context_from_message_id(msg_id):
-    session = db.Session()
-    sql = '''SELECT
-               `incident`.`context`
-             FROM
-               `message`
-               JOIN `incident` ON `incident`.`id` = `message`.`incident_id`
-             WHERE
-               `message`.`id` = :msg_id'''
-    context = session.execute(sql, {'msg_id': msg_id}).scalar()
-    if not context:
+    with db.guarded_session() as session:
+        sql = '''SELECT
+                   `incident`.`context`
+                 FROM
+                   `message`
+                   JOIN `incident` ON `incident`.`id` = `message`.`incident_id`
+                 WHERE
+                   `message`.`id` = :msg_id'''
+        context = session.execute(sql, {'msg_id': msg_id}).scalar()
+        if not context:
+            session.close()
+            return None
+        context = ujson.loads(context)
         session.close()
-        return None
-    context = ujson.loads(context)
-    session.close()
     return context
 
 
@@ -140,8 +146,10 @@ def get_incident_context_from_batch_id(batch_id):
 
 
 def lookup_username_from_contact(mode, destination, session=None):
+    cleanup = False
     if not session:
         session = db.Session()
+        cleanup = True
     if mode == 'sms' or mode == 'call':
         dest = normalize_phone_number(destination)
     else:
@@ -150,7 +158,10 @@ def lookup_username_from_contact(mode, destination, session=None):
              JOIN `target_contact` on `target_contact`.`target_id` = `target`.`id`
              JOIN `mode` on `mode`.`id` = `target_contact`.`mode_id`
              WHERE `mode`.`name` = :mode AND `target_contact`.`destination` = :dest'''
-    return session.execute(sql, {'mode': mode, 'dest': dest}).scalar()
+    ret = session.execute(sql, {'mode': mode, 'dest': dest}).scalar()
+    if cleanup:
+        session.close()
+    return ret
 
 
 def claim_incident(incident_id, owner, session=None):

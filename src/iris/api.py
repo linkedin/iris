@@ -13,7 +13,6 @@ import re
 import os
 import datetime
 import logging
-from contextlib import contextmanager
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
@@ -604,26 +603,6 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     return where
 
 
-@contextmanager
-def guarded_db_session():
-    '''
-    Context manager that will automatically close session on exceptions
-    '''
-    try:
-        session = db.Session()
-        yield session
-    except IrisValidationException as e:
-        session.close()
-        raise HTTPBadRequest('Validation error', str(e))
-    except (HTTPForbidden, HTTPUnauthorized, HTTPNotFound, HTTPBadRequest):
-        session.close()
-        raise
-    except Exception:
-        session.close()
-        logger.exception('SERVER ERROR')
-        raise
-
-
 class HeaderMiddleware(object):
     def process_request(self, req, resp):
         resp.content_type = 'application/json'
@@ -861,7 +840,7 @@ class Plan(object):
             raise HTTPBadRequest('"active" field required')
         except ValueError:
             raise HTTPBadRequest('Invalid active field')
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             if active:
                 session.execute(
                     '''INSERT INTO `plan_active` (`name`, `plan_id`)
@@ -1073,7 +1052,7 @@ class Plans(object):
             'tracking_template': tracking_template,
         }
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
 
             for index, steps in enumerate(plan_params['steps'], start=1):
@@ -1207,7 +1186,7 @@ class Incidents(object):
         if 'plan' not in incident_params:
             raise HTTPBadRequest('missing plan name attribute')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': incident_params['plan']}).scalar()
             if not plan_id:
@@ -1344,7 +1323,7 @@ class Incident(object):
         except KeyError:
             raise HTTPBadRequest('"owner" field required')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             # claim_incident will close the session
             is_active = utils.claim_incident(incident_id, owner, session)
         resp.status = HTTP_200
@@ -1672,7 +1651,7 @@ class Template(object):
             raise HTTPBadRequest('Invalid active argument', 'active must be an int')
         except KeyError:
             raise HTTPBadRequest('Missing active argument')
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             if active:
                 session.execute(
                     '''INSERT INTO `template_active` (`name`, `template_id`)
@@ -1759,7 +1738,7 @@ class Templates(object):
             logger.exception('SERVER ERROR')
             raise
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             template_id = session.execute(
                 '''INSERT INTO `template` (`name`, `created`, `user_id`)
                    VALUES (
@@ -1800,7 +1779,7 @@ class UserModes(object):
     enforce_user = True
 
     def on_get(self, req, resp, username):
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
             modes = {name: 'default' for (name, ) in results}
 
@@ -1818,7 +1797,7 @@ class UserModes(object):
     # TODO (dewang): change to PUT for consistency with oncall
     def on_post(self, req, resp, username):
         mode_params = ujson.loads(req.context['body'])
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
             modes = {name: 'default' for (name, ) in results}
 
@@ -1907,7 +1886,7 @@ class TargetRoles(object):
                }
            ]
         '''
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             sql = '''SELECT `target_role`.`name` AS `name`, `target_type`.`name` AS `type`
                      FROM `target_role`
                      JOIN `target_type` on `target_role`.`type_id` = `target_type`.`id`'''
@@ -1928,7 +1907,7 @@ class Targets(object):
             req.params['startswith'] = req.params['startswith'] + '%'
             sql += ' WHERE `name` like :startswith'
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             results = session.execute(sql, req.params)
             payload = ujson.dumps([row for (row,) in results])
             session.close()
@@ -1956,7 +1935,7 @@ class Target(object):
         if filters_sql:
             sql += ' WHERE %s' % ' AND '.join(filters_sql)
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             results = session.execute(sql, req.params)
             payload = ujson.dumps([row for (row,) in results])
             session.close()
@@ -2010,7 +1989,7 @@ class Application(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             app = session.execute(get_applications_query + ' AND `application`.`name` = :app_name',
                                   {'app_name': app_name}).fetchone()
             if not app:
@@ -2234,7 +2213,7 @@ class Application(object):
             raise HTTPUnauthorized('Only admins can remove apps')
 
         affected = False
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             try:
                 affected = session.execute('DELETE FROM `application` WHERE `name` = :app_name',
                                            {'app_name': app_name}).rowcount
@@ -2283,7 +2262,7 @@ class ApplicationQuota(object):
         if data['hard_quota_threshold'] <= data['soft_quota_threshold']:
             raise HTTPBadRequest('Hard threshold must be bigger than soft threshold')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             application_id = session.execute(
                 'SELECT `id` FROM `application` WHERE `name` = :app_name',
                 {'app_name': app_name}).scalar()
@@ -2322,7 +2301,7 @@ class ApplicationQuota(object):
         resp.body = '[]'
 
     def on_delete(self, req, resp, app_name):
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             application_id = session.execute(
                 'SELECT `id` FROM `application` WHERE `name` = :app_name',
                 {'app_name': app_name}).scalar()
@@ -2352,7 +2331,7 @@ class ApplicationKey(object):
         if not req.context['username']:
             raise HTTPUnauthorized('You must be a logged in user to view this app\'s key')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             if not req.context['is_admin']:
                 has_permission = session.execute(
                     '''SELECT 1
@@ -2390,7 +2369,7 @@ class ApplicationReKey(object):
         }
 
         affected = False
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             affected = session.execute(
                 'UPDATE `application` SET `key` = :new_key WHERE `name` = :app_name',
                 data).rowcount
@@ -2450,7 +2429,7 @@ class ApplicationEmailIncidents(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             if not req.context['is_admin']:
                 has_permission = session.execute(
                     '''SELECT 1
@@ -2582,7 +2561,7 @@ class ApplicationRename(object):
         }
 
         affected = False
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             try:
                 affected = session.execute(
                     'UPDATE `application` SET `name` = :new_name WHERE `name` = :old_name',
@@ -2722,7 +2701,7 @@ class Applications(object):
             'key': hashlib.sha256(os.urandom(32)).hexdigest()
         }
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             try:
                 app_id = session.execute(
                     'INSERT INTO `application` (`name`, `key`) VALUES (:name, :key)',
@@ -2874,7 +2853,7 @@ class ResponseMixin(object):
         """
         Return the result of the insert
         """
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             result = session.execute(
                 '''INSERT INTO `response` (`source`, `message_id`, `content`, `created`)
                    VALUES (:source, :message_id, :content, now())''',
@@ -2893,7 +2872,7 @@ class ResponseMixin(object):
 
         app = cache.applications[application]
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             sql = '''SELECT `target`.`id` FROM `target`
                      JOIN `target_contact` on `target_contact`.`target_id` = `target`.`id`
                      JOIN `mode` on `mode`.`id` = `target_contact`.`mode_id`
@@ -2952,7 +2931,7 @@ class ResponseMixin(object):
                 logger.exception(msg)
                 raise HTTPBadRequest(msg)
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             is_batch = False
             is_claim_all = False
             if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
@@ -3046,7 +3025,7 @@ class ResponseEmail(ResponseMixin):
         # Some people want to use emails to create iris incidents. Facilitate this.
         if to:
             to = to.split(' ')[-1].strip('<>')
-            with guarded_db_session() as session:
+            with db.guarded_session() as session:
                 email_check_result = session.execute(
                     '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
                        FROM `incident_emails`
@@ -3253,7 +3232,7 @@ class TwilioDeliveryUpdate(object):
             raise HTTPBadRequest('Invalid keys in payload')
 
         affected = False
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             affected = session.execute(
                 '''UPDATE `twilio_delivery_status`
                    SET `status` = :status
@@ -3324,7 +3303,7 @@ class Reprioritization(object):
             raise HTTPBadRequest(msg, msg)
         cursor.close()
 
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             session.execute(update_reprioritization_settings_query, {
                 'target': username,
                 'src_mode_id': src_mode_id,
@@ -3361,7 +3340,7 @@ class ReprioritizationMode(object):
 
            []
         '''
-        with guarded_db_session() as session:
+        with db.guarded_session() as session:
             affected_rows = session.execute(delete_reprioritization_settings_query, {
                 'target_name': username,
                 'mode_name': src_mode_name,
