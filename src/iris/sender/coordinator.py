@@ -13,14 +13,19 @@ UPDATE_FREQUENCY = 3
 
 
 class Coordinator(object):
-    def __init__(self, zk_hosts, hostname, port, join_cluster=True):
+    def __init__(self, zk_hosts, hostname, port, join_cluster):
         self.me = '%s:%s' % (hostname, port)
         self.is_master = None
         self.slaves = cycle([])
         self.slave_count = 0
         self.started_shutdown = False
 
-        self.zk = KazooClient(hosts=zk_hosts, handler=SequentialGeventHandler(), read_only=bool(join_cluster))
+        if join_cluster:
+            read_only = False
+        else:
+            read_only = True
+
+        self.zk = KazooClient(hosts=zk_hosts, handler=SequentialGeventHandler(), read_only=read_only)
         event = self.zk.start_async()
         event.wait(timeout=5)
 
