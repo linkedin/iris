@@ -1477,9 +1477,13 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, default_sender_addr):
+    def __init__(self, zk_hosts, default_sender_addr):
         self.default_sender_addr = default_sender_addr
-        self.coordination = Coordinator(None, None)
+        if zk_hosts:
+            self.coordinator = Coordinator(zk_hosts=zk_hosts, hostname=None, port=None, join_cluster=False)
+        else:
+            logger.info('Not using ZK to get senders. Using host %s for master instead.', default_sender_addr)
+            self.coordinator = None
 
     def on_post(self, req, resp):
         '''
@@ -1586,12 +1590,16 @@ class Notifications(object):
 
         message['application'] = req.context['app']['name']
 
-        sender_addr = self.coordination.get_current_master()
-        if sender_addr:
-            logger.info('Relaying message to current master sender: %s', sender_addr)
+        # If we're using ZK, try that to get master
+        if self.coordinator:
+            sender_addr = self.coordinator.get_current_master()
+            if sender_addr:
+                logger.info('Relaying message to current master sender: %s', sender_addr)
+            else:
+                sender_addr = self.default_sender_addr
+                logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
         else:
             sender_addr = self.default_sender_addr
-            logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
 
         s = None
 
@@ -1601,18 +1609,19 @@ class Notifications(object):
 
         # Then try slaves
         except:
-            logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
-            for slave_address in self.coordination.get_current_slaves():
-                try:
-                    logger.info('Trying slave %s..', slave_address)
-                    s = socket.create_connection(slave_address)
-                    break
-                except:
-                    logger.exception('Failed reaching slave %s', slave_address)
+            if self.coordinator:
+                logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
+                for slave_address in self.coordinator.get_current_slaves():
+                    try:
+                        logger.info('Trying slave %s..', slave_address)
+                        s = socket.create_connection(slave_address)
+                        break
+                    except:
+                        logger.exception('Failed reaching slave %s', slave_address)
 
         # If none of that works, bail
         if not s:
-            logger.error('Failed reaching any slaves. Bailing.')
+            logger.error('Failed reaching any senders. Bailing.')
             raise HTTPInternalServerError('Failed reaching any senders')
 
         s.send(msgpack.packb({'endpoint': 'v0/send', 'data': message}))
@@ -3607,7 +3616,7 @@ def json_error_serializer(req, resp, exception):
     resp.content_type = 'application/json'
 
 
-def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, sender_addr):
+def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr):
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
@@ -3629,7 +3638,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
     api.add_route('/v0/messages', Messages())
 
-    api.add_route('/v0/notifications', Notifications(sender_addr))
+    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr))
 
     api.add_route('/v0/targets/{target_type}', Target())
     api.add_route('/v0/targets', Targets())
@@ -3684,11 +3693,14 @@ def get_api(config):
     debug = False
     if config['server'].get('disable_auth'):
         debug = True
-    master_sender = config['sender'].get('master_sender', config['sender'])
-    master_sender_addr = (master_sender['host'], master_sender['port'])
+
+    default_master_sender = config['sender'].get('master_sender', config['sender'])
+    default_master_sender_addr = (default_master_sender['host'], default_master_sender['port'])
+    zk_hosts = config['sender'].get('zookeeper_cluster', False)
+
     # all notifications go through master sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, master_sender_addr)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)
