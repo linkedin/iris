@@ -159,17 +159,13 @@ def claim_incident(incident_id, owner, session=None):
     '''
     if not session:
         session = db.Session()
-    info = None
 
-    incident_owner = session.execute('''
+    previous_owner = session.execute('''
       SELECT `target`.`name`
       FROM `incident`
       LEFT JOIN `target` ON `target`.`id` = `incident`.`owner_id`
       WHERE `incident`.`id` = :incident_id
     ''', {'incident_id': incident_id}).scalar()
-
-    if incident_owner:
-        info = 'FYI this was already claimed by %s.' % incident_owner
 
     active = 0 if owner else 1
     now = datetime.datetime.utcnow()
@@ -184,7 +180,7 @@ def claim_incident(incident_id, owner, session=None):
     session.commit()
     session.close()
 
-    return active == 1, info
+    return active == 1, previous_owner
 
 
 def claim_bulk_incidents(incident_ids, owner):

@@ -707,7 +707,7 @@ def test_api_response_already_claimed(sample_user, sample_phone, sample_user2, s
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.json()['app_response'] == 'Iris incident(%s) claimed. FYI this was already claimed by %s.' % (incident_id, sample_user)
+    assert re.json()['app_response'] == 'Iris incident(%s) claimed, previously claimed by %s.' % (incident_id, sample_user)
 
 
 def test_api_response_email(fake_message_id, sample_email):
