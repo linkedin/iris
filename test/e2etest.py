@@ -386,7 +386,7 @@ def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone
         'message_id': fake_message_id,
     }, data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
 
 def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_number):
@@ -426,14 +426,14 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
     data = base_body.copy()
     data['Body'] = 'Claim   %s claim arg1 arg2' % fake_message_id
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
     data = base_body.copy()
     data['Body'] = fake_message_id
