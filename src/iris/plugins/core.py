@@ -63,14 +63,19 @@ class IrisPlugin(object):
         owner = utils.lookup_username_from_contact(mode, source)
         if not owner:
             return 'Failed to identify owner for the incident.'
-        is_active = utils.claim_incident(iid, owner)
+        is_active, info = utils.claim_incident(iid, owner)
         if is_active:
             logger.info(('Failed to claim incident(%s) for message: %s. '
                          'owner: %s, mode: %s, args: %s'),
                         iid, msg_id, owner, mode, args)
             return 'Failed to claim incident for message: %s.' % str(msg_id)
         else:
-            return 'Iris incident(%s) claimed.' % iid
+            msg = 'Iris incident(%s) claimed.' % iid
+
+            if info:
+                msg += ' %s' % info
+
+            return msg
 
     def process_iris_batch_claim(self, msg_id, source, mode, cmd, args=None):
         owner = utils.lookup_username_from_contact(mode, source)
