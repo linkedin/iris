@@ -181,6 +181,15 @@ def sample_phone(sample_user):
 
 
 @pytest.fixture(scope='module')
+def sample_phone2(sample_user2):
+    '''Email address of sample_user2'''
+    re = requests.get(base_url + 'users/' + sample_user2, headers=username_header(sample_user2))
+    assert re.status_code == 200
+    data = re.json()
+    return data['contacts']['call']
+
+
+@pytest.fixture(scope='module')
 def superuser_application():
     '''
     application which should have 'allow_other_app_incidents' in DB set to 1,
@@ -293,7 +302,14 @@ def sample_priority():
         return priorities[0]['name']
 
 
-def create_incident_with_message(application, plan, target, mode):
+def create_incident_with_message(application, plan, targets, mode):
+
+    if isinstance(targets, list):
+        multiple_users = True
+    else:
+        targets = [targets]
+        multiple_users = False
+
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         cursor.execute('''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
                           VALUES (
@@ -307,19 +323,29 @@ def create_incident_with_message(application, plan, target, mode):
         incident_id = cursor.lastrowid
         assert incident_id
         conn.commit()
-        cursor.execute('''INSERT INTO `message` (`created`, `application_id`, `target_id`, `priority_id`, `mode_id`, `active`, `incident_id`)
-                          VALUES(
-                                  NOW(),
-                                  (SELECT `id` FROM `application` WHERE `name` = %(application)s),
-                                  (SELECT `id` FROM `target` WHERE `name` = %(target)s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
-                                  (SELECT `id` FROM `priority` WHERE `name` = 'low'),
-                                  (SELECT `id` FROM `mode` WHERE `name` = %(mode)s),
-                                  TRUE,
-                                  %(incident_id)s
-                          )''', {'application': application, 'target': target, 'mode': mode, 'incident_id': incident_id})
-        assert cursor.lastrowid
-        conn.commit()
-        return incident_id
+
+        users_to_messages = {}
+
+        for target in targets:
+            cursor.execute('''INSERT INTO `message` (`created`, `application_id`, `target_id`, `priority_id`, `mode_id`, `active`, `incident_id`)
+                              VALUES(
+                                      NOW(),
+                                      (SELECT `id` FROM `application` WHERE `name` = %(application)s),
+                                      (SELECT `id` FROM `target` WHERE `name` = %(target)s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
+                                      (SELECT `id` FROM `priority` WHERE `name` = 'low'),
+                                      (SELECT `id` FROM `mode` WHERE `name` = %(mode)s),
+                                      TRUE,
+                                      %(incident_id)s
+                              )''', {'application': application, 'target': target, 'mode': mode, 'incident_id': incident_id})
+            message_id = cursor.lastrowid
+            assert message_id
+            users_to_messages[target] = message_id
+            conn.commit()
+
+        if multiple_users:
+            return incident_id, users_to_messages
+        else:
+            return incident_id
 
 
 def test_api_acls(sample_user, sample_user2):
@@ -360,7 +386,7 @@ def test_api_response_phone_call(fake_message_id, fake_incident_id, sample_phone
         'message_id': fake_message_id,
     }, data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
 
 def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_number):
@@ -400,14 +426,14 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
     data = base_body.copy()
     data['Body'] = 'Claim   %s claim arg1 arg2' % fake_message_id
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"Iris incident(%s) claimed."}' % fake_incident_id
+    assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
 
     data = base_body.copy()
     data['Body'] = fake_message_id
@@ -477,7 +503,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     # Shouldn't be any incidents. Verify response in this case.
     re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
     assert re.status_code == 200
-    assert re.json()['app_response'] == 'No incidents to claim'
+    assert re.json()['app_response'] == 'No active incidents to claim.'
 
     # Verify SMS with two incidents from the same app
     incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
@@ -638,6 +664,50 @@ def test_api_response_claim_last(sample_user, sample_phone, sample_application_n
     re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
     assert re.json()['active'] == 0
+
+
+def test_api_response_already_claimed(sample_user, sample_phone, sample_user2, sample_phone2, sample_application_name, sample_plan_name, sample_email):
+    incident_id, message_ids = create_incident_with_message(sample_application_name, sample_plan_name, [sample_user, sample_user2], 'sms')
+    assert incident_id
+    assert message_ids
+
+    base_body = {
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+    }
+
+    # First user should be able to the claim the incident without issue using claim all
+    data = base_body.copy()
+    data['Body'] = 'claim all'
+    data['From'] = sample_phone
+
+    re = requests.post(base_url + 'response/twilio/messages', data=data)
+    assert re.status_code == 200
+    assert re.json()['app_response'] == 'Iris Incidents claimed (1): %s' % incident_id
+
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    assert re.json()['active'] == 0
+
+    # Second person trying to claim all should get no incidents found
+    data = base_body.copy()
+    data['Body'] = 'claim all'
+    data['From'] = sample_phone2
+
+    re = requests.post(base_url + 'response/twilio/messages', data=data)
+    assert re.status_code == 200
+    assert re.json()['app_response'] == 'No active incidents to claim.'
+
+    # They try again using claim by ID and that incident was already claimed by first person
+    data = base_body.copy()
+    data['Body'] = 'claim %s' % message_ids[sample_user2]
+    data['From'] = sample_phone2
+
+    re = requests.post(base_url + 'response/twilio/messages', data=data)
+    assert re.status_code == 200
+    assert re.json()['app_response'] == 'Iris incident(%s) claimed, previously claimed by %s.' % (incident_id, sample_user)
 
 
 def test_api_response_email(fake_message_id, sample_email):

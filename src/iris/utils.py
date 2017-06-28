@@ -170,6 +170,14 @@ def claim_incident(incident_id, owner, session=None):
     '''
     if not session:
         session = db.Session()
+
+    previous_owner = session.execute('''
+      SELECT `target`.`name`
+      FROM `incident`
+      LEFT JOIN `target` ON `target`.`id` = `incident`.`owner_id`
+      WHERE `incident`.`id` = :incident_id
+    ''', {'incident_id': incident_id}).scalar()
+
     active = 0 if owner else 1
     now = datetime.datetime.utcnow()
     session.execute('''UPDATE `incident`
@@ -183,7 +191,7 @@ def claim_incident(incident_id, owner, session=None):
     session.commit()
     session.close()
 
-    return active == 1
+    return active == 1, previous_owner
 
 
 def claim_bulk_incidents(incident_ids, owner):

@@ -1325,7 +1325,7 @@ class Incident(object):
 
         with db.guarded_session() as session:
             # claim_incident will close the session
-            is_active = utils.claim_incident(incident_id, owner, session)
+            is_active = utils.claim_incident(incident_id, owner, session)[0]
         resp.status = HTTP_200
         resp.body = ujson.dumps({'incident_id': int(incident_id),
                                  'owner': owner,
@@ -2966,7 +2966,7 @@ class ResponseMixin(object):
             elif isinstance(msg_id, list) and content == 'claim_all':
                 # Claim all functionality.
                 if not msg_id:
-                    return self.iris_sender_app, 'No incidents to claim'
+                    return self.iris_sender_app, 'No active incidents to claim.'
                 is_claim_all = True
                 apps_to_message = defaultdict(list)
                 for mid in msg_id:
