@@ -2443,6 +2443,7 @@ iris = {
       this.data.$table.html(template(data));
       this.data.DataTable = this.data.$table.DataTable(options);
       iris.tables.bindArrowKeys(this.data.DataTable);
+      iris.tables.bindUrlPagination(this.data.DataTable);
     },
     bindArrowKeys: function(dataTable) {
       $(document).keydown(function(e) {
@@ -2457,6 +2458,19 @@ iris = {
         } else if (e.keyCode == 39) {
           dataTable.page('next').draw(false);
         }
+      });
+    },
+    bindUrlPagination: function(dataTable) {
+      // If we currently have a page number in URL, use it
+      var parts = window.location.hash.split('-');
+      if (parts.length == 2 && (parts[1] - 1) < dataTable.page.info().pages) {
+          dataTable.page(parts[1] - 1).draw(false);
+      }
+
+      // Store page number in URL for future refreshes / back buttons
+      dataTable.on('page.dt', function() {
+        var current_page = dataTable.page.info().page + 1;
+        window.history.replaceState(undefined, undefined, '#page-' + current_page)
       });
     }
   },
