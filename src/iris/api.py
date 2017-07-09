@@ -3,7 +3,8 @@
 
 from __future__ import absolute_import
 
-from gevent import socket
+from gevent import spawn, sleep, socket
+
 import msgpack
 import time
 import hmac
@@ -33,9 +34,6 @@ from .config import load_config
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
-
-from iris.sender.coordinator import Coordinator
-from gevent import spawn, sleep
 
 
 from .constants import (
@@ -660,8 +658,9 @@ class AuthMiddleware(object):
         try:
             app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
             if app not in cache.applications:
-                logger.warn('Tried authenticating with nonexistent app, %s', app)
-                raise HTTPUnauthorized('Authentication failure', 'Application not found', [])
+                logger.warn('Tried authenticating with nonexistent app: "%s"', app)
+                raise HTTPUnauthorized('Authentication failure',
+                                       'Application not found', [])
             req.context['app'] = cache.applications[app]
         except TypeError:
             return
@@ -700,7 +699,7 @@ class AuthMiddleware(object):
                 app_name, client_digest = auth[5:].split(':', 1)
                 app = cache.applications.get(app_name)
                 if not app:
-                    logger.warn('Tried authenticating with nonexistent app, %s', app_name)
+                    logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
                     logger.warn('Unprivileged application %s tried authenticating %s',
@@ -1459,7 +1458,11 @@ class Notifications(object):
     def __init__(self, zk_hosts, default_sender_addr):
         self.default_sender_addr = default_sender_addr
         if zk_hosts:
-            self.coordinator = Coordinator(zk_hosts=zk_hosts, hostname=None, port=None, join_cluster=False)
+            from iris.coordinator.kazoo import Coordinator
+            self.coordinator = Coordinator(zk_hosts=zk_hosts,
+                                           hostname=None,
+                                           port=None,
+                                           join_cluster=False)
         else:
             logger.info('Not using ZK to get senders. Using host %s for master instead.', default_sender_addr)
             self.coordinator = None

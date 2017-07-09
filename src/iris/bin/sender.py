@@ -27,7 +27,6 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
-from iris.sender.coordinator import Coordinator, NonClusterCoordinator
 from pymysql import DataError, IntegrityError
 # queue for sending messages
 from iris.sender.shared import send_queue, add_mode_stat
@@ -1133,14 +1132,16 @@ def init_sender(config):
 
     if zk_hosts:
         logger.info('Initializing coordinator with ZK: %s', zk_hosts)
+        from iris.coordinator.kazoo import Coordinator
         coordinator = Coordinator(zk_hosts=zk_hosts,
                                   hostname=socket.gethostname(),
                                   port=config['sender'].get('port', 2321),
                                   join_cluster=True)
     else:
         logger.info('ZK cluster info not specified. Using master status from config')
-        coordinator = NonClusterCoordinator(is_master=config['sender'].get('is_master', True),
-                                            slaves=config['sender'].get('slaves', []))
+        from iris.coordinator.noncluster import Coordinator
+        coordinator = Coordinator(is_master=config['sender'].get('is_master', True),
+                                  slaves=config['sender'].get('slaves', []))
 
 
 def main():

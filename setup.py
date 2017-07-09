@@ -40,12 +40,25 @@ setuptools.setup(
         'webassets==0.12.0',
         'python-ldap==2.4.9',
         'exchangelib==1.9.3',
-        'kazoo==2.3.1'
     ],
     extras_require={
+        'kazoo': ['kazoo==2.3.1'],
         # plugin deps
         'influxdb': ['influxdb'],
         'prometheus': ['prometheus_client'],
+        'dev': [
+            'gunicorn',
+            'Sphinx==1.5.6',
+            'sphinxcontrib-httpdomain',
+            'sphinx_rtd_theme',
+            # test deps
+            'mock==2.0.0',
+            'pytest==3.0.5',
+            'pytest-mock==1.5.0',
+            'pytest-cov',
+            'flake8',
+            'tox',
+        ],
     },
     entry_points={
         'console_scripts': [

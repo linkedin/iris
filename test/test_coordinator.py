@@ -2,7 +2,6 @@ from gevent import spawn, monkey, sleep, socket
 monkey.patch_all()
 
 import pytest  # noqa
-from iris.sender.coordinator import Coordinator, NonClusterCoordinator  # noqa
 
 zk_address = ('localhost', 2181)
 zk_url = '%s:%s' % zk_address
@@ -19,6 +18,8 @@ class TestFailover():
             instance.leave_cluster()
 
     def test_failover(self):
+        from iris.coordinator.kazoo import Coordinator
+
         # If we can't connect to zk, skip
         try:
             sock = socket.socket()
@@ -68,13 +69,15 @@ class TestFailover():
 
 
 def test_non_cluster():
-    assert NonClusterCoordinator(False, []).am_i_master() is False
+    from iris.coordinator.noncluster import Coordinator
 
-    master_without_slaves = NonClusterCoordinator(True, [])
+    assert Coordinator(False, []).am_i_master() is False
+
+    master_without_slaves = Coordinator(True, [])
     assert master_without_slaves.am_i_master()
     assert master_without_slaves.slave_count == 0
 
-    master_with_slaves = NonClusterCoordinator(True, [{'host': 'testinstance', 'port': 1001}, {'host': 'testinstance', 'port': 1002}])
+    master_with_slaves = Coordinator(True, [{'host': 'testinstance', 'port': 1001}, {'host': 'testinstance', 'port': 1002}])
     assert master_with_slaves.am_i_master()
     assert master_with_slaves.slave_count == 2
 
