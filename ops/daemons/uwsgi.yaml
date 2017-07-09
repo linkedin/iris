@@ -1,5 +1,5 @@
 prod:
-    plugins: python,logfile
+    plugins: python,logfile,gevent_python
     chdir: /home/iris/source/src
     socket: /home/iris/var/run/uwsgi.sock
     chmod-socket: 666
@@ -8,6 +8,8 @@ prod:
     # uid: 1000
     # gid: 1000
     workers: 12
+    gevent: 100
+    lazy-apps: true
     master-fifo: /home/iris/var/run/uwsgi_master_fifo
     touch-reload: /home/iris/var/run/uwsgi_touch_reload
     stats: /home/iris/var/run/uwsgi_stats.sock
@@ -38,6 +40,7 @@ prod:
 
     # control nginx and iris sender
     attach-daemon2:
+      - cmd=/usr/sbin/nginx -c /home/iris/daemons/nginx.conf,pidfile=/home/iris/var/run/nginx.pid
       - cmd=/home/iris/env/bin/iris-sender /home/iris/config/config.yaml
 
 # vim:filetype=yaml

@@ -89,7 +89,7 @@ provisioners:
 
   - type: "shell"
     inline:
-      - 'sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python mysql-client && sudo rm -rf /var/cache/apt/archives/*'
+      - 'sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python uwsgi-plugin-gevent-python mysql-client && sudo rm -rf /var/cache/apt/archives/*'
       - sudo useradd -m -s /bin/bash iris
       - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
       - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run
@@ -104,7 +104,7 @@ provisioners:
       - sudo -Hu iris mkdir /home/iris/config
       - sudo -Hu iris cp /home/iris/source/configs/config.dev.yaml /home/iris/config/config.yaml
       - sudo -Hu iris virtualenv /home/iris/env
-      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[prometheus]"'
+      - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[prometheus,kazoo]"'
 
   - type: "shell"
     only: ["docker"]

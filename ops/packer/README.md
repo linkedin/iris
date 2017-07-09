@@ -33,8 +33,9 @@ Usage
 Spin up an Iris instance and connect to existing MySQL DB:
 
 ```bash
-docker run -e DOCKER_DB_BOOTSTRAP=1 \
+docker run -d -e DOCKER_DB_BOOTSTRAP=1 \
 	-e IRIS_CFG_DB_USER=root -e IRIS_CFG_DB_PASSWORD=admin -e IRIS_CFG_DB_HOST=IP_ADDRESS \
+	--name iris -p 16649:16649 \
 	quay.io/iris/iris:latest
 ```
 
