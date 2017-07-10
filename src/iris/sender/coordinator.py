@@ -35,6 +35,7 @@ class Coordinator(object):
         self.party = Party(client=self.zk, path='/iris/sender_nodes', identifier=self.me)
 
         if join_cluster:
+            self.zk.add_listener(self.event_listener)
             self.party.join()
 
     def am_i_master(self):
@@ -70,22 +71,28 @@ class Coordinator(object):
             return
 
         if self.zk.state == KazooState.CONNECTED:
-            if self.is_master:
-                self.is_master = self.lock.is_acquired
+            if self.lock.is_acquired:
+                self.is_master = True
             else:
                 try:
                     self.is_master = self.lock.acquire(blocking=False, timeout=2)
+
+                # This one is expected when we're recovering from ZK being down
+                except kazoo.exceptions.CancelledError:
+                    self.is_master = False
+
                 except kazoo.exceptions.LockTimeout:
                     self.is_master = False
                     logger.exception('Failed trying to acquire lock (shouldn\'t happen as we\'re using nonblocking locks)')
+
                 except kazoo.exceptions.KazooException:
                     self.is_master = False
                     logger.exception('ZK problem while Failed trying to acquire lock')
         else:
-            logger.error('ZK connection is not in connected state')
+            logger.error('ZK connection is in %s state', self.zk.state)
             self.is_master = False
 
-        if self.is_master:
+        if self.zk.state == KazooState.CONNECTED and self.is_master:
             slaves = [self.address_to_tuple(host) for host in self.party if host != self.me]
             self.slave_count = len(slaves)
             self.slaves = cycle(slaves)
@@ -113,18 +120,38 @@ class Coordinator(object):
                 log('I am a slave sender')
 
             metrics.set('slave_instance_count', self.slave_count)
-            metrics.set('is_master_sender', int(self.is_master))
+            metrics.set('is_master_sender', int(self.is_master is True))
 
             sleep(UPDATE_FREQUENCY)
 
     def leave_cluster(self):
         self.started_shutdown = True
-        if self.party and self.party.participating:
-            logger.info('Leaving party')
-            self.party.leave()
-        if self.lock and self.lock.is_acquired:
-            logger.info('Releasing lock')
-            self.lock.release()
+
+        # cancel any attempts to acquire master lock which could make us hang
+        self.lock.cancel()
+
+        if self.zk.state == KazooState.CONNECTED:
+            if self.party and self.party.participating:
+                logger.info('Leaving party')
+                self.party.leave()
+            if self.lock and self.lock.is_acquired:
+                logger.info('Releasing lock')
+                self.lock.release()
+
+    def event_listener(self, state):
+        if state == KazooState.LOST or state == KazooState.SUSPENDED:
+            logger.info('ZK state transitioned to %s. Resetting master status.', state)
+
+            # cancel pending attempts to acquire lock which will break and leave
+            # us in bad state
+            self.lock.cancel()
+
+            # make us try to re-acquire lock during next iteration when we're connected
+            if self.lock.is_acquired:
+                self.lock.is_acquired = False
+
+            # in the meantime we're not master
+            self.is_master = None
 
 
 class NonClusterCoordinator():
