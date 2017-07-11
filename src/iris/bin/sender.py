@@ -792,7 +792,6 @@ def render(message):
                     'incident_id': message['incident_id']
                 }
                 message['extra_html'] = additional_body
-                logger.info('Added oneclick URL metadata to extra_html key of message %s', message['message_id'])
 
 
 def mark_message_as_sent(message):
