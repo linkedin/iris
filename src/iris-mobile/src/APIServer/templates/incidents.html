@@ -304,7 +304,7 @@ h4{
 
      function claimAjax(listOfIds,username,secret){
 
-      apiURL = "http://172.22.228.169:8000/claim";
+      apiURL = "http://172.22.228.169:16649/v0/mobile/claim";
 
       var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
       var arrayStr = listOfIds.toString();
@@ -563,7 +563,7 @@ h4{
   function doAjax(path, limit, username, secret){
 
 
-          apiURL = "http://172.22.228.169:8000/";
+          apiURL = "http://172.22.228.169:16649/v0/mobile/";
           // all testing variables
 
           var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
@@ -635,7 +635,7 @@ h4{
 
       //  alert(results.rows.item(i).username+", "+results.rows.item(i).secret+", "+data.registrationId+", "+device.platform);
 
-       apiURL = "http://172.22.228.169:8000/";
+       apiURL = "http://172.22.228.169:16649/v0/mobile/";
 
        var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
        console.log(exp);
