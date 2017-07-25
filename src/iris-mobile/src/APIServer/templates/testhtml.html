@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Include meta tag to ensure proper rendering and touch zooming -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Include jQuery Mobile stylesheets -->
+  <link rel="stylesheet" href="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+
+  <!-- Include the jQuery library -->
+  <script src="https://code.jquery.com/jquery-1.11.3.min.js"></script>
+
+  <!-- Include the jQuery Mobile library -->
+  <script src="https://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+
+<style>
+.graph {
+    max-width: 100%;
+    height: auto;
+}
+#claimButton{
+  width:97%;
+  margin: 2%;
+}
+
+.wrap {
+    white-space: pre-line !important;
+    list-style-type: none;
+    word-break:break-all;
+}
+.smalltab {
+    width: 20% !important;  /* 12.5% for 8 tabs wide */
+    clear: none !important;  /* Prevent line break caused by ui-block-a */
+}
+.bigtab {
+    width: 80% !important;  /* 12.5% for 8 tabs wide */
+    clear: none !important;  /* Prevent line break caused by ui-block-a */
+}
+.bigesttab {
+    width: 100% !important;  /* 12.5% for 8 tabs wide */
+    clear: none !important;  /* Prevent line break caused by ui-block-a */
+}
+.smallesttab {
+    width: 5% !important;  /* 12.5% for 8 tabs wide */
+    clear: none !important;  /* Prevent line break caused by ui-block-a */
+}
+.nobreak{
+  clear: none !important;
+  display:inline;
+}
+
+.has-right-radio .ui-link-inherit {
+    margin-right: 48px !important;
+}
+.right-radio {
+    position: absolute;
+    top: 0px; bottom: 0px; right: 0px;
+    width: 48px;
+    border-left: 1px solid rgb(204, 204, 204);
+}
+.right-radio .ui-checkbox input {
+    visibility: hidden;
+}
+.right-radio .ui-checkbox, .right-radio .ui-checkbox label {
+    position: absolute;
+    top: 0px; bottom: 0px; right: 0px; left: 0px;
+}
+.right-radio .ui-checkbox label {
+    background-image: none;
+    background-color: transparent;
+    border: 0;
+}
+.right-radio .ui-checkbox label .ui-btn-inner {
+    position: absolute;
+    top: 50%;
+    margin-top: -10px;
+}
+
+h4{
+  padding-right: 48px;;
+
+}
+#output{
+  /*margin-top:70px;*/
+}
+
+
+</style>
+</head>
+<body>
+
+<div data-role="page" id="pageone">
+
+  <div data-role="header" >
+    <h1 class="nobreak">Incidents</h1>
+
+
+
+    <a href="#popupDialog" data-rel="popup" data-position-to="window" data-transition="pop" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-icon-lock ui-btn-icon-left ">Log-out</a>
+    <div data-role="popup" id="popupDialog"  data-dismissible="false" style="max-width:400px;">
+        <div data-role="header" data-theme="a">
+        <h1>Are you sure?</h1>
+        </div>
+        <div role="main" class="ui-content">
+        <p>Logging out will deauthorize this device and require you to scan in a new secret.</p>
+            <a href="#" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-btn-b" data-rel="back">Cancel</a>
+            <a href="#" id="deAuth" class="ui-btn ui-corner-all ui-shadow ui-btn-inline ui-btn-b" data-rel="back" data-transition="flow">Log out</a>
+        </div>
+    </div>
+
+    <div data-role="navbar">
+       <ul>
+
+
+         <li class="bigtab" id="selecttab">
+           <div>
+           <fieldset class="ui-field-contain-inline">
+             <select  id="incidentView">
+               <option value="active">Active </option>
+               <option value="inactive10">Inactive (10)</option>
+               <option value="inactive25">Inactive (25)</option>
+               <option value="inactive50">Inactive (50)</option>
+             </select>
+           </fieldset>
+         </div>
+         </li>
+         <li class="smalltab" id="allTab">
+           <form>
+                <label>
+                    <input type="checkbox" id="checkAll">All
+                </label>
+            </form>
+          </li>
+       </ul>
+     </div>
+  </div>
+
+    <div data-role="footer" data-position="fixed"><button  class="ui-btn"  id="claimButton" style="display: none">Claim <span class="ui-li-count" id="claimCount">0</span></button></div>
+
+  <center><h3 id="wait" class="centered" style="display:none"> Loading...</h3></center>
+
+
+  <ul data-role="listview" data-split-icon="gear" data-split-theme="a"  id="output">
+
+
+  </ul>
+
+
+
+
+
+
+
+  <div data-role="footer">
+    <h1>No more incidents...</h1>
+  </div>
+</div>
+
+<div id="newPageDiv"></div>
+
+
+
+</body>
+<script>
+
+    function base64toHEX(base64) {
+
+      var raw = atob(base64);
+
+      var HEX = '';
+
+      for ( i = 0; i < raw.length; i++ ) {
+
+      var _hex = raw.charCodeAt(i).toString(16)
+
+      HEX += (_hex.length==2?_hex:'0'+_hex);
+
+      }
+      return HEX;
+
+    }
+
+    function createHTML(json, isArray){
+
+     var html = '<ul data-role="listview" data-inset="true" data-shadow="false">';
+     for(var key in json){
+         if (key == 'graph_image_url' || !json[key]){
+           continue;
+         }
+         if(typeof json[key] == 'object'){
+
+             html +=  (!isArray ? '<li class="wrap"><strong>'+ key +': </strong></li>' : '') + createHTML(json[key], (json[key] instanceof Array ? 1 : 0));
+         } else {
+             html += '<li class="wrap"><strong>'+ key +': </strong><ul ><li class="wrap">' + json[key] +'</li></ul></li>';
+         }
+     }
+     return html+'</ul>';
+
+    }
+
+
+    var jsonResponse = [];
+
+    function buildFromJSON(jsonData){
+        for(var i = 0; i < jsonData.length; i++) {
+          var obj = jsonData[i];
+          var entryTitle = "";
+          if(obj['context'].hasOwnProperty('name')){
+            entryTitle = obj['context']['name'];
+          }
+          else{
+            entryTitle = obj['id'] + " " + obj['created'];
+          }
+
+
+          //do not render checkboxes unless in active section
+          if($('select').val() != "active"){
+            var innerList = '<li data-role="collapsible" data-iconpos="right" data-inset="false"><h2>'+entryTitle+'</h2>'+obj['context']['graph_image_url']+createHTML(obj, true)+'</li>';
+          }
+          else{
+            //'<li ><h2><form > <label> <input type="checkbox" class="incidentCheckbox" id="'+obj['id']+'" value="'+obj['id']+'">&zwnj; <span class="nobreak">'+entryTitle+'</span></label> </form>   </li>' +'<li><a href="#page'+obj['id']+'">link</a></li>';
+            var innerList = '<li data-icon="false" > <a href="#" class="ui-btn pageLink" data-pagelink="page'+ obj['id']+'"> <h4 class="wrap">'+entryTitle+'</h4> <p>'+obj['application']+'</p> </a> <div class="right-radio"> <div class="ui-checkbox"><label for="'+obj['id']+'" class="ui-btn ui-corner-all ui-checkbox-off ui-btn-inherit ui-btn-icon-left"></label><input type="checkbox" class="incidentCheckbox" name="'+obj['id']+'" id="'+obj['id']+'"></div> <label for="'+obj['id']+'"></label> </div> </li>';
+          }
+
+          $("#output").append(innerList);
+
+          var newPage = '<div id="page'+ obj['id']+'"> <div  data-role=page data-url="page'+obj['id']+'"><div data-role="header"><a href="#pageone" class="ui-btn ui-icon-arrow-l ui-btn-icon-left">Back</a> <h1>'+entryTitle+'</h1> </div> <div data-role="main" class="ui-content"> '+ obj['context']['graph_image_url']+createHTML(obj, true) +'</div></div>';
+          $("#newPageDiv").append(newPage);
+
+
+        }
+
+        //dynamically create page for incident and go to it
+        $(".pageLink").click(function(){
+
+
+              var pageId = $(this).data("pagelink");
+              var pageHtml = document.getElementById(pageId).innerHTML;
+              var newPage = $(pageHtml);
+              newPage.appendTo( $.mobile.pageContainer );
+              $.mobile.changePage(newPage, { transition: "none" });
+
+
+
+        });
+    }
+
+
+    function claimIncidents(listOfIds){
+
+       var thisList =listOfIds;
+
+       // create/open SQLite db for storing secret and username
+       var myDB = window.sqlitePlugin.openDatabase({name: "irisMobile.db", location: 'default'});
+       //retrieve data from db
+       myDB.transaction(function(transaction) {
+       transaction.executeSql('SELECT * FROM data', [], function (tx, results) {
+       var len = results.rows.length, i;
+       for (i = 0; i < len; i++){
+
+
+       claimAjax(thisList,results.rows.item(i).username,results.rows.item(i).secret);
+       }
+       }, null);
+       });
+     }
+
+     function claimAjax(listOfIds,username,secret){
+
+      apiURL = "http://192.168.43.153:8000/claim";
+
+      var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
+      var arrayStr = listOfIds.toString();
+      console.log(exp);
+
+      //calculate signature
+      var uri = apiURL;
+      stringToHMAC = uri + username + exp.toString() + arrayStr;
+      var hash = CryptoJS.HmacSHA256(stringToHMAC, secret);
+      var hashInBase64 = CryptoJS.enc.Base64.stringify(hash);
+      var hashInHex = base64toHEX(hashInBase64);
+
+
+
+      var jsonToSend = '{"username":"'+ username+'", "exp":"'+ exp+'", "listOfIds":"'+arrayStr+'"}';
+      $.ajax({
+          url: apiURL,
+          type: 'POST',
+          data: jsonToSend,
+          dataType: "json",
+          beforeSend: function(request) {
+            request.setRequestHeader("Authorization", hashInHex);
+          },
+          success: function(data) {
+
+          },
+          complete: function () {
+
+          }
+       });
+    }
+
+
+    $(document).ready(function(){
+
+
+    });
+
+    //logout unsets the username local variable, deletes the secret and sends user back to index
+    $("#deAuth").click(function (e) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        window.localStorage.removeItem("username");
+
+        window.localStorage.removeItem("username");
+
+        var myDB = window.sqlitePlugin.openDatabase({name: "irisMobile.db", location: 'default'});
+        myDB.transaction(function(transaction) {
+         var executeQuery = "DROP TABLE IF EXISTS data";
+         transaction.executeSql(executeQuery, [],
+         function(tx, result) {
+           console.log('Table deleted successfully.');
+           window.location = "index.html";
+          },
+         function(error){
+           console.log('Error occurred while droping the table.');
+           window.location = "index.html";
+         }
+         );
+         });
+
+
+
+        //Do important stuff....
+    });
+
+
+    //when claim button is pressed process claim
+    $(document).on('click', '#claimButton', function(){
+          event.stopImmediatePropagation();
+          var listOfIds = [];
+          $('#claimButton').hide()
+          $('.incidentCheckbox').each(function(){
+              var $this = $(this);
+
+              if($this.is(":checked")){
+                //alert($this.attr("id")+ ", "+ $this.attr("value"));
+                listOfIds.push($this.attr('id'));
+              }
+
+          });
+          claimIncidents(listOfIds);
+          loadIncidents('getactive',0);
+    });
+
+
+    //check all checkboxes
+    $("#checkAll").click(function () {
+         $('input:checkbox').not(this).prop('checked', this.checked).checkboxradio("refresh");
+
+     });
+
+     //update number of checked incidents
+     $(document).on("change", ":checkbox", function() {
+         $('#claimCount').text($(".incidentCheckbox:checkbox:checked").length);
+         //uncheck all checkbox if not all are checked
+         if($(".incidentCheckbox:checkbox:checked").length != $(".incidentCheckbox:checkbox").length){
+           $("#checkAll").prop('checked', false).checkboxradio('refresh');
+         }
+         else {
+           $("#checkAll").prop('checked', true).checkboxradio('refresh');
+         }
+         if($(".incidentCheckbox:checkbox:checked").length == 0){
+           $('#claimButton').hide()
+         }
+         else{
+            $('#claimButton').show()
+         }
+
+      });
+
+
+      //exectute some functions when the selector is used
+      $('select').change(function() {
+          $('#claimButton').hide()
+          if($(this).val() == "active"){
+            $('#selecttab').removeClass('bigesttab').addClass('bigtab');
+            $('#allTab').show()
+
+            loadIncidents('getactive',0);
+          }
+          else if ($(this).val() =="inactive10")
+          {
+            $("#checkAll").prop('checked', false).checkboxradio('refresh');
+            $('#allTab').hide()
+            $('#selecttab').removeClass('bigtab').addClass('bigesttab');
+
+            loadIncidents('getall',10);
+
+
+          }
+          else if ($(this).val() =="inactive25")
+          {
+            $("#checkAll").prop('checked', false).checkboxradio('refresh');
+            $('#allTab').hide()
+            $('#selecttab').removeClass('bigtab').addClass('bigesttab');
+            loadIncidents('getall',25);
+          }
+          else if ($(this).val() =="inactive50")
+          {
+            $("#checkAll").prop('checked', false).checkboxradio('refresh');
+            $('#allTab').hide()
+            $('#selecttab').removeClass('bigtab').addClass('bigesttab');
+            loadIncidents('getall',50);
+          }
+
+      });
+
+
+
+  // document.getElementById('output').innerHTML = createHTML(jsonData, true);
+  </script>
+  <script id="CryptoJs">
+    /*
+    CryptoJS v3.1.2
+    code.google.com/p/crypto-js
+    (c) 2009-2013 by Jeff Mott. All rights reserved.
+    code.google.com/p/crypto-js/wiki/License
+    */
+    var CryptoJS=CryptoJS||function(h,s){var f={},g=f.lib={},q=function(){},m=g.Base={extend:function(a){q.prototype=this;var c=new q;a&&c.mixIn(a);c.hasOwnProperty("init")||(c.init=function(){c.$super.init.apply(this,arguments)});c.init.prototype=c;c.$super=this;return c},create:function(){var a=this.extend();a.init.apply(a,arguments);return a},init:function(){},mixIn:function(a){for(var c in a)a.hasOwnProperty(c)&&(this[c]=a[c]);a.hasOwnProperty("toString")&&(this.toString=a.toString)},clone:function(){return this.init.prototype.extend(this)}},
+    r=g.WordArray=m.extend({init:function(a,c){a=this.words=a||[];this.sigBytes=c!=s?c:4*a.length},toString:function(a){return(a||k).stringify(this)},concat:function(a){var c=this.words,d=a.words,b=this.sigBytes;a=a.sigBytes;this.clamp();if(b%4)for(var e=0;e<a;e++)c[b+e>>>2]|=(d[e>>>2]>>>24-8*(e%4)&255)<<24-8*((b+e)%4);else if(65535<d.length)for(e=0;e<a;e+=4)c[b+e>>>2]=d[e>>>2];else c.push.apply(c,d);this.sigBytes+=a;return this},clamp:function(){var a=this.words,c=this.sigBytes;a[c>>>2]&=4294967295<<
+    32-8*(c%4);a.length=h.ceil(c/4)},clone:function(){var a=m.clone.call(this);a.words=this.words.slice(0);return a},random:function(a){for(var c=[],d=0;d<a;d+=4)c.push(4294967296*h.random()|0);return new r.init(c,a)}}),l=f.enc={},k=l.Hex={stringify:function(a){var c=a.words;a=a.sigBytes;for(var d=[],b=0;b<a;b++){var e=c[b>>>2]>>>24-8*(b%4)&255;d.push((e>>>4).toString(16));d.push((e&15).toString(16))}return d.join("")},parse:function(a){for(var c=a.length,d=[],b=0;b<c;b+=2)d[b>>>3]|=parseInt(a.substr(b,
+    2),16)<<24-4*(b%8);return new r.init(d,c/2)}},n=l.Latin1={stringify:function(a){var c=a.words;a=a.sigBytes;for(var d=[],b=0;b<a;b++)d.push(String.fromCharCode(c[b>>>2]>>>24-8*(b%4)&255));return d.join("")},parse:function(a){for(var c=a.length,d=[],b=0;b<c;b++)d[b>>>2]|=(a.charCodeAt(b)&255)<<24-8*(b%4);return new r.init(d,c)}},j=l.Utf8={stringify:function(a){try{return decodeURIComponent(escape(n.stringify(a)))}catch(c){throw Error("Malformed UTF-8 data");}},parse:function(a){return n.parse(unescape(encodeURIComponent(a)))}},
+    u=g.BufferedBlockAlgorithm=m.extend({reset:function(){this._data=new r.init;this._nDataBytes=0},_append:function(a){"string"==typeof a&&(a=j.parse(a));this._data.concat(a);this._nDataBytes+=a.sigBytes},_process:function(a){var c=this._data,d=c.words,b=c.sigBytes,e=this.blockSize,f=b/(4*e),f=a?h.ceil(f):h.max((f|0)-this._minBufferSize,0);a=f*e;b=h.min(4*a,b);if(a){for(var g=0;g<a;g+=e)this._doProcessBlock(d,g);g=d.splice(0,a);c.sigBytes-=b}return new r.init(g,b)},clone:function(){var a=m.clone.call(this);
+    a._data=this._data.clone();return a},_minBufferSize:0});g.Hasher=u.extend({cfg:m.extend(),init:function(a){this.cfg=this.cfg.extend(a);this.reset()},reset:function(){u.reset.call(this);this._doReset()},update:function(a){this._append(a);this._process();return this},finalize:function(a){a&&this._append(a);return this._doFinalize()},blockSize:16,_createHelper:function(a){return function(c,d){return(new a.init(d)).finalize(c)}},_createHmacHelper:function(a){return function(c,d){return(new t.HMAC.init(a,
+    d)).finalize(c)}}});var t=f.algo={};return f}(Math);
+    (function(h){for(var s=CryptoJS,f=s.lib,g=f.WordArray,q=f.Hasher,f=s.algo,m=[],r=[],l=function(a){return 4294967296*(a-(a|0))|0},k=2,n=0;64>n;){var j;a:{j=k;for(var u=h.sqrt(j),t=2;t<=u;t++)if(!(j%t)){j=!1;break a}j=!0}j&&(8>n&&(m[n]=l(h.pow(k,0.5))),r[n]=l(h.pow(k,1/3)),n++);k++}var a=[],f=f.SHA256=q.extend({_doReset:function(){this._hash=new g.init(m.slice(0))},_doProcessBlock:function(c,d){for(var b=this._hash.words,e=b[0],f=b[1],g=b[2],j=b[3],h=b[4],m=b[5],n=b[6],q=b[7],p=0;64>p;p++){if(16>p)a[p]=
+    c[d+p]|0;else{var k=a[p-15],l=a[p-2];a[p]=((k<<25|k>>>7)^(k<<14|k>>>18)^k>>>3)+a[p-7]+((l<<15|l>>>17)^(l<<13|l>>>19)^l>>>10)+a[p-16]}k=q+((h<<26|h>>>6)^(h<<21|h>>>11)^(h<<7|h>>>25))+(h&m^~h&n)+r[p]+a[p];l=((e<<30|e>>>2)^(e<<19|e>>>13)^(e<<10|e>>>22))+(e&f^e&g^f&g);q=n;n=m;m=h;h=j+k|0;j=g;g=f;f=e;e=k+l|0}b[0]=b[0]+e|0;b[1]=b[1]+f|0;b[2]=b[2]+g|0;b[3]=b[3]+j|0;b[4]=b[4]+h|0;b[5]=b[5]+m|0;b[6]=b[6]+n|0;b[7]=b[7]+q|0},_doFinalize:function(){var a=this._data,d=a.words,b=8*this._nDataBytes,e=8*a.sigBytes;
+    d[e>>>5]|=128<<24-e%32;d[(e+64>>>9<<4)+14]=h.floor(b/4294967296);d[(e+64>>>9<<4)+15]=b;a.sigBytes=4*d.length;this._process();return this._hash},clone:function(){var a=q.clone.call(this);a._hash=this._hash.clone();return a}});s.SHA256=q._createHelper(f);s.HmacSHA256=q._createHmacHelper(f)})(Math);
+    (function(){var h=CryptoJS,s=h.enc.Utf8;h.algo.HMAC=h.lib.Base.extend({init:function(f,g){f=this._hasher=new f.init;"string"==typeof g&&(g=s.parse(g));var h=f.blockSize,m=4*h;g.sigBytes>m&&(g=f.finalize(g));g.clamp();for(var r=this._oKey=g.clone(),l=this._iKey=g.clone(),k=r.words,n=l.words,j=0;j<h;j++)k[j]^=1549556828,n[j]^=909522486;r.sigBytes=l.sigBytes=m;this.reset()},reset:function(){var f=this._hasher;f.reset();f.update(this._iKey)},update:function(f){this._hasher.update(f);return this},finalize:function(f){var g=
+    this._hasher;f=g.finalize(f);g.reset();return g.finalize(this._oKey.clone().concat(f))}})})();
+
+    /*
+    CryptoJS v3.1.2
+    code.google.com/p/crypto-js
+    (c) 2009-2013 by Jeff Mott. All rights reserved.
+    code.google.com/p/crypto-js/wiki/License
+    */
+    (function(){var h=CryptoJS,j=h.lib.WordArray;h.enc.Base64={stringify:function(b){var e=b.words,f=b.sigBytes,c=this._map;b.clamp();b=[];for(var a=0;a<f;a+=3)for(var d=(e[a>>>2]>>>24-8*(a%4)&255)<<16|(e[a+1>>>2]>>>24-8*((a+1)%4)&255)<<8|e[a+2>>>2]>>>24-8*((a+2)%4)&255,g=0;4>g&&a+0.75*g<f;g++)b.push(c.charAt(d>>>6*(3-g)&63));if(e=c.charAt(64))for(;b.length%4;)b.push(e);return b.join("")},parse:function(b){var e=b.length,f=this._map,c=f.charAt(64);c&&(c=b.indexOf(c),-1!=c&&(e=c));for(var c=[],a=0,d=0;d<
+    e;d++)if(d%4){var g=f.indexOf(b.charAt(d-1))<<2*(d%4),h=f.indexOf(b.charAt(d))>>>6-2*(d%4);c[a>>>2]|=(g|h)<<24-8*(a%4);a++}return j.create(c,a)},_map:"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="}})();
+  </script>
+
+  <script>
+
+
+   //separate function to do asynchronous call to db then call ajax function
+  function loadIncidents(path, limit){
+    var thispath =path;
+    var thisLimit = limit;
+    // create/open SQLite db for storing secret and username
+    var myDB = window.sqlitePlugin.openDatabase({name: "irisMobile.db", location: 'default'});
+    //retrieve data from db
+    myDB.transaction(function(transaction) {
+    transaction.executeSql('SELECT * FROM data', [], function (tx, results) {
+    var len = results.rows.length, i;
+    for (i = 0; i < len; i++){
+
+
+    doAjax(thispath,thisLimit,results.rows.item(i).username,results.rows.item(i).secret);
+    }
+    }, null);
+    });
+  }
+
+  function doAjax(path, limit, username, secret){
+
+
+          apiURL = "http://192.168.43.153:8000/";
+          // all testing variables
+
+          var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
+          console.log(exp);
+
+
+
+
+
+          //calculate signature
+          var uri = apiURL+ path +"?username=" + username +"&limit="+limit+ "&exp=" + exp.toString() ;
+          var hash = CryptoJS.HmacSHA256(uri, secret);
+          var hashInBase64 = CryptoJS.enc.Base64.stringify(hash);
+          var hashInHex = base64toHEX(hashInBase64);
+
+
+
+
+          $.ajax({
+              url: apiURL+path,
+
+              data: {
+                 "username": username,
+                 "limit": limit,
+                 "exp": exp
+
+              },
+              type: "GET",
+              beforeSend: function(request) {
+                $("#output").empty();
+                $("#wait").css("display", "block");
+                request.setRequestHeader("Authorization", hashInHex);
+              },
+              success: function(data) {
+                buildFromJSON(data);
+                $("#output").trigger("create");
+              },
+              complete: function () {
+                  $("#wait").css("display", "none");
+              }
+           });
+  }
+
+
+  var dummyData = [{"updated":1500339288,"plan_id":34777,"created":1500339231,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-zone-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/events?selected_fabrics=[\"ei-lca1\"]&selected_timezone=US\/Pacific&search_type=zones&selected_zones=[\"sre-infra-kafka-lag\"]","ingraphs_url":null,"fabric":"ei-lca1","notes":null,"filename":null,"zones":["sre-infra-kafka-lag"],"metanodes":null,"nodes":[["sreinfra-metrics-collectors\/service_metrics-lca1-app0867.stg.linkedin.com service metrics lag","https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/ei-lca1?alertdef=service_metrics-lca1-app0867.stg.linkedin.com%20service%20metrics%20lag&filename=sreinfra-metrics-collectors"]],"graph_image_url":null,"itr_url":null,"name":"sre-infra-kafka-lag"},"active":0,"id":3089182,"current_step":1},{"updated":1500339194,"plan_id":29421,"created":1500339109,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/ei-lca1?alertdef=Storage%20breakdown%20u002&filename=sreinfra-metrics-collectors","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&timezone=US\/Pacific","fabric":"ei-lca1","notes":null,"filename":"sreinfra-metrics-collectors","zones":["sre-infra","PENDING-NOC-SLA1"],"metanodes":[],"nodes":[["mnt_u002_utilization.lca1-app0867.stg.linkedin.com","threshold: 97.57456925 is greater than the max (97)"]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&legend=false&show_autoalerts&start=1500317509&end=1500339109&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":null,"name":"Storage breakdown u002"},"active":0,"id":3089173,"current_step":1},{"updated":1500336959,"plan_id":29421,"created":1500336886,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/ei-lca1?alertdef=Storage%20breakdown%20u002&filename=sreinfra-metrics-collectors","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&timezone=US\/Pacific","fabric":"ei-lca1","notes":null,"filename":"sreinfra-metrics-collectors","zones":["sre-infra","PENDING-NOC-SLA1"],"metanodes":[],"nodes":[["mnt_u002_utilization.lca1-app1495.stg.linkedin.com","threshold: 97.07022033 is greater than the max (97)"]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&legend=false&show_autoalerts&start=1500315285&end=1500336885&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":null,"name":"Storage breakdown u002"},"active":0,"id":3089048,"current_step":1},{"updated":1500334551,"plan_id":29421,"created":1500334481,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/ei-lca1?alertdef=Storage%20breakdown%20u002&filename=sreinfra-metrics-collectors","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&timezone=US\/Pacific","fabric":"ei-lca1","notes":null,"filename":"sreinfra-metrics-collectors","zones":["sre-infra","PENDING-NOC-SLA1"],"metanodes":[],"nodes":[["mnt_u002_utilization.lca1-app0908.stg.linkedin.com","threshold: 97.13298065 is greater than the max (97)"],["mnt_u002_utilization.lca1-app1480.stg.linkedin.com","threshold: 97.13295519 is greater than the max (97)"]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/sreinfra-metrics-collectors\/graph\/Storage%20breakdown%20u002?fabrics=ei-lca1&legend=false&show_autoalerts&start=1500312880&end=1500334480&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":null,"name":"Storage breakdown u002"},"active":0,"id":3088819,"current_step":1},{"updated":1500329065,"plan_id":29421,"created":1500328924,"owner":"ewong","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-lsg1?alertdef=Collector%20last%20local%20metric%20refresh&filename=metric-server","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/metric-server\/graph\/Collector%20last%20local%20metric%20refresh?fabrics=prod-lsg1&timezone=US\/Pacific","fabric":"prod-lsg1","notes":"Last time collector refreshed it's local metric map. Check logs for errors if alerting.","filename":"metric-server","zones":[],"metanodes":[],"nodes":[["s.lsg1-app6767.prod.linkedin.com","threshold: No valid data points found (examined 16 data points)."]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/metric-server\/graph\/Collector%20last%20local%20metric%20refresh?fabrics=prod-lsg1&legend=false&show_autoalerts&start=1500307323&end=1500328923&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":"https:\/\/iwww.corp.linkedin.com\/wiki\/cf\/display\/SOP\/Service+Document+-+Metric-server#ServiceDocument-Metric-server-Collectorlastlocalmetricrefresh","name":"Collector last local metric refresh"},"active":0,"id":3088382,"current_step":1},{"updated":1500272257,"plan_id":29421,"created":1500271842,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-ltx1?alertdef=Inmon%20-%20Adjudicator%20Leader%20Throughput&filename=inmon-system-alerts","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/inmon-system-alerts\/graph\/Inmon%20-%20Adjudicator%20Leader%20Throughput?fabrics=prod-ltx1&timezone=US\/Pacific","fabric":"prod-ltx1","notes":null,"filename":"inmon-system-alerts","zones":["inmon-system"],"metanodes":[],"nodes":[["adj_leader_throughput.ltx1-app13782.prod.linkedin.com","threshold: 0 is less than the min (20)"]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/inmon-system-alerts\/graph\/Inmon%20-%20Adjudicator%20Leader%20Throughput?fabrics=prod-ltx1&legend=false&show_autoalerts&start=1500250241&end=1500271841&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":"https:\/\/iwww.corp.linkedin.com\/wiki\/cf\/display\/SOP\/inmon+-+monitoring","name":"Inmon - Adjudicator Leader Throughput"},"active":0,"id":3085691,"current_step":1},{"updated":1500272257,"plan_id":29421,"created":1500271480,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-ltx1?alertdef=Inmon%20-%20Pipeline%20Signal%20End%20to%20End&filename=inmon-system-alerts","ingraphs_url":"http:\/\/ingraphs.prod.linkedin.com\/dashboard\/inmon-system-alerts\/graph\/Inmon%20-%20Pipeline%20Signal%20End%20to%20End?fabrics=prod-ltx1&timezone=US\/Pacific","fabric":"prod-ltx1","notes":null,"filename":"inmon-system-alerts","zones":["inmon-system"],"metanodes":[],"nodes":[["loss_pct.aggregate","threshold: 0 is less than the min (70)"]],"graph_image_url":"http:\/\/ingraphs.prod.linkedin.com\/api\/v2\/img\/dashboard\/inmon-system-alerts\/graph\/Inmon%20-%20Pipeline%20Signal%20End%20to%20End?fabrics=prod-ltx1&legend=false&show_autoalerts&start=1500249879&end=1500271479&height=80&width=400&as_png&timezone=US\/Pacific","itr_url":"https:\/\/iwww.corp.linkedin.com\/wiki\/cf\/display\/SOP\/inmon+-+monitoring","name":"Inmon - Pipeline Signal End to End"},"active":0,"id":3085669,"current_step":2},{"updated":1500262215,"plan_id":34777,"created":1500262173,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-zone-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/events?selected_fabrics=[\"prod-lva1\"]&selected_timezone=US\/Pacific&search_type=zones&selected_zones=[\"sre-infra-kafka-lag\"]","ingraphs_url":null,"fabric":"prod-lva1","notes":null,"filename":null,"zones":["sre-infra-kafka-lag"],"metanodes":null,"nodes":[["sreinfra-metrics-collectors\/service_metrics-b8-lva1-monitor09.prod.linkedin.com service metrics lag","https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-lva1?alertdef=service_metrics-b8-lva1-monitor09.prod.linkedin.com%20service%20metrics%20lag&filename=sreinfra-metrics-collectors"]],"graph_image_url":null,"itr_url":null,"name":"sre-infra-kafka-lag"},"active":0,"id":3085444,"current_step":1},{"updated":1500254832,"plan_id":34777,"created":1500254753,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-zone-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/events?selected_fabrics=[\"prod-lva1\"]&selected_timezone=US\/Pacific&search_type=zones&selected_zones=[\"sre-infra-kafka-lag\"]","ingraphs_url":null,"fabric":"prod-lva1","notes":null,"filename":null,"zones":["sre-infra-kafka-lag"],"metanodes":null,"nodes":[["sreinfra-metrics-collectors\/service_metrics-b14-lva1-monitor15.prod.linkedin.com service metrics lag","https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-lva1?alertdef=service_metrics-b14-lva1-monitor15.prod.linkedin.com%20service%20metrics%20lag&filename=sreinfra-metrics-collectors"]],"graph_image_url":null,"itr_url":null,"name":"sre-infra-kafka-lag"},"active":0,"id":3084670,"current_step":1},{"updated":1500251135,"plan_id":34777,"created":1500251044,"owner":"dewang","application":"Autoalerts","plan":"mon-infra-zone-sla1","context":{"console_url":"https:\/\/alerts.prod.linkedin.com\/#\/events?selected_fabrics=[\"prod-ltx1\"]&selected_timezone=US\/Pacific&search_type=zones&selected_zones=[\"sre-infra-kafka-lag\"]","ingraphs_url":null,"fabric":"prod-ltx1","notes":null,"filename":null,"zones":["sre-infra-kafka-lag"],"metanodes":null,"nodes":[["sreinfra-metrics-collectors\/service_metrics-b23-ltx1-monitor0048.prod.linkedin.com service metrics lag","https:\/\/alerts.prod.linkedin.com\/#\/alertdef\/fabric\/prod-ltx1?alertdef=service_metrics-b23-ltx1-monitor0048.prod.linkedin.com%20service%20metrics%20lag&filename=sreinfra-metrics-collectors"]],"graph_image_url":null,"itr_url":null,"name":"sre-infra-kafka-lag"},"active":0,"id":3084283,"current_step":1}];
+  buildFromJSON(dummyData);
+  </script>
+  <script>//
+
+</script>
+
+
+  </html>

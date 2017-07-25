@@ -1,0 +1,53 @@
+{
+  "name": "cordova-plugin-network-information",
+  "version": "1.2.1",
+  "description": "Cordova Network Information Plugin",
+  "cordova": {
+    "id": "cordova-plugin-network-information",
+    "platforms": [
+      "firefoxos",
+      "android",
+      "amazon-fireos",
+      "ubuntu",
+      "ios",
+      "blackberry10",
+      "wp7",
+      "wp8",
+      "windows8",
+      "windows",
+      "tizen",
+      "browser"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/cordova-plugin-network-information"
+  },
+  "keywords": [
+    "cordova",
+    "network",
+    "information",
+    "ecosystem:cordova",
+    "cordova-firefoxos",
+    "cordova-android",
+    "cordova-amazon-fireos",
+    "cordova-ubuntu",
+    "cordova-ios",
+    "cordova-blackberry10",
+    "cordova-wp7",
+    "cordova-wp8",
+    "cordova-windows8",
+    "cordova-windows",
+    "cordova-tizen",
+    "cordova-browser"
+  ],
+  "scripts": {
+    "test": "npm run jshint",
+    "jshint": "jshint www && jshint src && jshint tests"
+  },
+  "author": "Apache Software Foundation",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "jshint": "^2.6.0"
+  }
+}

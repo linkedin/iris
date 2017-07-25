@@ -1,0 +1,14 @@
+{
+    "GoogleCloudMessaging": {
+        "name": "GoogleCloudMessaging",
+        "type": "podspec",
+        "spec": "~> 1.2.0",
+        "count": 1
+    },
+    "GGLInstanceID": {
+        "name": "GGLInstanceID",
+        "type": "podspec",
+        "spec": "~> 1.2.1",
+        "count": 1
+    }
+}

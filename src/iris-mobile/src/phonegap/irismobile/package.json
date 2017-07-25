@@ -1,0 +1,61 @@
+{
+    "name": "linkedin.irismobile.sample",
+    "version": "1.0.0",
+    "displayName": "irismobile",
+    "cordova": {
+        "platforms": [
+            "android"
+        ],
+        "plugins": {
+            "cordova-plugin-battery-status": {},
+            "cordova-plugin-camera": {},
+            "cordova-plugin-console": {},
+            "cordova-plugin-contacts": {},
+            "cordova-plugin-device": {},
+            "cordova-plugin-device-motion": {},
+            "cordova-plugin-device-orientation": {},
+            "cordova-plugin-dialogs": {},
+            "cordova-plugin-file": {},
+            "cordova-plugin-file-transfer": {},
+            "cordova-plugin-geolocation": {},
+            "cordova-plugin-globalization": {},
+            "cordova-plugin-inappbrowser": {},
+            "cordova-plugin-media": {},
+            "cordova-plugin-media-capture": {},
+            "cordova-plugin-network-information": {},
+            "cordova-plugin-splashscreen": {},
+            "cordova-plugin-statusbar": {},
+            "cordova-plugin-vibration": {},
+            "cordova-plugin-whitelist": {},
+            "phonegap-plugin-barcodescanner": {},
+            "cordova.plugins.diagnostic": {},
+            "cordova-sqlite-storage": {}
+        }
+    },
+    "dependencies": {
+        "cordova-android": "^6.2.2",
+        "cordova-plugin-battery-status": "~1.1.1",
+        "cordova-plugin-camera": "~2.1.1",
+        "cordova-plugin-console": "~1.0.2",
+        "cordova-plugin-contacts": "~2.0.1",
+        "cordova-plugin-device": "~1.1.1",
+        "cordova-plugin-device-motion": "~1.2.0",
+        "cordova-plugin-device-orientation": "~1.0.2",
+        "cordova-plugin-dialogs": "~1.2.0",
+        "cordova-plugin-file": "git+https://github.com/apache/cordova-plugin-file.git",
+        "cordova-plugin-file-transfer": "~1.5.0",
+        "cordova-plugin-geolocation": "~2.1.0",
+        "cordova-plugin-globalization": "~1.0.3",
+        "cordova-plugin-inappbrowser": "~1.3.0",
+        "cordova-plugin-media": "~2.2.0",
+        "cordova-plugin-media-capture": "~1.2.0",
+        "cordova-plugin-network-information": "~1.2.0",
+        "cordova-plugin-splashscreen": "~3.2.1",
+        "cordova-plugin-statusbar": "~2.1.2",
+        "cordova-plugin-vibration": "~2.1.0",
+        "cordova-plugin-whitelist": "~1.2.1",
+        "cordova-sqlite-storage": "^2.0.4",
+        "cordova.plugins.diagnostic": "^3.6.5",
+        "phonegap-plugin-barcodescanner": "git+https://github.com/jrontend/phonegap-plugin-barcodescanner.git"
+    }
+}

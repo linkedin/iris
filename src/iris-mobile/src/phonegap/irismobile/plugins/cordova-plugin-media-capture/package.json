@@ -1,0 +1,43 @@
+{
+  "name": "cordova-plugin-media-capture",
+  "version": "1.2.0",
+  "description": "Cordova Media Capture Plugin",
+  "cordova": {
+    "id": "cordova-plugin-media-capture",
+    "platforms": [
+      "android",
+      "amazon-fireos",
+      "ubuntu",
+      "ios",
+      "blackberry10",
+      "wp7",
+      "wp8",
+      "windows8",
+      "windows"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/cordova-plugin-media-capture"
+  },
+  "keywords": [
+    "cordova",
+    "media",
+    "capture",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-amazon-fireos",
+    "cordova-ubuntu",
+    "cordova-ios",
+    "cordova-blackberry10",
+    "cordova-wp7",
+    "cordova-wp8",
+    "cordova-windows8",
+    "cordova-windows"
+  ],
+  "peerDependencies": {
+    "cordova-plugin-file": "^3.0.0"
+  },
+  "author": "Apache Software Foundation",
+  "license": "Apache 2.0"
+}

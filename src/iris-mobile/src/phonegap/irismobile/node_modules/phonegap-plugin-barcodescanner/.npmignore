@@ -1,0 +1,6 @@
+.DS_Store
+bin/
+.classpath
+.project
+*.iml
+local.properties

@@ -1,0 +1,1408 @@
+{
+    "prepare_queue": {
+        "installed": [],
+        "uninstalled": []
+    },
+    "config_munge": {
+        "files": {
+            "res/xml/config.xml": {
+                "parents": {
+                    "/*": [
+                        {
+                            "xml": "<feature name=\"Battery\"><param name=\"android-package\" value=\"org.apache.cordova.batterystatus.BatteryListener\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Camera\"><param name=\"android-package\" value=\"org.apache.cordova.camera.CameraLauncher\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Contacts\"><param name=\"android-package\" value=\"org.apache.cordova.contacts.ContactManager\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Device\"><param name=\"android-package\" value=\"org.apache.cordova.device.Device\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Accelerometer\"><param name=\"android-package\" value=\"org.apache.cordova.devicemotion.AccelListener\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Compass\"><param name=\"android-package\" value=\"org.apache.cordova.deviceorientation.CompassListener\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Notification\"><param name=\"android-package\" value=\"org.apache.cordova.dialogs.Notification\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"File\"><param name=\"android-package\" value=\"org.apache.cordova.file.FileUtils\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<allow-navigation href=\"cdvfile:*\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"FileTransfer\"><param name=\"android-package\" value=\"org.apache.cordova.filetransfer.FileTransfer\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Geolocation\"><param name=\"android-package\" value=\"org.apache.cordova.geolocation.Geolocation\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Globalization\"><param name=\"android-package\" value=\"org.apache.cordova.globalization.Globalization\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"InAppBrowser\"><param name=\"android-package\" value=\"org.apache.cordova.inappbrowser.InAppBrowser\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Media\"><param name=\"android-package\" value=\"org.apache.cordova.media.AudioHandler\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Capture\"><param name=\"android-package\" value=\"org.apache.cordova.mediacapture.Capture\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"NetworkStatus\"><param name=\"android-package\" value=\"org.apache.cordova.networkinformation.NetworkManager\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"SplashScreen\"><param name=\"android-package\" value=\"org.apache.cordova.splashscreen.SplashScreen\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"StatusBar\"><param name=\"android-package\" value=\"org.apache.cordova.statusbar.StatusBar\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Vibration\"><param name=\"android-package\" value=\"org.apache.cordova.vibration.Vibration\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"Whitelist\"><param name=\"android-package\" value=\"org.apache.cordova.whitelist.WhitelistPlugin\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"BarcodeScanner\"><param name=\"android-package\" value=\"com.phonegap.plugins.barcodescanner.BarcodeScanner\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"SQLitePlugin\"><param name=\"android-package\" value=\"io.sqlc.SQLitePlugin\" /></feature>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<feature name=\"PushNotification\"><param name=\"android-package\" value=\"com.adobe.phonegap.push.PushPlugin\" /></feature>",
+                            "count": 1
+                        }
+                    ]
+                }
+            },
+            "AndroidManifest.xml": {
+                "parents": {
+                    "/*": [
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />",
+                            "count": 5
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.READ_CONTACTS\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.WRITE_CONTACTS\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.GET_ACCOUNTS\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\" />",
+                            "count": 2
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\" />",
+                            "count": 2
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.RECORD_AUDIO\" />",
+                            "count": 2
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.MODIFY_AUDIO_SETTINGS\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.READ_PHONE_STATE\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.RECORD_VIDEO\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />",
+                            "count": 1
+                        }
+                    ],
+                    "/manifest": [
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.VIBRATE\" />",
+                            "count": 2
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.CAMERA\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.FLASHLIGHT\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.INTERNET\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.WAKE_LOCK\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"com.google.android.c2dm.permission.RECEIVE\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"${applicationId}.permission.C2D_MESSAGE\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"${applicationId}.permission.PushHandlerActivity\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<permission android:name=\"${applicationId}.permission.C2D_MESSAGE\" android:protectionLevel=\"signature\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<permission android:name=\"${applicationId}.permission.PushHandlerActivity\" android:protectionLevel=\"signature\" />",
+                            "count": 1
+                        }
+                    ],
+                    "/manifest/application": [
+                        {
+                            "xml": "<receiver android:name=\"cordova.plugins.Diagnostic$LocationProviderChangedReceiver\"><intent-filter><action android:name=\"android.location.PROVIDERS_CHANGED\" /></intent-filter></receiver>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<receiver android:name=\"cordova.plugins.Diagnostic$NFCStateChangedReceiver\"><intent-filter><action android:name=\"android.nfc.action.ADAPTER_STATE_CHANGED\" /></intent-filter></receiver>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<activity android:clearTaskOnLaunch=\"true\" android:configChanges=\"orientation|keyboardHidden\" android:exported=\"false\" android:name=\"com.google.zxing.client.android.CaptureActivity\" android:theme=\"@android:style/Theme.NoTitleBar.Fullscreen\" android:windowSoftInputMode=\"stateAlwaysHidden\"><intent-filter><action android:name=\"com.google.zxing.client.android.SCAN\" /><category android:name=\"android.intent.category.DEFAULT\" /></intent-filter></activity>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<activity android:label=\"@string/share_name\" android:name=\"com.google.zxing.client.android.encode.EncodeActivity\"><intent-filter><action android:name=\"com.phonegap.plugins.barcodescanner.ENCODE\" /><category android:name=\"android.intent.category.DEFAULT\" /></intent-filter></activity>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<activity android:label=\"@string/share_name\" android:name=\"com.google.zxing.client.android.HelpActivity\"><intent-filter><action android:name=\"android.intent.action.VIEW\" /><category android:name=\"android.intent.category.DEFAULT\" /></intent-filter></activity>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<activity android:exported=\"true\" android:name=\"com.adobe.phonegap.push.PushHandlerActivity\" android:permission=\"${applicationId}.permission.PushHandlerActivity\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<receiver android:name=\"com.adobe.phonegap.push.BackgroundActionButtonHandler\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<receiver android:exported=\"true\" android:name=\"com.google.android.gms.gcm.GcmReceiver\" android:permission=\"com.google.android.c2dm.permission.SEND\"><intent-filter><action android:name=\"com.google.android.c2dm.intent.RECEIVE\" /><category android:name=\"${applicationId}\" /></intent-filter></receiver>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<service android:exported=\"false\" android:name=\"com.adobe.phonegap.push.GCMIntentService\"><intent-filter><action android:name=\"com.google.android.c2dm.intent.RECEIVE\" /></intent-filter></service>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<service android:exported=\"false\" android:name=\"com.adobe.phonegap.push.PushInstanceIDListenerService\"><intent-filter><action android:name=\"com.google.android.gms.iid.InstanceID\" /></intent-filter></service>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<service android:exported=\"false\" android:name=\"com.adobe.phonegap.push.RegistrationIntentService\" />",
+                            "count": 1
+                        }
+                    ]
+                }
+            },
+            "config.xml": {
+                "parents": {
+                    "/*": [
+                        {
+                            "xml": "<feature name=\"Diagnostic\"><param name=\"android-package\" value=\"cordova.plugins.Diagnostic\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "count": 1
+                        }
+                    ]
+                }
+            },
+            "res/values/strings.xml": {
+                "parents": {
+                    "/resources": [
+                        {
+                            "xml": "<string name=\"app_picker_name\">Applications</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"bookmark_picker_name\">Bookmarks</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_add_calendar\">Add to calendar</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_add_contact\">Add contact</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_back\">Back</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_book_search\">Book Search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_cancel\">Cancel</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_custom_product_search\">Custom search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_dial\">Dial number</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_done\">Done</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_email\">Send email</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_get_directions\">Get directions</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_google_shopper\">Shopper</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_mms\">Send MMS</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_ok\">OK</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_open_browser\">Open browser</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_product_search\">Product Search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_search_book_contents\">Search contents</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_app\">Application</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_bookmark\">Bookmark</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_by_email\">Share via email</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_by_sms\">Share via SMS</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_clipboard\">Clipboard</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_share_contact\">Contact</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_show_map\">Show map</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_sms\">Send SMS</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_web_search\">Web search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"button_wifi\">Connect to Network</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_contact\">Contact info</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_email\">Email address</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_location\">Geographic coordinates</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_phone\">Phone number</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_sms\">SMS address</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"contents_text\">Plain text</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_clear_text\">Clear history</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_clear_one_history_text\">Clear</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_email_title\">Barcode Scanner history</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_empty\">Empty</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_empty_detail\">No barcode scans have been recorded</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_send\">Send history</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"history_title\">History</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"menu_encode_mecard\">Use MECARD</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"menu_encode_vcard\">Use vCard</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"menu_help\">Help</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"menu_history\">History</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"menu_share\">Share</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_bulk_mode_scanned\">Bulk mode: barcode scanned and saved</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_camera_framework_bug\">Sorry, the Android camera encountered a problem. You may need to restart the device.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_format\">Format</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_meta\">Metadata</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_mms_subject\">Hi</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_status\">Place a barcode inside the viewfinder rectangle to scan it.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_time\">Time</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_default_type\">Type</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_encode_contents_failed\">Could not encode a barcode from the data provided.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_google_books\">Google Books</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_google_product\">Google Product Search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_google_shopper_missing\">Google Shopper is not installed</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_install_google_shopper\">Google Shopper combines barcode scanning with online and local prices, reviews and more without opening the browser. Would you like to try it?</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_intent_failed\">Sorry, the requested application could not be launched. The barcode contents may be invalid.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_redirect\">Redirect</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_book_not_searchable\">Sorry, this book is not searchable.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_failed\">Sorry, the search encountered a problem.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_no_page_returned\">No page returned</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_page\">Page</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_results\">Results</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_searching_book\">Searching book\\u2026</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_snippet_unavailable\">Snippet not available</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sbc_unknown_page\">Unknown page</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_share_explanation\">You can share data by displaying a barcode on your screen and scanning it with another phone.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_share_subject_line\">Here are the contents of a barcode I scanned</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_share_text\">Or type some text and press Enter</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_sure\">Are you sure?</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"msg_unmount_usb\">Sorry, the SD card is not accessible.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_actions_title\">When a barcode is found\\u2026</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_auto_focus_title\">Use auto focus</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_bulk_mode_summary\">Scan and save many barcodes continuously</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_bulk_mode_title\">Bulk scan mode</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_copy_to_clipboard_title\">Copy to clipboard</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string formatted=\"false\" name=\"preferences_custom_product_search_summary\">Substitutions: %s = contents, %f = format, %t = type</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_custom_product_search_title\">Custom search URL</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_decode_1D_title\">1D barcodes</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_decode_Data_Matrix_title\">Data Matrix</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_decode_QR_title\">QR Codes</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_device_bug_workarounds_title\">Device Bug Workarounds</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_disable_continuous_focus_summary\">Use only standard focus mode</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_disable_continuous_focus_title\">No continuous focus</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_disable_exposure_title\">No exposure</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_front_light_summary\">Improves scanning in low light on some phones, but may cause glare. Does not work on all phones.</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_front_light_title\">Use front light</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_general_title\">General settings</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_name\">Settings</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_play_beep_title\">Beep</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_remember_duplicates_summary\">Store multiple scans of the same barcode in History</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_remember_duplicates_title\">Remember duplicates</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_result_title\">Result settings</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_scanning_title\">When scanning for barcodes, decode\\u2026</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_search_country\">Search country</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_try_bsplus\">Try Barcode Scanner+</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_try_bsplus_summary\">Enhanced with new features and interface</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_supplemental_summary\">Try to retrieve more information about the barcode contents</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_supplemental_title\">Retrieve more info</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"preferences_vibrate_title\">Vibrate</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_address_book\">Found contact info</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_calendar\">Found calendar event</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_email_address\">Found email address</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_geo\">Found geographic coordinates</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_isbn\">Found book</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_product\">Found product</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_sms\">Found SMS address</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_tel\">Found phone number</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_text\">Found plain text</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_uri\">Found URL</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"result_wifi\">Found WLAN Configuration</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"sbc_name\">Google Book Search</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"share_name\">Share via barcode</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"wifi_changing_network\">Requesting connection to network\\u2026</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"wifi_ssid_label\">Network Name</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"wifi_type_label\">Type</string>",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<string name=\"google_app_id\" translatable=\"false\">85075801930</string>",
+                            "count": 1
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "installed_plugins": {
+        "cordova-plugin-battery-status": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-camera": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-compat": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-console": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-contacts": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device-motion": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device-orientation": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-dialogs": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-file": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-file-transfer": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-geolocation": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-globalization": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-inappbrowser": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-media": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-media-capture": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-network-information": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-splashscreen": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-statusbar": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-vibration": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-whitelist": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova.plugins.diagnostic": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "phonegap-plugin-barcodescanner": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-sqlite-storage": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "phonegap-plugin-push": {
+            "SENDER_ID": "85075801930",
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        }
+    },
+    "dependent_plugins": {},
+    "modules": [
+        {
+            "id": "cordova-plugin-battery-status.battery",
+            "file": "plugins/cordova-plugin-battery-status/www/battery.js",
+            "pluginId": "cordova-plugin-battery-status",
+            "clobbers": [
+                "navigator.battery"
+            ]
+        },
+        {
+            "id": "cordova-plugin-camera.Camera",
+            "file": "plugins/cordova-plugin-camera/www/CameraConstants.js",
+            "pluginId": "cordova-plugin-camera",
+            "clobbers": [
+                "Camera"
+            ]
+        },
+        {
+            "id": "cordova-plugin-camera.CameraPopoverOptions",
+            "file": "plugins/cordova-plugin-camera/www/CameraPopoverOptions.js",
+            "pluginId": "cordova-plugin-camera",
+            "clobbers": [
+                "CameraPopoverOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-camera.camera",
+            "file": "plugins/cordova-plugin-camera/www/Camera.js",
+            "pluginId": "cordova-plugin-camera",
+            "clobbers": [
+                "navigator.camera"
+            ]
+        },
+        {
+            "id": "cordova-plugin-camera.CameraPopoverHandle",
+            "file": "plugins/cordova-plugin-camera/www/CameraPopoverHandle.js",
+            "pluginId": "cordova-plugin-camera",
+            "clobbers": [
+                "CameraPopoverHandle"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.contacts",
+            "file": "plugins/cordova-plugin-contacts/www/contacts.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "navigator.contacts"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.Contact",
+            "file": "plugins/cordova-plugin-contacts/www/Contact.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "Contact"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactAddress",
+            "file": "plugins/cordova-plugin-contacts/www/ContactAddress.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactAddress"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactError",
+            "file": "plugins/cordova-plugin-contacts/www/ContactError.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactField",
+            "file": "plugins/cordova-plugin-contacts/www/ContactField.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactField"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactFindOptions",
+            "file": "plugins/cordova-plugin-contacts/www/ContactFindOptions.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactFindOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactName",
+            "file": "plugins/cordova-plugin-contacts/www/ContactName.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactName"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactOrganization",
+            "file": "plugins/cordova-plugin-contacts/www/ContactOrganization.js",
+            "pluginId": "cordova-plugin-contacts",
+            "clobbers": [
+                "ContactOrganization"
+            ]
+        },
+        {
+            "id": "cordova-plugin-contacts.ContactFieldType",
+            "file": "plugins/cordova-plugin-contacts/www/ContactFieldType.js",
+            "pluginId": "cordova-plugin-contacts",
+            "merges": [
+                ""
+            ]
+        },
+        {
+            "id": "cordova-plugin-device.device",
+            "file": "plugins/cordova-plugin-device/www/device.js",
+            "pluginId": "cordova-plugin-device",
+            "clobbers": [
+                "device"
+            ]
+        },
+        {
+            "id": "cordova-plugin-device-motion.Acceleration",
+            "file": "plugins/cordova-plugin-device-motion/www/Acceleration.js",
+            "pluginId": "cordova-plugin-device-motion",
+            "clobbers": [
+                "Acceleration"
+            ]
+        },
+        {
+            "id": "cordova-plugin-device-motion.accelerometer",
+            "file": "plugins/cordova-plugin-device-motion/www/accelerometer.js",
+            "pluginId": "cordova-plugin-device-motion",
+            "clobbers": [
+                "navigator.accelerometer"
+            ]
+        },
+        {
+            "id": "cordova-plugin-device-orientation.CompassError",
+            "file": "plugins/cordova-plugin-device-orientation/www/CompassError.js",
+            "pluginId": "cordova-plugin-device-orientation",
+            "clobbers": [
+                "CompassError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-device-orientation.CompassHeading",
+            "file": "plugins/cordova-plugin-device-orientation/www/CompassHeading.js",
+            "pluginId": "cordova-plugin-device-orientation",
+            "clobbers": [
+                "CompassHeading"
+            ]
+        },
+        {
+            "id": "cordova-plugin-device-orientation.compass",
+            "file": "plugins/cordova-plugin-device-orientation/www/compass.js",
+            "pluginId": "cordova-plugin-device-orientation",
+            "clobbers": [
+                "navigator.compass"
+            ]
+        },
+        {
+            "id": "cordova-plugin-dialogs.notification",
+            "file": "plugins/cordova-plugin-dialogs/www/notification.js",
+            "pluginId": "cordova-plugin-dialogs",
+            "merges": [
+                "navigator.notification"
+            ]
+        },
+        {
+            "id": "cordova-plugin-dialogs.notification_android",
+            "file": "plugins/cordova-plugin-dialogs/www/android/notification.js",
+            "pluginId": "cordova-plugin-dialogs",
+            "merges": [
+                "navigator.notification"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.DirectoryEntry",
+            "file": "plugins/cordova-plugin-file/www/DirectoryEntry.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.DirectoryEntry"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.DirectoryReader",
+            "file": "plugins/cordova-plugin-file/www/DirectoryReader.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.DirectoryReader"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.Entry",
+            "file": "plugins/cordova-plugin-file/www/Entry.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.Entry"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.File",
+            "file": "plugins/cordova-plugin-file/www/File.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.File"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileEntry",
+            "file": "plugins/cordova-plugin-file/www/FileEntry.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileEntry"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileError",
+            "file": "plugins/cordova-plugin-file/www/FileError.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileReader",
+            "file": "plugins/cordova-plugin-file/www/FileReader.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileReader"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileSystem",
+            "file": "plugins/cordova-plugin-file/www/FileSystem.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileSystem"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileUploadOptions",
+            "file": "plugins/cordova-plugin-file/www/FileUploadOptions.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileUploadOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileUploadResult",
+            "file": "plugins/cordova-plugin-file/www/FileUploadResult.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileUploadResult"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.FileWriter",
+            "file": "plugins/cordova-plugin-file/www/FileWriter.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.FileWriter"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.Flags",
+            "file": "plugins/cordova-plugin-file/www/Flags.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.Flags"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.LocalFileSystem",
+            "file": "plugins/cordova-plugin-file/www/LocalFileSystem.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.LocalFileSystem"
+            ],
+            "merges": [
+                "window"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.Metadata",
+            "file": "plugins/cordova-plugin-file/www/Metadata.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.Metadata"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.ProgressEvent",
+            "file": "plugins/cordova-plugin-file/www/ProgressEvent.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.ProgressEvent"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.fileSystems",
+            "file": "plugins/cordova-plugin-file/www/fileSystems.js",
+            "pluginId": "cordova-plugin-file"
+        },
+        {
+            "id": "cordova-plugin-file.requestFileSystem",
+            "file": "plugins/cordova-plugin-file/www/requestFileSystem.js",
+            "pluginId": "cordova-plugin-file",
+            "clobbers": [
+                "window.requestFileSystem"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.resolveLocalFileSystemURI",
+            "file": "plugins/cordova-plugin-file/www/resolveLocalFileSystemURI.js",
+            "pluginId": "cordova-plugin-file",
+            "merges": [
+                "window"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.isChrome",
+            "file": "plugins/cordova-plugin-file/www/browser/isChrome.js",
+            "pluginId": "cordova-plugin-file",
+            "runs": true
+        },
+        {
+            "id": "cordova-plugin-file.androidFileSystem",
+            "file": "plugins/cordova-plugin-file/www/android/FileSystem.js",
+            "pluginId": "cordova-plugin-file",
+            "merges": [
+                "FileSystem"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file.fileSystems-roots",
+            "file": "plugins/cordova-plugin-file/www/fileSystems-roots.js",
+            "pluginId": "cordova-plugin-file",
+            "runs": true
+        },
+        {
+            "id": "cordova-plugin-file.fileSystemPaths",
+            "file": "plugins/cordova-plugin-file/www/fileSystemPaths.js",
+            "pluginId": "cordova-plugin-file",
+            "merges": [
+                "cordova"
+            ],
+            "runs": true
+        },
+        {
+            "id": "cordova-plugin-file-transfer.FileTransferError",
+            "file": "plugins/cordova-plugin-file-transfer/www/FileTransferError.js",
+            "pluginId": "cordova-plugin-file-transfer",
+            "clobbers": [
+                "window.FileTransferError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-file-transfer.FileTransfer",
+            "file": "plugins/cordova-plugin-file-transfer/www/FileTransfer.js",
+            "pluginId": "cordova-plugin-file-transfer",
+            "clobbers": [
+                "window.FileTransfer"
+            ]
+        },
+        {
+            "id": "cordova-plugin-geolocation.geolocation",
+            "file": "plugins/cordova-plugin-geolocation/www/android/geolocation.js",
+            "pluginId": "cordova-plugin-geolocation",
+            "clobbers": [
+                "navigator.geolocation"
+            ]
+        },
+        {
+            "id": "cordova-plugin-geolocation.PositionError",
+            "file": "plugins/cordova-plugin-geolocation/www/PositionError.js",
+            "pluginId": "cordova-plugin-geolocation",
+            "runs": true
+        },
+        {
+            "id": "cordova-plugin-globalization.GlobalizationError",
+            "file": "plugins/cordova-plugin-globalization/www/GlobalizationError.js",
+            "pluginId": "cordova-plugin-globalization",
+            "clobbers": [
+                "window.GlobalizationError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-globalization.globalization",
+            "file": "plugins/cordova-plugin-globalization/www/globalization.js",
+            "pluginId": "cordova-plugin-globalization",
+            "clobbers": [
+                "navigator.globalization"
+            ]
+        },
+        {
+            "id": "cordova-plugin-inappbrowser.inappbrowser",
+            "file": "plugins/cordova-plugin-inappbrowser/www/inappbrowser.js",
+            "pluginId": "cordova-plugin-inappbrowser",
+            "clobbers": [
+                "cordova.InAppBrowser.open",
+                "window.open"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media.MediaError",
+            "file": "plugins/cordova-plugin-media/www/MediaError.js",
+            "pluginId": "cordova-plugin-media",
+            "clobbers": [
+                "window.MediaError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media.Media",
+            "file": "plugins/cordova-plugin-media/www/Media.js",
+            "pluginId": "cordova-plugin-media",
+            "clobbers": [
+                "window.Media"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.CaptureAudioOptions",
+            "file": "plugins/cordova-plugin-media-capture/www/CaptureAudioOptions.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "CaptureAudioOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.CaptureImageOptions",
+            "file": "plugins/cordova-plugin-media-capture/www/CaptureImageOptions.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "CaptureImageOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.CaptureVideoOptions",
+            "file": "plugins/cordova-plugin-media-capture/www/CaptureVideoOptions.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "CaptureVideoOptions"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.CaptureError",
+            "file": "plugins/cordova-plugin-media-capture/www/CaptureError.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "CaptureError"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.MediaFileData",
+            "file": "plugins/cordova-plugin-media-capture/www/MediaFileData.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "MediaFileData"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.MediaFile",
+            "file": "plugins/cordova-plugin-media-capture/www/MediaFile.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "MediaFile"
+            ]
+        },
+        {
+            "id": "cordova-plugin-media-capture.capture",
+            "file": "plugins/cordova-plugin-media-capture/www/capture.js",
+            "pluginId": "cordova-plugin-media-capture",
+            "clobbers": [
+                "navigator.device.capture"
+            ]
+        },
+        {
+            "id": "cordova-plugin-network-information.network",
+            "file": "plugins/cordova-plugin-network-information/www/network.js",
+            "pluginId": "cordova-plugin-network-information",
+            "clobbers": [
+                "navigator.connection",
+                "navigator.network.connection"
+            ]
+        },
+        {
+            "id": "cordova-plugin-network-information.Connection",
+            "file": "plugins/cordova-plugin-network-information/www/Connection.js",
+            "pluginId": "cordova-plugin-network-information",
+            "clobbers": [
+                "Connection"
+            ]
+        },
+        {
+            "id": "cordova-plugin-splashscreen.SplashScreen",
+            "file": "plugins/cordova-plugin-splashscreen/www/splashscreen.js",
+            "pluginId": "cordova-plugin-splashscreen",
+            "clobbers": [
+                "navigator.splashscreen"
+            ]
+        },
+        {
+            "id": "cordova-plugin-statusbar.statusbar",
+            "file": "plugins/cordova-plugin-statusbar/www/statusbar.js",
+            "pluginId": "cordova-plugin-statusbar",
+            "clobbers": [
+                "window.StatusBar"
+            ]
+        },
+        {
+            "id": "cordova-plugin-vibration.notification",
+            "file": "plugins/cordova-plugin-vibration/www/vibration.js",
+            "pluginId": "cordova-plugin-vibration",
+            "merges": [
+                "navigator.notification",
+                "navigator"
+            ]
+        },
+        {
+            "id": "cordova.plugins.diagnostic.Diagnostic",
+            "file": "plugins/cordova.plugins.diagnostic/www/android/diagnostic.js",
+            "pluginId": "cordova.plugins.diagnostic",
+            "clobbers": [
+                "cordova.plugins.diagnostic"
+            ]
+        },
+        {
+            "id": "phonegap-plugin-barcodescanner.BarcodeScanner",
+            "file": "plugins/phonegap-plugin-barcodescanner/www/barcodescanner.js",
+            "pluginId": "phonegap-plugin-barcodescanner",
+            "clobbers": [
+                "cordova.plugins.barcodeScanner"
+            ]
+        },
+        {
+            "id": "cordova-sqlite-storage.SQLitePlugin",
+            "file": "plugins/cordova-sqlite-storage/www/SQLitePlugin.js",
+            "pluginId": "cordova-sqlite-storage",
+            "clobbers": [
+                "SQLitePlugin"
+            ]
+        },
+        {
+            "id": "phonegap-plugin-push.PushNotification",
+            "file": "plugins/phonegap-plugin-push/www/push.js",
+            "pluginId": "phonegap-plugin-push",
+            "clobbers": [
+                "PushNotification"
+            ]
+        }
+    ],
+    "plugin_metadata": {
+        "cordova-plugin-battery-status": "1.1.2",
+        "cordova-plugin-camera": "2.1.1",
+        "cordova-plugin-compat": "1.1.0",
+        "cordova-plugin-console": "1.0.7",
+        "cordova-plugin-contacts": "2.0.1",
+        "cordova-plugin-device": "1.1.6",
+        "cordova-plugin-device-motion": "1.2.5",
+        "cordova-plugin-device-orientation": "1.0.7",
+        "cordova-plugin-dialogs": "1.2.1",
+        "cordova-plugin-file": "4.3.4-dev",
+        "cordova-plugin-file-transfer": "1.5.1",
+        "cordova-plugin-geolocation": "2.1.0",
+        "cordova-plugin-globalization": "1.0.7",
+        "cordova-plugin-inappbrowser": "1.3.0",
+        "cordova-plugin-media": "2.2.0",
+        "cordova-plugin-media-capture": "1.2.0",
+        "cordova-plugin-network-information": "1.2.1",
+        "cordova-plugin-splashscreen": "3.2.2",
+        "cordova-plugin-statusbar": "2.1.3",
+        "cordova-plugin-vibration": "2.1.5",
+        "cordova-plugin-whitelist": "1.2.2",
+        "cordova.plugins.diagnostic": "3.6.5",
+        "phonegap-plugin-barcodescanner": "4.1.0",
+        "cordova-sqlite-storage": "2.0.4",
+        "phonegap-plugin-push": "1.10.5"
+    }
+}

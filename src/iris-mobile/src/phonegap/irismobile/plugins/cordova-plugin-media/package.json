@@ -1,0 +1,44 @@
+{
+  "name": "cordova-plugin-media",
+  "version": "2.2.0",
+  "description": "Cordova Media Plugin",
+  "cordova": {
+    "id": "cordova-plugin-media",
+    "platforms": [
+      "android",
+      "amazon-fireos",
+      "ubuntu",
+      "ios",
+      "blackberry10",
+      "wp7",
+      "wp8",
+      "windows8",
+      "windows",
+      "tizen"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/cordova-plugin-media"
+  },
+  "keywords": [
+    "cordova",
+    "media",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-amazon-fireos",
+    "cordova-ubuntu",
+    "cordova-ios",
+    "cordova-blackberry10",
+    "cordova-wp7",
+    "cordova-wp8",
+    "cordova-windows8",
+    "cordova-windows",
+    "cordova-tizen"
+  ],
+  "peerDependencies": {
+    "cordova-plugin-file": "^4.0.0"
+  },
+  "author": "Apache Software Foundation",
+  "license": "Apache-2.0"
+}

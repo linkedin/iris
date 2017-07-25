@@ -1,0 +1,41 @@
+{
+  "name": "cordova-plugin-geolocation",
+  "version": "2.1.0",
+  "description": "Cordova Geolocation Plugin",
+  "cordova": {
+    "id": "cordova-plugin-geolocation",
+    "platforms": [
+      "android",
+      "amazon-fireos",
+      "ios",
+      "blackberry10",
+      "ubuntu",
+      "wp7",
+      "wp8",
+      "windows8",
+      "windows",
+      "firefoxos"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/cordova-plugin-geolocation"
+  },
+  "keywords": [
+    "cordova",
+    "geolocation",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-amazon-fireos",
+    "cordova-ios",
+    "cordova-blackberry10",
+    "cordova-ubuntu",
+    "cordova-wp7",
+    "cordova-wp8",
+    "cordova-windows8",
+    "cordova-windows",
+    "cordova-firefoxos"
+  ],
+  "author": "Apache Software Foundation",
+  "license": "Apache 2.0"
+}

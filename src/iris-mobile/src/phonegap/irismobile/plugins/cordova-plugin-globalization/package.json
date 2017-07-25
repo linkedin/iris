@@ -1,0 +1,56 @@
+{
+  "name": "cordova-plugin-globalization",
+  "version": "1.0.7",
+  "description": "Cordova Globalization Plugin",
+  "types": "./types/index.d.ts",
+  "cordova": {
+    "id": "cordova-plugin-globalization",
+    "platforms": [
+      "android",
+      "amazon-fireos",
+      "ubuntu",
+      "firefoxos",
+      "ios",
+      "wp7",
+      "wp8",
+      "windows",
+      "tizen",
+      "blackberry10"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apache/cordova-plugin-globalization"
+  },
+  "keywords": [
+    "cordova",
+    "globalization",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-amazon-fireos",
+    "cordova-ubuntu",
+    "cordova-firefoxos",
+    "cordova-ios",
+    "cordova-wp7",
+    "cordova-wp8",
+    "cordova-windows",
+    "cordova-tizen",
+    "cordova-blackberry10"
+  ],
+  "scripts": {
+    "test": "npm run jshint",
+    "jshint": "jshint www && jshint src && jshint tests"
+  },
+  "author": "Apache Software Foundation",
+  "license": "Apache-2.0",
+  "engines": {
+    "cordovaDependencies": {
+      "2.0.0": {
+        "cordova": ">100"
+      }
+    }
+  },
+  "devDependencies": {
+    "jshint": "^2.6.0"
+  }
+}

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    id="cordova.plugins.diagnostic"
+    version="3.6.5">
+
+    <name>Diagnostic</name>
+    <description>Cordova/Phonegap plugin to check the state of Location/WiFi/Camera/Bluetooth device settings.</description>
+    <author>Dave Alden</author>
+    <license>MIT</license>
+    <keywords>ecosystem:cordova,cordova,phonegap,android,ios,windows,diagnostic,wifi,location,gps,camera,bluetooth,settings</keywords>
+    <engines>
+        <engine name="cordova" version=">=3.0.0" />
+    </engines>
+    <repo>https://github.com/dpa99c/cordova-diagnostic-plugin.git</repo>
+    <issue>https://github.com/dpa99c/cordova-diagnostic-plugin/issues</issue>
+
+    <!-- ios -->
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="Diagnostic">
+                <param name="ios-package" value="Diagnostic" />
+            </feature>
+        </config-file>
+        
+        <!-- Default usage descriptions: override as necessary in .plist -->
+        <config-file target="*-Info.plist" parent="NSLocationAlwaysUsageDescription">
+            <string>This app requires constant access to your location in order to track your position, even when the screen is off.</string>
+        </config-file>
+        
+        <config-file target="*-Info.plist" parent="NSLocationWhenInUseUsageDescription">
+            <string>This app requires access to your location when the screen is on and the app is displayed.</string>
+        </config-file>
+        
+        <config-file target="*-Info.plist" parent="NSCalendarsUsageDescription">
+            <string>This app requires calendar access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSPhotoLibraryUsageDescription">
+            <string>This app requires photo library access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
+            <string>This app requires bluetooth access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSMicrophoneUsageDescription">
+            <string>This app requires microphone access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSCameraUsageDescription">
+            <string>This app requires camera access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSMotionUsageDescription">
+            <string>This app requires motion detection access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSContactsUsageDescription">
+          <string>This app requires contacts access to function properly.</string>
+        </config-file>
+
+        <config-file target="*-Info.plist" parent="NSRemindersUsageDescription">
+            <string>This app requires reminders access to function properly.</string>
+        </config-file>
+
+        <js-module src="www/ios/diagnostic.js" name="Diagnostic">
+            <clobbers target="cordova.plugins.diagnostic" />
+        </js-module>
+
+        <header-file src="src/ios/Diagnostic.h" />
+        <source-file src="src/ios/Diagnostic.m" />
+
+        <framework src="CoreLocation.framework" />
+        <framework src="CoreBluetooth.framework" />
+        <framework src="CoreMotion.framework" />
+        <framework src="AVFoundation.framework" />
+        <framework src="Photos.framework" />
+        <framework src="AddressBook.framework" />
+        <framework src="EventKit.framework" />
+        <framework src="Contacts.framework" />
+        <framework src="UserNotifications.framework" />
+    </platform>
+
+    <!-- android -->
+    <platform name="android">
+        <config-file target="config.xml" parent="/*">
+            <feature name="Diagnostic" >
+                <param name="android-package" value="cordova.plugins.Diagnostic"/>
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <framework src="com.android.support:support-v4:25.+" />
+        <framework src="com.android.support:appcompat-v7:25.+" />
+
+        <js-module src="www/android/diagnostic.js" name="Diagnostic">
+            <clobbers target="cordova.plugins.diagnostic" />
+        </js-module>
+        <source-file src="src/android/Diagnostic.java" target-dir="src/cordova/plugins" />
+
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <receiver
+                    android:name="cordova.plugins.Diagnostic$LocationProviderChangedReceiver">
+                <intent-filter>
+                    <action android:name="android.location.PROVIDERS_CHANGED" />
+                </intent-filter>
+            </receiver>
+            <receiver android:name="cordova.plugins.Diagnostic$NFCStateChangedReceiver">
+                <intent-filter>
+                    <action android:name="android.nfc.action.ADAPTER_STATE_CHANGED" />
+                </intent-filter>
+            </receiver>
+        </config-file>
+    </platform>
+
+    <!-- windows -->
+    <platform name="windows">
+        <config-file target="config.xml" parent="/*">
+            <feature name="Diagnostic" >
+                <param name="windows-package" value="cordova.plugins.Diagnostic"/>
+            </feature>
+            <preference name="windows-target-version" value="10.0" />
+        </config-file>
+
+        <js-module src="www/windows/diagnostic.js" name="Diagnostic">
+            <clobbers target="cordova.plugins.diagnostic" />
+        </js-module>
+        <js-module src="src/windows/diagnosticProxy.js" name="diagnosticProxy">
+            <merges target="" />
+        </js-module>
+    </platform>
+</plugin>

@@ -1,0 +1,22 @@
+{
+    "ImageIO.framework": 1,
+    "CoreLocation.framework": 4,
+    "AVFoundation.framework": 3,
+    "AddressBook.framework": 3,
+    "AddressBookUI.framework": 1,
+    "libz.tbd": 2,
+    "CoreMotion.framework": 2,
+    "AudioToolbox.framework": 3,
+    "SystemConfiguration.framework": 1,
+    "CoreTelephony.framework": 1,
+    "libiconv.dylib": 1,
+    "CoreVideo.framework": 1,
+    "QuartzCore.framework": 1,
+    "CoreImage.framework": 1,
+    "CoreBluetooth.framework": 1,
+    "Photos.framework": 1,
+    "EventKit.framework": 1,
+    "Contacts.framework": 1,
+    "UserNotifications.framework": 1,
+    "libsqlite3.tbd": 1
+}

@@ -1,0 +1,89 @@
+{
+    "prepare_queue": {
+        "installed": [],
+        "uninstalled": []
+    },
+    "config_munge": {
+        "files": {}
+    },
+    "installed_plugins": {
+        "cordova-plugin-battery-status": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-camera": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-console": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-contacts": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device-motion": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-device-orientation": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-dialogs": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-file": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-file-transfer": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-geolocation": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-globalization": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-inappbrowser": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-media": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-media-capture": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-network-information": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-splashscreen": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-statusbar": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-vibration": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-plugin-whitelist": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova.plugins.diagnostic": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "phonegap-plugin-barcodescanner": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "cordova-sqlite-storage": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        },
+        "phonegap-plugin-push": {
+            "SENDER_ID": "85075801930",
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        }
+    },
+    "dependent_plugins": {
+        "cordova-plugin-compat": {
+            "PACKAGE_NAME": "linkedin.irismobile.sample"
+        }
+    }
+}
