@@ -97,10 +97,22 @@ class Coordinator(object):
             logger.error('ZK connection is in %s state', self.zk.state)
             self.is_master = False
 
-        if self.zk.state == KazooState.CONNECTED and self.is_master:
-            slaves = [self.address_to_tuple(host) for host in self.party if host != self.me]
-            self.slave_count = len(slaves)
-            self.slaves = cycle(slaves)
+        if self.zk.state == KazooState.CONNECTED:
+
+            if self.is_master:
+                slaves = [self.address_to_tuple(host) for host in self.party if host != self.me]
+                self.slave_count = len(slaves)
+                self.slaves = cycle(slaves)
+            else:
+                self.slaves = cycle([])
+                self.slave_count = 0
+
+            # Keep us as part of the party, so the current master sees us as a slave
+            if not self.party.participating:
+                try:
+                    self.party.join()
+                except kazoo.exceptions.KazooException:
+                    logger.exception('ZK problem while trying to join party')
         else:
             self.slaves = cycle([])
             self.slave_count = 0
@@ -154,6 +166,10 @@ class Coordinator(object):
             # make us try to re-acquire lock during next iteration when we're connected
             if self.lock.is_acquired:
                 self.lock.is_acquired = False
+
+            # make us try to rejoin the party during next iteration when we're connected
+            if self.party.participating:
+                self.party.participating = False
 
             # in the meantime we're not master
             self.is_master = None
