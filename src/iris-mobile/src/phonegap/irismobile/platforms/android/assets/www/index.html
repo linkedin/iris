@@ -67,7 +67,7 @@
         if($('#txt-username').val()){
 
           //set username
-           window.localStorage.setItem("username", $('#txt-username').val());
+           window.localStorage.setItem("username", $('#txt-username').val().toLowerCase());
 
           window.location = "qrScan.html";
         }
@@ -95,7 +95,7 @@
 
     function getCode(username, secret){
 
-            apiURL = "http://172.22.228.20:8000/";
+            apiURL = "http://172.22.228.169:8000/";
 
             var exp = Math.round((new Date()).getTime() / 1000) + 60; //current time + 60 seconds for expiration
             console.log(exp);

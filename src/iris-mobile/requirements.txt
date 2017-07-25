@@ -3,7 +3,6 @@ chardet==3.0.4
 Django==1.11.2
 falcon==1.2.0
 gunicorn==19.7.1
-hashlib==20081119
 hmac==20101005
 idna==2.5
 image==1.5.5
