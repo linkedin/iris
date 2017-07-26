@@ -56,6 +56,16 @@ ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
 logger.addHandler(ch)
 
+pidfile = os.environ.get('SYNC_TARGETS_PIDFILE')
+if pidfile:
+    try:
+        pid = os.getpid()
+        with open(pidfile, 'w') as h:
+            h.write('%s\n' % pid)
+            logger.info('Wrote pid %s to %s', pid, pidfile)
+    except IOError:
+        logger.exception('Failed writing pid to %s', pidfile)
+
 
 def normalize_phone_number(num):
     return format_number(parse(num.decode('utf-8'), 'US'),
