@@ -25,6 +25,16 @@ ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
 logger.addHandler(ch)
 
+pidfile = os.environ.get('OWA_SYNC_PIDFILE')
+if pidfile:
+    try:
+        pid = os.getpid()
+        with open(pidfile, 'w') as h:
+            h.write('%s\n' % pid)
+            logger.info('Wrote pid %s to %s', pid, pidfile)
+    except IOError:
+        logger.exception('Failed writing pid to %s', pidfile)
+
 default_metrics = {
     'owa_api_failure_count': 0,
     'message_relay_success_count': 0,

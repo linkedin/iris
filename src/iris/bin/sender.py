@@ -188,6 +188,16 @@ ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
 logger.addHandler(ch)
 
+pidfile = os.environ.get('SENDER_PIDFILE')
+if pidfile:
+    try:
+        pid = os.getpid()
+        with open(pidfile, 'w') as h:
+            h.write('%s\n' % pid)
+            logger.info('Wrote pid %s to %s', pid, pidfile)
+    except IOError:
+        logger.exception('Failed writing pid to %s', pidfile)
+
 
 # rate limiting data structure message key -> minute -> count
 # used to calcuate if a new message exceeds the rate limit
