@@ -9,8 +9,8 @@ import sys
 from glob import glob
 from iris.config import load_config
 
-dbpath = '/home/iris/db'
-initializedfile = '/home/iris/db_initialized'
+dbpath = os.environ.get('DATABASE_PATH', '/home/iris/db')
+initializedfile = os.environ.get('INIT_FILE', '/home/iris/db_initialized')
 
 
 def load_sqldump(config, sqlfile, one_db=True):
@@ -88,7 +88,7 @@ def main():
             initialize_mysql_schema(mysql_config)
 
     os.execv('/usr/bin/uwsgi',
-             ['', '--yaml', '/home/iris/daemons/uwsgi.yaml:prod'])
+             ['', '--yaml', os.environ.get('UWSGI_CONFIG', '/home/iris/daemons/uwsgi.yaml:prod')])
 
 
 if __name__ == '__main__':
