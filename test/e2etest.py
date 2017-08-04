@@ -969,6 +969,87 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.json()['description'] == 'Priority not found for step 1'
 
 
+def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
+    data = {
+        "creator": sample_user,
+        "name": sample_user + "-test-dynamic-foo",
+        "description": "Test plan for e2e test",
+        "threshold_window": 900,
+        "threshold_count": 10,
+        "aggregation_window": 300,
+        "aggregation_reset": 300,
+        "steps": [
+            [
+                {
+                    "dynamic_index": 0,
+                    "priority": "low",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name
+                },
+                {
+                    "dynamic_index": 1,
+                    "priority": "high",
+                    "wait": 300,
+                    "repeat": 1,
+                    "template": sample_template_name
+                },
+            ],
+            [
+                {
+                    "dynamic_index": 0,
+                    "priority": "urgent",
+                    "wait": 300,
+                    "repeat": 1,
+                    "template": sample_template_name
+                },
+                {
+                    "dynamic_index": 1,
+                    "priority": "medium",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name
+                },
+            ]
+        ],
+        "isValid": True
+    }
+    # sort list so it's easier to compare
+    data['steps'][0] = sorted(data['steps'][0], key=lambda x: x['priority'])
+    data['steps'][1] = sorted(data['steps'][1], key=lambda x: x['priority'])
+    data['steps'] = sorted(data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
+
+    # Test post to plans endpoint (create plan)
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 201
+    plan_id = re.content.strip()
+    new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
+    assert new_data['name'] == data['name']
+    assert new_data['creator'] == data['creator']
+    assert new_data['description'] == data['description']
+    assert len(new_data['steps']) == len(data['steps'])
+    new_data['steps'][0] = sorted(new_data['steps'][0], key=lambda x: x['priority'])
+    new_data['steps'][1] = sorted(new_data['steps'][1], key=lambda x: x['priority'])
+    new_data['steps'] = sorted(new_data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
+    for k in ('dynamic_index', 'priority', 'wait', 'repeat', 'template'):
+        assert new_data['steps'][0][0][k] == data['steps'][0][0][k]
+        assert new_data['steps'][0][1][k] == data['steps'][0][1][k]
+        assert new_data['steps'][1][0][k] == data['steps'][1][0][k]
+        assert new_data['steps'][1][1][k] == data['steps'][1][1][k]
+
+    # Test errors
+    bad_step = {"dynamic_index": 100,
+                "priority": "medium",
+                "wait": 600,
+                "repeat": 0,
+                "template": sample_template_name}
+    # Test bad dynamic target index
+    data['steps'][0][0] = bad_step
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 400
+    assert re.json()['description'] == 'Dynamic target numbers must span 0..n without gaps'
+
+
 def test_delete_plan(sample_user, sample_team, sample_template_name, sample_application_name):
     re = requests.delete(base_url + 'plans/plan')
     assert re.status_code == 401
@@ -1147,6 +1228,67 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     assert re.status_code == 201
     re = requests.get(base_url + 'incidents/%s' % re.content.strip())
     assert re.status_code == 200
+
+    re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
+        'owner': sample_user,
+        'plan': sample_user + '-test-incident-post',
+        'context': {},
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+
+
+def test_post_dynamic_incident(sample_user, sample_team, sample_application_name, sample_template_name):
+    data = {
+        "creator": sample_user,
+        "name": sample_user + "-test-incident-dynamic-post",
+        "description": "Test plan for e2e test",
+        "threshold_window": 900,
+        "threshold_count": 10,
+        "aggregation_window": 300,
+        "aggregation_reset": 300,
+        "steps": [
+            [
+                {
+                    "dynamic_index": 0,
+                    "priority": "low",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name
+                },
+                {
+                    "dynamic_index": 1,
+                    "priority": "high",
+                    "wait": 300,
+                    "repeat": 1,
+                    "template": sample_template_name
+                },
+            ],
+        ],
+        "isValid": True
+    }
+    re = requests.post(base_url + 'plans', json=data)
+    assert re.status_code == 201
+
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-incident-dynamic-post',
+        'context': {},
+        'dynamic_targets': [{'role': 'user', 'target': sample_user},
+                            {'role': 'team', 'target': sample_team}]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    incident_id = int(re.content)
+    assert re.status_code == 201
+    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    assert re.status_code == 200
+
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-incident-dynamic-post',
+        'context': {},
+        'dynamic_targets': [{'role': 'user', 'target': sample_user},
+                            {'role': 'user', 'target': sample_team}]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json() == {'description': 'invalid role %s for target %s' % ('user', sample_team) ,'title':'Invalid incident'}
 
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,

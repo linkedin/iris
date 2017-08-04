@@ -129,6 +129,7 @@ iris = {
       notificationTemplateSource: $('#plan-notification-template').html(),
       stepTemplateSource: $('#plan-step-template').html(),
       trackingTemplateSource: $('#plan-tracking-notification-template').html(),
+      testPlanSource: $('#test-plan-template').html(),
       addNotificationBtn: '.plan-notification-add',
       removeNotificationBtn: '.plan-notification-remove',
       planNotificationInputs: '.plan-notification input, .plan-notification select',
@@ -140,7 +141,9 @@ iris = {
       clonePlanBtn: '#clone-plan',
       showTestPlanModalBtn: '#test-plan-modal-btn',
       showDeletePlanModalBtn: '#delete-plan-modal-btn',
+      toggleDynamic: '.toggle-dynamic',
       testPlanBtn: '#test-plan',
+      testPlanInputs: '.test-plan-dynamic-target select',
       deletePlanBtn: '#delete-plan',
       versionSelect: '.version-select',
       activatePlan: '.badge[data-active="0"]',
@@ -163,8 +166,10 @@ iris = {
         aggregation_window: 300,
         threshold_count: 10,
         threshold_window: 900,
+        dynamic_index: 0,
+        dynamic: 0,
         count: 1,
-        steps: [[{count: 1}]]
+        steps: [[{count: 1, id: 'n0', dynamic_index: 0}]]
       },
       blankTrackingTemplateModel: {
         applications: window.appData.applications,
@@ -199,9 +204,9 @@ iris = {
       this.getPlan(path).done(function(){
         self.events();
         iris.versionTour.init();
+        iris.typeahead.init();
       });
       this.drag.init();
-      iris.typeahead.init();
     },
     events: function(){
       var data = this.data;
@@ -223,6 +228,8 @@ iris = {
       data.$page.on('change', data.versionSelect, this.loadVersion.bind(this));
       data.$page.on('change', data.trackingType, this.updateTrackingPlaceholder.bind(this));
       data.$page.on('change', data.appSelect, this.renderVariables.bind(this));
+      data.$page.on('change', data.testPlanInputs, this.updateTestPlanValues);
+      data.$page.on('change', data.toggleDynamic, this.toggleDynamicTargets);
       window.onbeforeunload = iris.unloadDialog.bind(this);
     },
     getPlan: function(plan){
@@ -257,6 +264,7 @@ iris = {
         } else {
           self.data.viewMode = true;
           return $.getJSON(this.data.url + plan).done(function(response){
+            var max_idx = -1;
             self.data.id = response.id;
             self.data.name = response.name;
             self.data.ajaxResponse = response; //set response in root object for clone plan functionality.
@@ -266,8 +274,16 @@ iris = {
             for (i = 0; i < response.steps.length; i++) {
               for (j = 0; j < response.steps[i].length; j++) {
                 response.steps[i][j].count = response.steps[i][j].repeat + 1;
+                if (response.steps[i][j].dynamic_index !== null) {
+                  max_idx = Math.max(max_idx, response.steps[i][j].dynamic_index);
+                }
+                response.steps[i][j].dynamic = response.steps[i][j].dynamic_index !== null
               }
             }
+            response.max_dynamic_index = max_idx + 1;
+            response.dynamic = max_idx !== -1;
+            response.target_roles = window.appData.target_roles;
+            response.target_role_type =  window.appData.target_roles[0].type;
             self.data.$page.html(template(response));
             self.loadVersionSelect();
             iris.changeTitle('Plan ' + response.name);
@@ -282,6 +298,14 @@ iris = {
     toggleTrackingTemplate: function(){
       $('#tracking-notification').toggleClass('active');
     },
+    toggleDynamicTargets: function(){
+      var $toggle = $(this),
+          dynamic = $toggle.prop('checked') ? '1' : '0';
+
+      $('.plan-notification').each(function(){
+        $(this).attr('data-dynamic', dynamic);
+      });
+    },
     clonePlan: function(){
       var response = this.data.ajaxResponse;
       response.viewMode = false;
@@ -295,24 +319,34 @@ iris = {
     testPlanModal: function() {
       var
           $modal = $('#test-plan-modal'),
-          $applicationSelect = $modal.find('select'),
+          $applicationSelect = $modal.find('#test-plan-modal-application-select'),
           frag = '';
       window.appData.applications.forEach(function(app) {
         frag += ['<option>', app['name'], '</option>'].join('');
-      })
-      $applicationSelect.html(frag)
+      });
+      $applicationSelect.html(frag);
       $modal.modal();
     },
     testPlan: function() {
       var
           $modal = $('#test-plan-modal'),
-          $application = $modal.find('select').val(),
-          $context = JSON.parse(window.appData.applications.filter(function(l) {return l.name === $application})[0]['sample_context']) || {};
+          $application = $modal.find('#test-plan-modal-application-select').val(),
+          $context = JSON.parse(window.appData.applications.filter(function(l) {return l.name === $application})[0]['sample_context']) || {},
+          targets = $modal.find('.test-plan-dynamic-target'),
+          dynamic_targets = [],
+          role,
+          target;
+      for (var i = 0; i < targets.length; i++) {
+        role = $(targets[i]).find('select').val();
+        target = $(targets[i]).find('input.tt-input').val();
+        dynamic_targets.push({'role': role, 'target': target});
+      }
       $.ajax({
           url: '/v0/incidents',
           data: JSON.stringify({
             application: $application,
             context: $context,
+            dynamic_targets: dynamic_targets,
             plan: this.data.name
           }),
           method: 'POST',
@@ -324,6 +358,20 @@ iris = {
       }).always(function() {
         $modal.modal('hide');
       })
+    },
+    updateTestPlanValues: function(){
+      var $this = $(this);
+
+      if ($this.is('select[data-type="role"]')) {
+        var $target = $this.parents('.test-plan-dynamic-target').find('input[data-typeaheadtype="target"]')
+        $target.val('').attr(
+            'placeholder',
+            $this.find('option:selected').attr('data-url-type') + ' name');
+        $target.attr('data-targettype', $this.find('option:selected').attr('data-url-type'));
+        iris.typeahead.init();
+      }
+
+      $this.attr('value', $this.val());
     },
     deletePlan: function() {
       var $modal = $('#delete-plan-modal');
@@ -408,9 +456,23 @@ iris = {
     },
     addNotification: function(event){
       var $step = $(event.target).parents('.plan-step'),
+          notifications = $('.plan-notification');
           template = Handlebars.compile(this.data.notificationTemplateSource);
+          max_id = 0;
 
-      $step.find('.plan-notification-add').before(template(this.data.blankModel));
+      for (i = 0; i < notifications.length; i++){
+        id = notifications[i].id;
+        // New notifications have ids like 'notification-n{{id}}'
+        // Existing ones have ids like 'notification-{{id}}'
+        if (id.startsWith('notification-n')) {
+            max_id = Math.max(parseInt(id.slice(14)), max_id);
+        }
+      }
+      // Create a new notification with id notification-n{{max_id + 1}}
+      newModel = $.extend({},this.data.blankModel);
+      newModel.id = 'n' + (max_id + 1).toString();
+      newModel.dynamic = $('.toggle-dynamic').prop('checked');
+      $step.find('.plan-notification-add').before(template(newModel));
       // re-init typeahead
       iris.typeahead.init();
     },
@@ -474,7 +536,7 @@ iris = {
         $this.find('.plan-notification').each(function(){
           var notification = {};
 
-          $(this).find('input:not(".tt-hint"),select,textarea').each(function(){
+          $(this).find('input:not(".tt-hint"):visible:not(".toggle-dynamic"),select:visible,textarea').each(function(){
             var $current = $(this),
                 type = $current.attr('data-type'),
                 val = $current.val();
@@ -485,7 +547,6 @@ iris = {
               missingFields.push(type);
               model.isValid = false;
             }
-
             val = isNaN(val) ? val : parseFloat(val);
             // convert minutes to seconds for API
             if (type === 'wait') {
@@ -2546,7 +2607,7 @@ iris = {
     }
   },
   unloadDialog: function(){
-    if ( this.data.$page.find('input, textarea').not('[data-default]').not('[disabled]').filter(function () { return !!this.value }).length > 0 ) {
+    if ( this.data.$page.find('input, textarea').not('[data-default]').not('[disabled]').not('.unload-exclude').filter(function () { return !!this.value }).length > 0 ) {
       return 'You have unsaved changes';
     }
   },
@@ -2686,6 +2747,13 @@ iris = {
       } else {
         return string
       }
+    });
+    Handlebars.registerHelper('range', function(n, block) {
+      var accum = '';
+      for (var i = 0; i < n; i++) {
+        accum += block.fn(i);
+      }
+      return accum;
     });
   } //end registerHandlebarHelpers
 }; //end iris

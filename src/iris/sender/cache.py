@@ -29,6 +29,7 @@ plan_notifications = None
 target_reprioritization = None
 target_names = None
 targets_for_role = None
+dynamic_plan_map = None
 
 
 class Cache():
@@ -59,6 +60,20 @@ class Cache():
                 del self.data[key]
             cursor.close()
             connection.close()
+
+
+class DynamicPlanMap(Cache):
+    def __getitem__(self, key):
+        try:
+            return self.data[key]
+        except KeyError:
+            connection = self.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+            cursor.execute(self.sql, key)
+            ret = self.data[key] = {row['dynamic_index']: row for row in cursor}
+            cursor.close()
+            connection.close()
+            return ret
 
 
 class Templates():
@@ -405,11 +420,12 @@ def purge():
     target_names.purge()
     targets_for_role.purge()
     incidents.purge()
+    dynamic_plan_map.purge()
 
 
 def init(api_host, config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
-    global roles, incidents, templates, plans, iris_client
+    global roles, incidents, templates, plans, iris_client, dynamic_plan_map
 
     iris_client = IrisClient(api_host, 0)
 
@@ -451,5 +467,10 @@ def init(api_host, config):
     target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
     role_lookups = get_role_lookups(config)
     targets_for_role = RoleTargets(role_lookups, db.engine)
+    dynamic_plan_map = DynamicPlanMap(db.engine,
+                                      'SELECT * FROM `dynamic_plan_map` WHERE `incident_id` = %s',
+                                      '''SELECT dynamic_plan_map.* FROM `dynamic_plan_map`
+                                         JOIN `incident` ON `incident`.`id` = `dynamic_plan_map`.`incident_id`
+                                         WHERE `incident`.`active` = TRUE AND `incident_id` IN %s''')
 
     spawn(target_reprioritization.refresh)

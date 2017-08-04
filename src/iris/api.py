@@ -276,10 +276,11 @@ single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
     `target_role`.`name` as `role`,
     `target`.`name` as `target`,
     `plan_notification`.`template` as `template`,
-    `priority`.`name` as `priority`
+    `priority`.`name` as `priority`,
+    `plan_notification`.`dynamic_index` AS `dynamic_index`
 FROM `plan_notification`
-JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`
-JOIN `target_role` ON `plan_notification`.`role_id` = `target_role`.`id`
+LEFT OUTER JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`
+LEFT OUTER JOIN `target_role` ON `plan_notification`.`role_id` = `target_role`.`id`
 JOIN `priority` ON `plan_notification`.`priority_id` = `priority`.`id`
 WHERE `plan_notification`.`plan_id` = %s
 ORDER BY `plan_notification`.`step`'''
@@ -365,6 +366,18 @@ insert_plan_step_query = '''INSERT INTO `plan_notification` (
     :role_id,
     :repeat,
     :wait
+)'''
+
+insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
+    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`
+) VALUES (
+    :plan_id,
+    :step,
+    :priority_id,
+    :template,
+    :repeat,
+    :wait,
+    :dynamic_index
 )'''
 
 reprioritization_setting_query = '''SELECT
@@ -1051,41 +1064,56 @@ class Plans(object):
             'tracking_template': tracking_template,
         }
 
+        dynamic_indices = set()
+        for steps in plan_params['steps']:
+            for step in steps:
+                if 'dynamic_index' in step:
+                    dynamic_indices.add(step['dynamic_index'])
+        if dynamic_indices != set(range(len(dynamic_indices))):
+            raise HTTPBadRequest('Invalid plan',
+                                 'Dynamic target numbers must span 0..n without gaps')
+
         with db.guarded_session() as session:
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
 
             for index, steps in enumerate(plan_params['steps'], start=1):
                 for step in steps:
+                    dynamic = step.get('dynamic_index') is not None
                     step['plan_id'] = plan_id
                     step['step'] = index
                     priority = cache.priorities.get(step['priority'])
-                    role = cache.target_roles.get(step['role'])
+                    role = cache.target_roles.get(step.get('role'))
 
                     if priority:
                         step['priority_id'] = priority['id']
                     else:
                         raise HTTPBadRequest('Invalid plan',
                                              'Priority not found for step %s' % index)
-                    if role:
-                        step['role_id'] = role
-                    else:
-                        raise HTTPBadRequest('Invalid plan', 'Role not found for step %s' % index)
 
-                    allowed_roles = {row[0] for row in session.execute(get_allowed_roles_query, step)}
+                    if not dynamic:
+                        if role:
+                            step['role_id'] = role
+                        else:
+                            raise HTTPBadRequest('Invalid plan', 'Role not found for step %s' % index)
 
-                    if not allowed_roles:
-                        raise HTTPBadRequest(
-                            'Invalid plan',
-                            'Target %s not found for step %s' % (step['target'], index))
+                        allowed_roles = {row[0] for row in session.execute(get_allowed_roles_query, step)}
 
-                    if role not in allowed_roles:
-                        raise HTTPBadRequest(
-                            'Invalid role',
-                            'Role %s is not appropriate for target %s in step %s' % (
-                                step['role'], step['target'], index))
+                        if not allowed_roles:
+                            raise HTTPBadRequest(
+                                'Invalid plan',
+                                'Target %s not found for step %s' % (step['target'], index))
+
+                        if role not in allowed_roles:
+                            raise HTTPBadRequest(
+                                'Invalid role',
+                                'Role %s is not appropriate for target %s in step %s' % (
+                                    step['role'], step['target'], index))
 
                     try:
-                        session.execute(insert_plan_step_query, step)
+                        if dynamic:
+                            session.execute(insert_dynamic_step_query, step)
+                        else:
+                            session.execute(insert_plan_step_query, step)
                     except IntegrityError:
                         raise HTTPBadRequest('Invalid plan',
                                              'Target not found for step %s' % index)
@@ -1182,6 +1210,7 @@ class Incidents(object):
         - none of the templates used in the plan supports the given application
         '''
         incident_params = ujson.loads(req.context['body'])
+        dynamic_targets = []
         if 'plan' not in incident_params:
             raise HTTPBadRequest('missing plan name attribute')
 
@@ -1204,6 +1233,24 @@ class Incidents(object):
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
+            if 'dynamic_targets' in incident_params:
+                num_targets = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
+                                              'WHERE `plan_id` = :plan_id',
+                                              {'plan_id': plan_id}).scalar()
+                if num_targets != len(incident_params['dynamic_targets']):
+                    raise HTTPBadRequest('Invalid number of dynamic targets')
+
+                for dynamic_target in incident_params.get('dynamic_targets', []):
+                    target = session.execute('''SELECT `target_role`.`id` AS `role_id`, `target`.`id` AS `target_id`
+                                                FROM `target` JOIN `target_role`
+                                                    ON `target_role`.`type_id` = `target`.`type_id`
+                                                WHERE `target`.`name` = :target
+                                                    AND `target_role`.`name` = :role''', dynamic_target)
+                    if target.rowcount == 0:
+                        raise HTTPBadRequest('Invalid incident', 'invalid role %s for target %s' %
+                                             (dynamic_target['role'], dynamic_target['target']))
+                    else:
+                        dynamic_targets.append(target.fetchone())
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
@@ -1239,6 +1286,18 @@ class Incidents(object):
                                            `current_step`, `active`, `application_id`)
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
                 data).lastrowid
+
+            for idx, target in enumerate(dynamic_targets):
+                data = {
+                    'incident_id': incident_id,
+                    'target_id': target['target_id'],
+                    'role_id': target['role_id'],
+                    'index': idx
+                }
+                session.execute('''INSERT INTO `dynamic_plan_map` (`incident_id`, `role_id`,
+                                                                   `target_id`, `dynamic_index`)
+                                   VALUES (:incident_id, :role_id, :target_id, :index)''',
+                                data)
 
             session.commit()
             session.close()
