@@ -129,7 +129,7 @@ iris = {
       notificationTemplateSource: $('#plan-notification-template').html(),
       stepTemplateSource: $('#plan-step-template').html(),
       trackingTemplateSource: $('#plan-tracking-notification-template').html(),
-      testPlanSource: $('#test-plan-template').html(),
+      testPlanTemplateSource: $('#test-plan-template').html(),
       addNotificationBtn: '.plan-notification-add',
       removeNotificationBtn: '.plan-notification-remove',
       planNotificationInputs: '.plan-notification input, .plan-notification select',
@@ -271,13 +271,13 @@ iris = {
             response.viewMode = self.data.viewMode;
             response.availableTemplates = self.data.blankModel.availableTemplates;
             // convert 'repeat' field to 'count' for frontend
-            for (i = 0; i < response.steps.length; i++) {
-              for (j = 0; j < response.steps[i].length; j++) {
+            for (var i = 0; i < response.steps.length; i++) {
+              for (var j = 0; j < response.steps[i].length; j++) {
                 response.steps[i][j].count = response.steps[i][j].repeat + 1;
                 if (response.steps[i][j].dynamic_index !== null) {
                   max_idx = Math.max(max_idx, response.steps[i][j].dynamic_index);
                 }
-                response.steps[i][j].dynamic = response.steps[i][j].dynamic_index !== null
+                response.steps[i][j].dynamic = response.steps[i][j].dynamic_index !== null;
               }
             }
             response.max_dynamic_index = max_idx + 1;
@@ -456,11 +456,11 @@ iris = {
     },
     addNotification: function(event){
       var $step = $(event.target).parents('.plan-step'),
-          notifications = $('.plan-notification');
-          template = Handlebars.compile(this.data.notificationTemplateSource);
+          notifications = $('.plan-notification'),
+          template = Handlebars.compile(this.data.notificationTemplateSource),
           max_id = 0;
 
-      for (i = 0; i < notifications.length; i++){
+      for (var i = 0; i < notifications.length; i++){
         id = notifications[i].id;
         // New notifications have ids like 'notification-n{{id}}'
         // Existing ones have ids like 'notification-{{id}}'
