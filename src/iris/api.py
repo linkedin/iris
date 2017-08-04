@@ -1220,6 +1220,9 @@ class Incidents(object):
             if not plan_id:
                 logger.warn('Plan "%s" not found.', incident_params['plan'])
                 raise HTTPNotFound()
+            num_dynamic = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
+                                          'WHERE `plan_id` = :plan_id',
+                                          {'plan_id': plan_id}).scalar()
 
             app = req.context['app']
 
@@ -1233,24 +1236,22 @@ class Incidents(object):
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
-            if 'dynamic_targets' in incident_params:
-                num_targets = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
-                                              'WHERE `plan_id` = :plan_id',
-                                              {'plan_id': plan_id}).scalar()
-                if num_targets != len(incident_params['dynamic_targets']):
+            if num_dynamic > 0:
+                target_list = incident_params.get('dynamic_targets', [])
+                if num_dynamic != len(target_list):
                     raise HTTPBadRequest('Invalid number of dynamic targets')
 
-                for dynamic_target in incident_params.get('dynamic_targets', []):
+                for dynamic_target in target_list:
                     target = session.execute('''SELECT `target_role`.`id` AS `role_id`, `target`.`id` AS `target_id`
                                                 FROM `target` JOIN `target_role`
                                                     ON `target_role`.`type_id` = `target`.`type_id`
                                                 WHERE `target`.`name` = :target
-                                                    AND `target_role`.`name` = :role''', dynamic_target)
-                    if target.rowcount == 0:
+                                                    AND `target_role`.`name` = :role''', dynamic_target).fetchone()
+                    if target is None:
                         raise HTTPBadRequest('Invalid incident', 'invalid role %s for target %s' %
                                              (dynamic_target['role'], dynamic_target['target']))
                     else:
-                        dynamic_targets.append(target.fetchone())
+                        dynamic_targets.append(target)
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)

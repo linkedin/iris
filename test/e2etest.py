@@ -1270,6 +1270,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     re = requests.post(base_url + 'plans', json=data)
     assert re.status_code == 201
 
+    # Create incident
     re = requests.post(base_url + 'incidents', json={
         'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
@@ -1281,6 +1282,15 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     re = requests.get(base_url + 'incidents/%s' % re.content.strip())
     assert re.status_code == 200
 
+    # Claim
+    re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
+        'owner': sample_user,
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+
+    # Test errors
+    # Invalid role:target combination
     re = requests.post(base_url + 'incidents', json={
         'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
@@ -1288,15 +1298,36 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                             {'role': 'user', 'target': sample_team}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 400
-    assert re.json() == {'description': 'invalid role %s for target %s' % ('user', sample_team) ,'title':'Invalid incident'}
+    assert re.json() == {'description': 'invalid role %s for target %s' % ('user', sample_team),
+                         'title': 'Invalid incident'}
 
-    re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
-        'owner': sample_user,
-        'plan': sample_user + '-test-incident-post',
+    # Not enough targets
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
+        'dynamic_targets': [{'role': 'user', 'target': sample_user}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
-    assert re.status_code == 200
-    assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+    assert re.status_code == 400
+    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+
+    # No targets specified
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-incident-dynamic-post',
+        'context': {}
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+
+    # Too many targets
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-incident-dynamic-post',
+        'context': {},
+        'dynamic_targets': [{'role': 'user', 'target': sample_user},
+                            {'role': 'user', 'target': sample_team},
+                            {'role': 'user', 'target': sample_user}]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json() == {'title': 'Invalid number of dynamic targets'}
 
 
 def test_post_incident_change_application(sample_user, sample_application_name, sample_application_name2, superuser_application):

@@ -102,7 +102,8 @@ INSERT INTO `template_variable` VALUES
 UNLOCK TABLES;
 
 LOCK TABLES `plan_notification` WRITE;
-INSERT INTO `plan_notification` VALUES
+INSERT INTO `plan_notification`(`id`, `plan_id`, `step`, `template`, `target_id`, `role_id`,
+                                `priority_id`, `repeat`, `wait`) VALUES
     (1,1,1,'test_template',4,44,17,1,300),
     (2,1,1,'test_template',4,35,35,0,600),
     (3,1,2,'test_template',4,35,26,0,600),
