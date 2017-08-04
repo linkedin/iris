@@ -2,29 +2,6 @@
 {% block content %}
 <div class="main plan-details"></div>
 
-<!-- Modal for creating a test incident out of this plan -->
-<div class="modal fade" id="test-plan-modal" tabindex="-1" role="dialog" aria-labelledby="test-plan-modal-btn">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-        <h4 class="modal-title">Test plan</h4>
-      </div>
-      <div class="modal-body">
-        This will make a test incident for your plan.
-        <div class="form-inline">
-          <label for="test-plan-modal-application-select">Application: </label>
-          <select id="test-plan-modal-application-select" class="form-control"></select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" id="test-plan">Create Incident</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Modal for deleting this plan -->
 <div class="modal fade" id="delete-plan-modal" tabindex="-1" role="dialog" aria-labelledby="delete-plan-modal-btn">
   <div class="modal-dialog" role="document">
@@ -65,6 +42,53 @@
 </div>
 {% raw %}
 <script id="plan-module-template" type="text/x-handlebars-template">
+  <!-- Modal for creating a test incident out of this plan -->
+  <div class="modal fade" id="test-plan-modal" tabindex="-1" role="dialog" aria-labelledby="test-plan-modal-btn">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">Test plan</h4>
+        </div>
+        <div class="modal-body">
+          This will make a test incident for your plan.<hr>
+          <div class="form-inline">
+            <label for="test-plan-modal-application-select">Application: </label>
+            <select id="test-plan-modal-application-select" class="form-control"></select>
+          </div>
+          {{#isEqual this.max_dynamic_index 0}}
+          {{ else }}
+            <br><h4>Dynamic targets:</h4>
+            <div class="test-plan-dynamic-targets">
+            {{#range max_dynamic_index}}
+              <div class="test-plan-dynamic-target form-inline">
+                <h5>Target {{this}}</h5>
+                <p>
+                  <label class="item-label light" for="test-plan-role-{{this}}">Role: </label>
+                  <select class="form-control border-bottom" data-type="role" value="{{role}}">
+                    {{#each @root.target_roles}}
+                      <option value="{{this.name}}" {{isSelected this.name ../role}} data-url-type="{{this.type}}"> {{this.name}} </option>
+                    {{/each}}
+                  </select>
+                </p>
+                <p>
+                  <label class="item-label light" for="test-plan-target-{{this}}">Target: </label>
+                  <input type="text" class="form-control border-bottom typeahead unload-exclude"
+                     placeholder="{{@root.target_role_type}} name" data-typeaheadtype="target"
+                     data-targettype="{{@root.target_role_type}}">
+                </p>
+              </div>
+            {{/range}}
+            </div>
+          {{/isEqual}}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="test-plan">Create Incident</button>
+        </div>
+      </div>
+    </div>
+  </div>
   {{#if viewMode}}
   <div class="module">
     <h3>
@@ -95,6 +119,10 @@
       <button type="button" class="btn btn-primary btn-sm pull-right" data-toggle="modal" data-target="#publish-plan-modal">Publish Plan</button>
       <button type="button" class="btn btn-danger btn-sm pull-right" data-toggle="modal" data-target="#delete-plan-modal">Delete Plan</button>
     </h3>
+    <div class="toggle-input">
+      <input type="checkbox" class="toggle-dynamic" id="toggle-dynamic-{{id}}" {{#if dynamic}} checked {{/if}}">
+      <label for="toggle-dynamic-{{id}}" data-toggle="tooltip" title="A plan with dynamic targets lets you define a role and target at incident creation time instead of plan creation time. ">Dynamic Targets</label>
+    </div>
     <input type="text" id="plan-name" class="form-control" placeholder="Enter a plan name" value="{{name}}">
     <textarea rows="3" id="plan-desc" class="form-control" placeholder="Briefly describe the plan">{{description}}</textarea>
     <div id="aggregation">
@@ -272,18 +300,22 @@
 {{#if @root.viewMode}}
   <div class="plan-notification {{ priority }}" data-mode="view">
   <!--// view-only template-->
-    <p class="item-content" title="{{ role }}" ><label class="item-label light" data-toggle="tooltip" title="Role for target">Role</label> {{ role }}</p>
-    <p class="item-content" title="{{ target }}"><label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label> {{ target }}</p>
+    {{#isEqual dynamic_index null}}
+      <p class="item-content" title="{{ role }}" ><label class="item-label light" data-toggle="tooltip" title="Role for target">Role</label> {{ role }}</p>
+      <p class="item-content" title="{{ target }}"><label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label> {{ target }}</p>
+    {{else}}
+      <p class="item-content dynamic-index" title="{{ dynamic_index }}" ><label class="item-label light" data-toggle="tooltip" title="Dynamic target number">Target No.</label> {{ dynamic_index }}</p>
+    {{/isEqual}}
     <p class="item-content" title="{{ priority }}"><label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label> {{ priority }}</p>
     <p class="item-content" title="{{ secondsToMinutes wait }}"><label class="item-label light" data-toggle="tooltip" title="Minimum time that must elapse before repeating or moving onto the next escalation step.">Wait</label> {{ secondsToMinutes wait }} minutes</p>
     <p class="item-content" title="{{ count }}"><label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label> {{ count }} times</p>
     <p class="item-content" title="{{ template }}"><label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label> <a href="/templates/{{template}}">{{ template }}</a></p>
   </div>
 {{else}}
-  <div draggable="true" class="plan-notification" data-mode="edit">
+  <div draggable="true" class="plan-notification" data-mode="edit" data-dynamic="{{#if dynamic}}1{{else}}0{{/if}}" id="notification-{{id}}">
   <!--// edit-mode template -->
     <div class="plan-notification-remove"> X </div>
-    <p>
+    <p class="notification-static">
       <label class="item-label light" data-toggle="tooltip" title="Role for target">Role</label>
       <select class="form-control border-bottom" data-type="role" value="{{role}}">
         {{#each @root.target_roles}}
@@ -291,11 +323,15 @@
         {{/each}}
       </select>
     </p>
-    <p>
+    <p class="notification-static">
       <label class="item-label light" data-toggle="tooltip" title="Target of role - e.g. 'Manager of SRE-INFRA'">Target</label>
       <input type="text" class="form-control border-bottom typeahead"
              placeholder="{{target_role_type}} name" data-type="target"
              value="{{target}}" data-url-type="{{target_role_type}}">
+    </p>
+    <p class="notification-dynamic">
+      <label class="item-label light" data-toggle="tooltip" title="0-indexed number assigned to a dynamic target. Notifications with the same target index will be sent to the same person.">Target No.</label>
+      <input type="number" class="form-control border-bottom" placeholder="Target index" data-type="dynamic_index" value="{{dynamic_index}}" min="0">
     </p>
     <p>
       <label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label>

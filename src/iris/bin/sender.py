@@ -138,14 +138,18 @@ UNSENT_MESSAGES_SQL = '''SELECT
     `plan`.`id` as `plan_id`,
     `incident`.`id` as `incident_id`,
     `incident`.`context` as `context`,
-    `plan_notification`.`template` as `template`
+    `plan_notification`.`template` as `template`,
+    `dynamic_target`.`name` as `dynamic_target`
 FROM `message`
 JOIN `application` ON `message`.`application_id`=`application`.`id`
 JOIN `priority` ON `message`.`priority_id`=`priority`.`id`
-JOIN `target` ON `message`.`target_id`=`target`.`id`
+LEFT OUTER JOIN `target` ON `message`.`target_id`=`target`.`id`
 LEFT OUTER JOIN `plan` ON `message`.`plan_id`=`plan`.`id`
 LEFT OUTER JOIN `plan_notification` ON `message`.`plan_notification_id`=`plan_notification`.`id`
 LEFT OUTER JOIN `incident` ON `message`.`incident_id`=`incident`.`id`
+LEFT OUTER JOIN `dynamic_plan_map` ON `incident`.`id` = `dynamic_plan_map`.`incident_id`
+  AND `plan_notification`.`dynamic_index` = `dynamic_plan_map`.`dynamic_index`
+LEFT OUTER JOIN `target` `dynamic_target` ON `dynamic_target`.`id` = `dynamic_plan_map`.`target_id`
 WHERE `message`.`active`=1'''
 
 SENT_MESSAGE_BATCH_SQL = '''UPDATE `message`
@@ -254,8 +258,14 @@ config = None
 def create_messages(incident_id, plan_notification_id):
     application_id = cache.incidents[incident_id]['application_id']
     plan_notification = cache.plan_notifications[plan_notification_id]
-    role = cache.roles[plan_notification['role_id']]['name']
-    target = cache.targets[plan_notification['target_id']]['name']
+    if plan_notification['role_id'] is None and plan_notification['target_id'] is None:
+        dynamic_info = cache.dynamic_plan_map[incident_id][plan_notification['dynamic_index']]
+        role = cache.roles[dynamic_info['role_id']]['name']
+        target = cache.targets[dynamic_info['target_id']]['name']
+    else:
+        role = cache.roles[plan_notification['role_id']]['name']
+        target = cache.targets[plan_notification['target_id']]['name']
+
     # find role/priority from plan_notification_id
     names = cache.targets_for_role(role, target)
     priority_id = plan_notification['priority_id']
@@ -309,7 +319,7 @@ def create_messages(incident_id, plan_notification_id):
                             application_id, target_id, priority_id, body))
 
             if redirect_to_plan_owner:
-                # needed for the lastrowid to exist in the DB to satsify the constraint
+                # needed for the lastrowid to exist in the DB to satisfy the constraint
                 connection.commit()
                 auditlog.message_change(
                     cursor.lastrowid,
@@ -509,6 +519,9 @@ def poll():
     logger.info('%d new messages waiting in database - queued: %d', new_msg_count, queued_msg_cnt)
 
     for m in cursor:
+        # Set dynamic target as target if applicable
+        if m.get('dynamic_target') and m.get('target') is None:
+            m['target'] = m['dynamic_target']
         # iris's own email response does not have context since content and
         # subject are already set
         if m.get('context'):
