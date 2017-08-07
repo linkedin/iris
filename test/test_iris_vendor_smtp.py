@@ -43,3 +43,17 @@ def test_smtp_send_email(mocker):
         ['foo@bar'],
         CheckEmailString())
     mocked_SMPT.return_value.quit.assert_called_once_with()
+
+
+def test_smtp_unicode(mocker):
+    from iris.vendors.iris_smtp import iris_smtp
+    smtp_config = {
+        'smtp_server': 'foo',
+        'from': 'iris@bar',
+    }
+    smtp_vendor = iris_smtp(smtp_config)
+    smtp_vendor.send_email({
+        'destination': 'foo@bar',
+        'subject': 'hello',
+        'body': u'\u201c',
+    })
