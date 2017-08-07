@@ -52,6 +52,7 @@ def test_smtp_unicode(mocker):
         'from': 'iris@bar',
     }
     smtp_vendor = iris_smtp(smtp_config)
+    mocker.patch('iris.vendors.iris_smtp.SMTP')
     smtp_vendor.send_email({
         'destination': 'foo@bar',
         'subject': 'hello',
