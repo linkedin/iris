@@ -67,7 +67,6 @@ iris = {
     },
     init: function(){
       iris.changeTitle('Plans');
-      var self = this;
       if (this.initialized == false) {
         this.initFilters();
         this.events();
@@ -77,8 +76,7 @@ iris = {
     },
     events: function(){
       var data = this.data,
-          $table = data.$table,
-          $page = data.$page;
+          $table = data.$table;
 
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
@@ -108,7 +106,6 @@ iris = {
       // });
     },
     getData: function(params){
-      var self = this;
       params['limit'] = iris.data.tableEntryLimit;
       return $.getJSON(this.data.url, params).fail(function(){
         iris.createAlert('No plans found');
@@ -178,7 +175,7 @@ iris = {
           application: {
             email_subject: "",
             email_text: "",
-            email_html: "",
+            email_html: ""
           }
         }
       }
@@ -244,8 +241,8 @@ iris = {
           }
         }
         self.data.blankModel.availableTemplates.sort(function(a,b){
-          var a = a.toLowerCase(),
-              b = b.toLowerCase();
+          a = a.toLowerCase();
+          b = b.toLowerCase();
 
           if (a < b) {
             return -1;
@@ -363,7 +360,7 @@ iris = {
       var $this = $(this);
 
       if ($this.is('select[data-type="role"]')) {
-        var $target = $this.parents('.test-plan-dynamic-target').find('input[data-typeaheadtype="target"]')
+        var $target = $this.parents('.test-plan-dynamic-target').find('input[data-typeaheadtype="target"]');
         $target.val('').attr(
             'placeholder',
             $this.find('option:selected').attr('data-url-type') + ' name');
@@ -377,8 +374,8 @@ iris = {
       var $modal = $('#delete-plan-modal');
       $.ajax({
           url: '/v0/plans/' + this.data.name,
-          method: 'DELETE',
-      }).done(function(r) {
+          method: 'DELETE'
+      }).done(function() {
         window.onbeforeunload = null;
         window.location = '/plans/';
       }).fail(function(r) {
@@ -429,7 +426,7 @@ iris = {
           data: JSON.stringify({active: 1}),
           method: 'POST',
           contentType: 'application/json'
-      }).done(function(r){
+      }).done(function(){
         $el.attr('data-active', 1);
       }).fail(function(){
         iris.createAlert('Failed to activate.');
@@ -458,7 +455,9 @@ iris = {
       var $step = $(event.target).parents('.plan-step'),
           notifications = $('.plan-notification'),
           template = Handlebars.compile(this.data.notificationTemplateSource),
-          max_id = 0;
+          max_id = 0,
+          id,
+          newModel;
 
       for (var i = 0; i < notifications.length; i++){
         id = notifications[i].id;
@@ -496,7 +495,6 @@ iris = {
     updateSubmitModel: function(){
       // gets & checks data from plan inputs and prepares model for post.
       var model = this.data.submitModel,
-          self = this,
           missingFields = [],
           $trackingEl = $('#tracking-notification.active');
 
@@ -529,7 +527,7 @@ iris = {
       }
 
       // collect data for notifications
-      $('.plan-step:has(.plan-notification)').each(function(i){
+      $('.plan-step:has(.plan-notification)').each(function(){
         var step = [],
             $this = $(this);
 
@@ -774,8 +772,8 @@ iris = {
     },
     renderVariables: function(e){
       var $el = $(e.target),
-          app = $el.val();
-      template = Handlebars.compile(this.data.variablesTemplateSource);
+          app = $el.val(),
+          template = Handlebars.compile(this.data.variablesTemplateSource);
       $el.parents().find('.variables').html(template({variables: this.getVariablesForApp(app)}));
     }
   }, //end iris.plan
@@ -795,7 +793,6 @@ iris = {
     },
     init: function(){
       iris.changeTitle('Templates');
-      var self = this;
       if (this.initialized == false) {
         this.initFilters();
         this.events();
@@ -805,8 +802,7 @@ iris = {
     },
     events: function(){
       var data = this.data,
-          $table = data.$table,
-          $page = data.$page;
+          $table = data.$table;
 
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
@@ -820,7 +816,6 @@ iris = {
       data.$filterForm.on('submit', iris.tables.filterTable.bind(this));
     },
     getData: function(params){
-      var self = this;
       return $.getJSON(this.data.url, params).fail(function(){
         iris.createAlert('No templates found');
       });
@@ -882,7 +877,7 @@ iris = {
       Handlebars.registerPartial('template-step', $('#template-step-template').html());
       Handlebars.registerPartial('template-notification', $('#template-notification-template').html());
       Handlebars.registerPartial('variables', this.data.variablesTemplateSource);
-      this.getTemplate(path).done(function(response){
+      this.getTemplate(path).done(function(){
         self.events();
         iris.versionTour.init();
       });
@@ -970,11 +965,10 @@ iris = {
     renderVariables: function(e){
       var $el = $(e.target),
           app = $el.val(),
-          self = this;
+          self = this,
+          template = Handlebars.compile(self.data.variablesTemplateSource);
 
       self.data.$page.find(self.data.previewTemplate).css('display', !app ? 'none' : '');
-
-      template = Handlebars.compile(self.data.variablesTemplateSource);
       $el.parents('.step').find('.variables').html(template({variables: this.getVariablesForApp(app)}));
     },
     cloneTemplate: function(){
@@ -1024,7 +1018,7 @@ iris = {
           data: JSON.stringify({active: 1}),
           method: 'POST',
           contentType: 'application/json'
-      }).done(function(r){
+      }).done(function(){
         $el.attr('data-active', 1);
       }).fail(function(){
         iris.createAlert('Failed to activate.');
@@ -1170,7 +1164,7 @@ iris = {
           iris.createAlert('Error: ' + errorTxt);
         });
       }
-    },
+    }
   }, //end iris.template
   incidents: {
     initialized: false,
@@ -1230,7 +1224,6 @@ iris = {
     events: function(){
       var data = this.data,
           $table = data.$table,
-          $page = data.$page,
           self = this;
 
       $table.on('click', 'tbody tr[data-route]', function(e){
@@ -1251,11 +1244,8 @@ iris = {
       data.$filterForm.on('submit', iris.tables.filterTable.bind(this));
     },
     getData: function(params){
-       var self = this,
-           fields = this.data.fields;
-
       //merge params and fields
-      params['fields'] = fields;
+      params['fields'] = this.data.fields;
       params['limit'] = iris.data.tableEntryLimit;
 
       return $.ajax({
@@ -1376,10 +1366,6 @@ iris = {
       }
     },
     init: function(){
-      var self = this,
-          location = window.location.pathname.split('/'),
-          path = this.data.id = location[location.length - 1];
-
       this.getIncident(this.data.id);
     },
     events: function(){
@@ -1465,7 +1451,6 @@ iris = {
     },
     init: function(){
       iris.changeTitle('Messages');
-      var self = this;
       if (this.initialized == false) {
         this.initFilters();
         this.events();
@@ -1476,8 +1461,7 @@ iris = {
 
     events: function(){
       var data = this.data,
-          $table = data.$table,
-          $page = data.$page;
+          $table = data.$table;
 
       $table.on('click', 'tbody tr[data-route]', function(e){
         if (e.target.tagName !== 'A') {
@@ -1491,11 +1475,8 @@ iris = {
       data.$filterForm.on('submit', iris.tables.filterTable.bind(this));
     },
     getData: function(params){
-      var self = this,
-          fields = this.data.fields;
-
       //merge params and fields
-      params['fields'] = fields;
+      params['fields'] = this.data.fields;
       params['limit'] = iris.data.tableEntryLimit;
 
       return $.ajax({
@@ -1510,7 +1491,7 @@ iris = {
       for (var i = 0; i < window.appData.applications.length; i++) {
         this.data.$filterApp.append($(document.createElement('option')).attr({ value: window.appData.applications[i].name }).text(window.appData.applications[i].name));
       }
-      for (var i = 0; i < window.appData.priorities.length; i++) {
+      for (i = 0; i < window.appData.priorities.length; i++) {
         this.data.$filterPriority.append($(document.createElement('option')).attr({ value: window.appData.priorities[i].name }).text(window.appData.priorities[i].name));
       }
       iris.typeahead.init('user');
@@ -1527,8 +1508,7 @@ iris = {
       incidentSource: $('#message-template').html()
     },
     init: function(){
-      var self = this,
-          location = window.location.pathname.split('/'),
+      var location = window.location.pathname.split('/'),
           path = this.data.id = location[location.length - 1];
       this.getMessage(path);
     },
@@ -1557,9 +1537,8 @@ iris = {
           });
       }).fail(function() {
           iris.createAlert('Message not found');
-          return;
       });
-    },
+    }
   },
   user: {
     data: {
@@ -1686,7 +1665,7 @@ iris = {
         var frag = '';
         window.appData.modes.forEach(function(mode) {
           frag += ['<option>', mode, '</option>'].join('');
-        })
+        });
         $(this).html(frag)
       });
       $('#reprio-dest-mode').val('sms');
@@ -1783,7 +1762,6 @@ iris = {
     },
     createBatchingTable: function(){
       var template = Handlebars.compile(this.data.batchingTemplate),
-          $priority = this.data.$priority,
           settings = this.data.settings;
       this.data.$batching.append(template(settings));
     },
@@ -1933,7 +1911,7 @@ iris = {
       }
 
       // If this application already exists, just go to its page
-      for (i = 0; i < window.appData.applications.length; i++) {
+      for (var i = 0; i < window.appData.applications.length; i++) {
         if (window.appData.applications[i].name.toLowerCase() == appNameLower) {
           window.location = '/applications/' + window.appData.applications[i].name;
           return;
@@ -1947,7 +1925,7 @@ iris = {
           }),
           method: 'POST',
           contentType: 'application/json'
-      }).done(function(r) {
+      }).done(function() {
         window.location = '/applications/' + appName
       }).fail(function(r) {
         iris.createAlert('Failed creating application: ' + r.responseJSON['title'])
@@ -2103,7 +2081,7 @@ iris = {
     },
     modelPersist: function() {
       var self = this;
-      self.data.$page.find('textarea').each(function(elem) {
+      self.data.$page.find('textarea').each(function() {
         var key = $(this).data('field');
         if (key && key in self.data.model) {
           self.data.model[key] = $(this).val();
@@ -2263,7 +2241,7 @@ iris = {
           }
         });
         // Remove any default modes using modes we no longer support
-        for (priority in self.data.model.default_modes) {
+        for (var priority in self.data.model.default_modes) {
           if (self.data.model.supported_modes.indexOf(self.data.model.default_modes[priority]) == -1) {
             delete self.data.model.default_modes[priority];
           }
@@ -2299,7 +2277,7 @@ iris = {
       $('#rekey-app-modal').modal();
     },
     renameApplication: function() {
-      var self = this, $nameBox = $('#app-new-name-box'),
+      var $nameBox = $('#app-new-name-box'),
           newName = $.trim($nameBox.val());
       if (newName == '' || newName == this.data.application) {
         $nameBox.focus();
@@ -2314,11 +2292,11 @@ iris = {
         }),
         method: 'PUT',
         contentType: 'application/json'
-      }).done(function(r) {
+      }).done(function() {
         window.onbeforeunload = null;
         window.location = '/applications/' + newName;
       }).fail(function(r) {
-        iris.createAlert('Failed renaming application: ' + r.responseJSON['title'])
+        iris.createAlert('Failed renaming application: ' + r.responseJSON['title']);
         $('body').scrollTop(0);
         $renameBtn.prop('disabled', false);
       }).always(function() {
@@ -2332,11 +2310,11 @@ iris = {
         url: '/v0/applications/' + this.data.application,
         method: 'DELETE',
         contentType: 'application/json'
-      }).done(function(r) {
+      }).done(function() {
         window.onbeforeunload = null;
         window.location = '/applications/';
       }).fail(function(r) {
-        iris.createAlert('Failed deleting application: ' + r.responseJSON['title'])
+        iris.createAlert('Failed deleting application: ' + r.responseJSON['title']);
         $('body').scrollTop(0);
         $deleteBtn.prop('disabled', false);
       }).always(function() {
@@ -2350,7 +2328,7 @@ iris = {
         url: '/v0/applications/' + this.data.application + '/rekey',
         method: 'POST',
         contentType: 'application/json'
-      }).done(function(r) {
+      }).done(function() {
         iris.createAlert('Successfully rekey\'d application', 'success')
       }).fail(function(r) {
         iris.createAlert('Failed re-keying application: ' + r.responseJSON['title'])
@@ -2420,16 +2398,16 @@ iris = {
             url += k.slice(7) +'=' + encodeURI(v) + '&';
           }
         }
-        url = url.slice(0, -1)
+        url = url.slice(0, -1);
         history.pushState(url, null, url);
-      };
+      }
       var self = this;
 
       if (window.location.search) {
         var qs = {};
         var qs_parts = decodeURI(window.location.search.substr(1)).split('&');
-        for (var i = qs_parts.length - 1; i >= 0; i--) {
-          qs_pair = qs_parts[i].split('=');
+        for (i = qs_parts.length - 1; i >= 0; i--) {
+          var qs_pair = qs_parts[i].split('=');
           qs[qs_pair[0]] = qs_pair[1];
         }
       } else {
@@ -2446,7 +2424,6 @@ iris = {
 
         var $this = $(this);
         var name = $this.attr('name');
-        var value = $this.val();
         if (typeof(name) != 'undefined') {
           var qs_name = name.split('-')[1];
           var qs_value = qs[qs_name];
@@ -2492,7 +2469,7 @@ iris = {
         self.data.$table.empty();
         iris.tables.createTable.call(self, data);
       }).always(function(){
-        if ($btn && $btn.prop('disabled')) { $btn.prop('disabled', false) };
+        if ($btn && $btn.prop('disabled')) { $btn.prop('disabled', false) }
       });
     },
     createTable: function(data){
@@ -2550,10 +2527,10 @@ iris = {
       //---- 'before' - inserts alert as a sibling node before $el
       //---- 'after' - inserts alert as a sibling node after $el
     //-- fixed: alternate alert which is absolutely positioned at top center of the screen
-    var alert,
-        type = type || 'danger',
-        $el = $el || $('.main'),
-        action = action || 'prepend';
+    var alert;
+    type = type || 'danger';
+    $el = $el || $('.main');
+    action = action || 'prepend';
     if (!$('#iris-alert').length) {
       alert = '<div id="iris-alert" class="alert alert-'+ type +' alert-dismissible ' + fixed + '" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><span class="alert-content"></span></div>';
       $el[action](alert);
@@ -2564,7 +2541,7 @@ iris = {
     data: {
       targetUrl: '/v0/targets/',
       planUrl: '/v0/plans?name__startswith=%QUERY&active=1',
-      field: 'input.typeahead',
+      field: 'input.typeahead'
     },
     init: function(urlType){
       var $field = $(this.data.field),
@@ -2662,7 +2639,7 @@ iris = {
     saveState: function(){
       localStorage.setItem('tourCompleted', true);
     },
-    showPrevButton: true,
+    showPrevButton: true
   },
   registerHandlebarHelpers: function(){
     // Register handlebars helpers
