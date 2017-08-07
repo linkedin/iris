@@ -68,7 +68,7 @@ class iris_smtp(object):
 
         if plaintext:
             mt = MIMEText(None, 'plain', 'utf-8')
-            mt.set_payload(quopri.encodestring(plaintext))
+            mt.set_payload(quopri.encodestring(plaintext.encode('UTF-8')))
             mt.replace_header('Content-Transfer-Encoding', 'quoted-printable')
             m.attach(mt)
 
@@ -89,7 +89,7 @@ class iris_smtp(object):
             mt = MIMEText(None, 'html', 'utf-8')
             # Google does not like base64 encoded emails for the oneclick button functionalty,
             # so force quoted printable.
-            mt.set_payload(quopri.encodestring(html))
+            mt.set_payload(quopri.encodestring(html.encode('UTF-8')))
             mt.replace_header('Content-Transfer-Encoding', 'quoted-printable')
             m.attach(mt)
 
