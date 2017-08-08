@@ -1,6 +1,16 @@
 Configuration
 =============
 
+Oncall integration
+------------------
+Iris communicates with Oncall primarily through its role_lookup plugins, which allow it to 
+determine a message recipient given a role:target pair. To use Oncall with Iris:
+
+#. Configure Iris to communicate with Oncall by setting the "oncall-api" key in the config to
+   the URL where Oncall is hosted
+
+#. In the "role_lookups" key, include "oncall" in the list and remove "dummy"
+
 Slack integration
 -----------------
 
