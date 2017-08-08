@@ -11,6 +11,7 @@ role_lookups:
   # - oncall # oncall service integration
   - dummy # dummy role lookup used for testing purposes. Disable this in production.
 
+# oncall-api: https://oncall.dummy.com  # oncall url
 metrics: dummy
 
 # Change these to random long values when you run this in production
