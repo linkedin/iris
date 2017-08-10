@@ -1366,7 +1366,9 @@ iris = {
       }
     },
     init: function(){
-      this.getIncident(this.data.id);
+      var location = window.location.pathname.split('/'),
+          path = this.data.id = location[location.length - 1];
+      this.getIncident(path);
     },
     events: function(){
       var data = this.data;
