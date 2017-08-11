@@ -160,7 +160,9 @@ class Templates():
         logger.info('refreshing templates')
 
         try:
-            templates_response = iris_client.get('templates/?active=1&fields=id&fields=name').json()
+            request = iris_client.get('templates/?active=1&fields=id&fields=name')
+            request.raise_for_status()
+            templates_response = request.json()
         except (requests.exceptions.RequestException, ValueError):
             logger.exception('Failed to hit api to get active templates')
             return
@@ -199,7 +201,9 @@ class Plans():
                       'aggregation_reset', 'name', 'tracking_type', 'tracking_key', 'tracking_template']
 
             try:
-                plan = iris_client.get('plans/%s/' % key, params={'fields': fields}).json()
+                request = iris_client.get('plans/%s/' % key, params={'fields': fields})
+                request.raise_for_status()
+                plan = request.json()
             except (requests.exceptions.RequestException, ValueError):
                 logger.exception('Failed to hit api to get plan %s', key)
                 return None
@@ -234,7 +238,9 @@ class Plans():
         logger.info('refreshing plans')
 
         try:
-            plans_response = iris_client.get('plans/?active=1&fields=id&fields=name').json()
+            request = iris_client.get('plans/?active=1&fields=id&fields=name')
+            request.raise_for_status()
+            plans_response = request.json()
         except (requests.exceptions.RequestException, ValueError):
             logger.exception('Failed to hit api to refresh plans')
             return
