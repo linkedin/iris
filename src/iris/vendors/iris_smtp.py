@@ -101,7 +101,7 @@ class iris_smtp(object):
                 smtp.connect(mx[1], 25)
                 conn = smtp
                 break
-            except Exception, e:
+            except Exception as e:
                 logger.exception(e)
 
         if not conn:
