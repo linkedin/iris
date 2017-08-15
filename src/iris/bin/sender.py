@@ -345,8 +345,19 @@ def deactivate():
 
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
-    cursor.execute(INACTIVE_SQL)
-    connection.commit()
+
+    max_retries = 3
+
+    # this deadlocks sometimes. try until it doesn't.
+    for i in xrange(max_retries):
+        try:
+            cursor.execute(INACTIVE_SQL)
+            connection.commit()
+            break
+        except Exception:
+            logger.exception('Failed running deactivate query. (Try %s/%s)', i + 1, max_retries)
+            sleep(.2)
+
     cursor.close()
     connection.close()
 
