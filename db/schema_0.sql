@@ -71,6 +71,44 @@ CREATE TABLE `incident` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `incident_claim_action`
+--
+
+DROP TABLE IF EXISTS `incident_claim_action`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `incident_claim_action` (
+  `id` tinyint(4) NOT NULL AUTO_INCREMENT,
+  `name` varchar(30) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `incident_claim`
+--
+
+DROP TABLE IF EXISTS `incident_claim`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `incident_claim` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `incident_id` bigint(20) NOT NULL,
+  `target_id` bigint(20) NOT NULL,
+  `time` datetime NOT NULL,
+  `action_id` tinyint(4) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ix_incident_claim_time` (`time`),
+  KEY `ix_incident_claim_target_id` (`target_id`),
+  KEY `ix_incident_claim_incident_id` (`incident_id`),
+  KEY `ix_action_claim_action_id` (`action_id`),
+  CONSTRAINT `incident_claim_ibfk_2` FOREIGN KEY (`target_id`) REFERENCES `user` (`target_id`),
+  CONSTRAINT `incident_claim_ibfk_3` FOREIGN KEY (`action_id`) REFERENCES `incident_claim_action` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `message`
 --
 

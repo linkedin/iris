@@ -150,12 +150,12 @@ incident_columns = {
     'id': '`incident`.`id` as `id`',
     'plan': '`plan`.`name` as `plan`',
     'plan_id': '`incident`.`plan_id` as `plan_id`',
-    'active': '`incident`.`active` as `active`',
+    'active': 'LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") as `active`',
     'updated': 'UNIX_TIMESTAMP(`incident`.`updated`) as `updated`',
     'application': '`application`.`name` as `application`',
     'context': '`incident`.`context` as `context`',
     'created': 'UNIX_TIMESTAMP(`incident`.`created`) as `created`',
-    'owner': '`target`.`name` as `owner`',
+    'owner': 'IF(`incident_claim_action`.`name` = "claim", `target`.`name`, NULL) as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
 }
 
@@ -163,7 +163,7 @@ incident_filters = {
     'id': '`incident`.`id`',
     'plan': '`plan`.`name`',
     'plan_id': '`incident`.`plan_id`',
-    'active': '`incident`.`active`',
+    'active': 'LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim")',
     'updated': '`incident`.`updated`',
     'application': '`application`.`name`',
     'context': '`incident`.`context`',
@@ -181,23 +181,30 @@ incident_filter_types = {
 }
 
 incident_query = '''SELECT %s FROM `incident`
+LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+          (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
+LEFT JOIN `target` ON `target`.`id` = `incident_claim`.`target_id`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
-LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
 
-single_incident_query = '''SELECT `incident`.`id` as `id`,
+single_incident_query = '''
+SELECT `incident`.`id` as `id`,
     `incident`.`plan_id` as `plan_id`,
     `plan`.`name` as `plan`,
     UNIX_TIMESTAMP(`incident`.`created`) as `created`,
     UNIX_TIMESTAMP(`incident`.`updated`) as `updated`,
     `incident`.`context` as `context`,
-    `target`.`name` as `owner`,
     `application`.`name` as `application`,
     `incident`.`current_step` as `current_step`,
-    `incident`.`active` as `active`
+    LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") as `active`,
+    IF(`incident_claim_action`.`name` = "claim", `target`.`name`, NULL) as `owner`
 FROM `incident`
+LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+          (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
+LEFT JOIN `target` ON `target`.`id` = `incident_claim`.`target_id`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
-LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`
 WHERE `incident`.`id` = %s'''
 
@@ -217,6 +224,15 @@ JOIN `target` ON `message`.`target_id` = `target`.`id`
 JOIN `plan_notification` ON `message`.`plan_notification_id` = `plan_notification`.`id`
 WHERE `message`.`incident_id` = %s
 ORDER BY `message`.`sent`'''
+
+single_incident_claim_history_query = '''
+SELECT `incident_claim_action`.`name` as `action`, `target`.`name` as `user`, `incident_claim`.`time`
+FROM `incident_claim`
+JOIN `incident_claim_action` on `incident_claim_action`.`id` = `incident_claim`.`action_id`
+JOIN `target` ON `target`.`id` = `incident_claim`.`target_id`
+WHERE `incident_claim`.`incident_id` = %s
+ORDER BY `incident_claim`.`time` ASC
+'''
 
 plan_columns = {
     'id': '`plan`.`id` as `id`',
@@ -1364,6 +1380,10 @@ class Incident(object):
         if incident:
             cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
             incident['steps'] = cursor.fetchall()
+
+            cursor.execute(single_incident_claim_history_query, (incident['id']))
+            incident['claim_history'] = cursor.fetchall()
+
             connection.close()
 
             incident['context'] = ujson.loads(incident['context'])
@@ -3473,28 +3493,40 @@ class Stats(object):
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
             'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
             'pct_incidents_claimed_last_month': '''SELECT ROUND(
-                                                   (SELECT COUNT(*) FROM `incident`
+                                                   (SELECT COUNT(*)
+                                                    FROM `incident`
+                                                    LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                                                              (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+                                                    LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
                                                     WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                     AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                    AND `active` = FALSE
+                                                    AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = FALSE
                                                     AND NOT isnull(`owner_id`)) /
                                                    (SELECT COUNT(*) FROM `incident`
                                                     WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                     AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
             'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
                                                                                 FROM `incident`
+                                                                                LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                                                                                          (SELECT `id` FROM `incident_claim`
+                                                                                           WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+                                                                                LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
                                                                                 WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                                 AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                                AND `active` = FALSE
+                                                                                AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = FALSE
                                                                                 AND NOT ISNULL(`owner_id`)
                                                                                 AND NOT ISNULL(`updated`)),
                                                             @row_id := 0,
                                                             (SELECT CEIL(AVG(time_to_claim)) as median
                                                             FROM (SELECT `updated` - `created` as time_to_claim
                                                                   FROM `incident`
+                                                                  LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                                                                            (SELECT `id` FROM `incident_claim`
+                                                                             WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+                                                                  LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
                                                                   WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                   AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                  AND `active` = FALSE
+                                                                  AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = FALSE
                                                                   AND NOT ISNULL(`owner_id`)
                                                                   AND NOT ISNULL(`updated`)
                                                                   ORDER BY time_to_claim) as time_to_claim
@@ -3548,9 +3580,13 @@ class ApplicationStats(object):
                                                    AND `application_id` = %(application_id)s''',
             'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
                                                                                 FROM `incident`
+                                                                                LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                                                                                          (SELECT `id` FROM `incident_claim`
+                                                                                           WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+                                                                                LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
                                                                                 WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                                 AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                                AND `active` = FALSE
+                                                                                AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = FALSE
                                                                                 AND NOT ISNULL(`owner_id`)
                                                                                 AND NOT ISNULL(`updated`)
                                                                                 AND `application_id` = %(application_id)s),
@@ -3558,9 +3594,13 @@ class ApplicationStats(object):
                                                             (SELECT CEIL(AVG(time_to_claim)) as median
                                                             FROM (SELECT `updated` - `created` as time_to_claim
                                                                   FROM `incident`
+                                                                  LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                                                                            (SELECT `id` FROM `incident_claim`
+                                                                             WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+                                                                  LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
                                                                   WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
                                                                   AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                  AND `active` = FALSE
+                                                                  AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = FALSE
                                                                   AND NOT ISNULL(`owner_id`)
                                                                   AND NOT ISNULL(`updated`)
                                                                   AND `application_id` = %(application_id)s

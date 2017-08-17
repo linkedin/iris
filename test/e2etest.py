@@ -409,8 +409,8 @@ def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_nu
     assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
 
-def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
-    if not all([fake_message_id, fake_incident_id, sample_phone]):
+def test_api_response_sms(fake_message_id, fake_incident_id, sample_user, sample_phone):
+    if not all([fake_message_id, fake_incident_id, sample_user, sample_phone]):
         pytest.skip('Failed finding a batch ID to use for tests')
 
     base_body = {
@@ -434,6 +434,12 @@ def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
     assert re.json()['app_response'].startswith('Iris incident(%s) claimed' % fake_incident_id)
+
+    re = requests.get(base_url + 'incidents/%s' % fake_incident_id)
+    assert re.status_code == 200
+    result = re.json()
+    assert result['active'] == 0
+    assert result['owner'] == sample_user
 
     data = base_body.copy()
     data['Body'] = fake_message_id
@@ -473,6 +479,67 @@ def test_api_response_batch_sms(fake_batch_id, sample_phone):
     data['Body'] = '%s claim arg1 arg2' % '*(fasdf'
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 400
+
+
+def test_api_claim_history(sample_user, sample_application_name, sample_plan_name):
+    incident_id, message_ids = create_incident_with_message(sample_application_name, sample_plan_name, [sample_user], 'sms')
+
+    assert incident_id
+
+    # assure that it's fresh and unclaimed and active
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    info = re.json()
+    assert info['active'] == 1
+    assert info['owner'] is None
+
+    # make sure it's present in the active incident list
+    re = requests.get(base_url + 'incidents?active=1&fields=id')
+    assert re.status_code == 200
+    assert incident_id in {incident['id'] for incident in re.json()}
+
+    # claim it
+    re = requests.post(base_url + 'incidents/%s' % incident_id, json={'owner': sample_user})
+    assert re.status_code == 200
+    info = re.json()
+    assert info['active'] == 0
+    assert info['owner'] == sample_user
+    assert info['incident_id'] == incident_id
+
+    # make sure it's present in the inactive owned by this user list
+    re = requests.get(base_url + 'incidents?active=0&owner=%s&fields=id&fields=owner' % sample_user)
+    assert re.status_code == 200
+    assert (incident_id, sample_user) in {(incident['id'], incident['owner']) for incident in re.json()}
+
+    # try to unclaim it and make it active again
+    re = requests.post(base_url + 'incidents/%s' % incident_id, json={'owner': None})
+    assert re.status_code == 200
+    info = re.json()
+    assert info['active'] == 1
+    assert info['owner'] is None
+    assert info['incident_id'] == incident_id
+
+    # claim it again
+    re = requests.post(base_url + 'incidents/%s' % incident_id, json={'owner': sample_user})
+    assert re.status_code == 200
+    info = re.json()
+    assert info['active'] == 0
+    assert info['owner'] == sample_user
+    assert info['incident_id'] == incident_id
+
+    # validate audit history
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    info = re.json()
+    assert info['active'] == 0
+    assert info['owner'] == sample_user
+
+    # first we claimed, then unclaimed, then claimed again. when you unclaim, we consider the last user
+    # who claimed is the person unclaiming
+    correct_history = [('claim', sample_user), ('unclaim', sample_user), ('claim', sample_user)]
+
+    # use list comprehension getting the action/user so we can easily dodge comparing the date column
+    assert [(action['action'], action['user']) for action in info['claim_history']] == correct_history
 
 
 def test_api_response_claim_all(sample_user, sample_phone, sample_application_name, sample_application_name2, sample_plan_name, sample_email):
@@ -608,11 +675,15 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
 
     re = requests.get(base_url + 'incidents/%s' % incident_id_1)
     assert re.status_code == 200
-    assert re.json()['active'] == 0
+    result = re.json()
+    assert result['active'] == 0
+    assert result['owner'] == sample_user
 
     re = requests.get(base_url + 'incidents/%s' % incident_id_2)
     assert re.status_code == 200
-    assert re.json()['active'] == 0
+    result = re.json()
+    assert result['active'] == 0
+    assert result['owner'] == sample_user
 
 
 def test_api_response_claim_last(sample_user, sample_phone, sample_application_name, sample_plan_name, sample_email):
@@ -663,7 +734,9 @@ def test_api_response_claim_last(sample_user, sample_phone, sample_application_n
 
     re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
-    assert re.json()['active'] == 0
+    result = re.json()
+    assert result['active'] == 0
+    assert result['owner'] == sample_user
 
 
 def test_api_response_already_claimed(sample_user, sample_phone, sample_user2, sample_phone2, sample_application_name, sample_plan_name, sample_email):

@@ -39,9 +39,13 @@ NEW_INCIDENTS = '''SELECT
     `incident`.`context` as `context`,
     `application`.`name` as `application`
 FROM `incident`
+LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+          (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
 JOIN `application`
 ON `incident`.`application_id`=`application`.`id`
-WHERE `current_step`=0 AND `active`=1'''
+WHERE `current_step`=0
+AND LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = 1'''
 
 INACTIVE_SQL = '''UPDATE
 `incident`
@@ -72,9 +76,12 @@ FROM (
             `incident`.`context`
             FROM `message`
             JOIN `incident` ON `message`.`incident_id` = `incident`.`id`
+            LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+                      (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+            LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
             JOIN `plan_notification` ON `message`.`plan_notification_id` = `plan_notification`.`id`
             JOIN `plan` ON `message`.`plan_id` = `plan`.`id`
-            WHERE `incident`.`active` = 1
+            WHERE LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = 1
             AND `incident`.`current_step`=`plan`.`step_count`
             AND `step` = `incident`.`current_step`
             GROUP BY `incident`.`id`, `message`.`plan_notification_id`, `message`.`target_id`
@@ -110,9 +117,12 @@ FROM (
         `incident`.`context`
     FROM `message`
     JOIN `incident` ON `message`.`incident_id` = `incident`.`id`
+    LEFT JOIN `incident_claim` ON `incident_claim`.`incident_id` = `incident`.`id` AND `incident_claim`.`id` =
+              (SELECT `id` FROM `incident_claim` WHERE `incident_claim`.`incident_id` = `incident`.`id` ORDER BY `time` DESC, `id` DESC LIMIT 1)
+    LEFT JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
     JOIN `plan_notification` ON `message`.`plan_notification_id` = `plan_notification`.`id`
     JOIN `plan` ON `message`.`plan_id` = `plan`.`id`
-    WHERE `incident`.`active` = 1
+    WHERE LEAST(`incident`.`active`, IFNULL(`incident_claim_action`.`name`, "unclaim") != "claim") = 1
     GROUP BY `incident`.`id`, `message`.`plan_notification_id`, `message`.`target_id`
 ) as `inner`
 GROUP BY `incident_id`, `plan_notification_id`
