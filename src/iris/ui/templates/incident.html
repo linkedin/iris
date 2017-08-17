@@ -80,8 +80,31 @@
         {{/each}}
       </tbody>
     </table>
-    {{/if}}
   </div>
+  {{/if}}
+  {{#if claim_history}}
+  <div class="module">
+    <label><strong>Claim History:</strong></label>
+    <table class="display dataTable" width="100%">
+      <thead>
+        <tr>
+          <td class="light id">Action</td>
+          <td class="light step">User</td>
+          <td class="light target">Time</td>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each claim_history}}
+        <tr>
+          <td><span class="label label-info">{{action}}</span></td>
+          <td>{{user}}</td>
+          <td>{{convertToLocal time}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
 </script>
 {% endraw %}
 {% endblock %}
