@@ -46,10 +46,12 @@ WHERE `current_step`=0 AND `active`=1'''
 INACTIVE_SQL = '''UPDATE
 `incident`
 SET `active`=0
-WHERE `id` IN (
-    SELECT distinct `incident_id`
-    FROM (
-        SELECT
+WHERE `id` IN %s'''
+
+GET_INACTIVE_IDS_SQL = '''SELECT
+distinct `incident_id`
+FROM (
+    SELECT
         `incident_id`,
         `max`,
         `age`,
@@ -79,8 +81,7 @@ WHERE `id` IN (
         ) as `inner`
         GROUP BY `incident_id`, `plan_notification_id`
         HAVING `max_count` = `max` AND BIT_AND(`age` > `wait`) = 1
-    ) as `exhausted_incidents`
-)'''
+    ) as `exhausted_incidents`'''
 
 QUEUE_SQL = '''SELECT
 `incident_id`,
@@ -351,9 +352,12 @@ def deactivate():
     # this deadlocks sometimes. try until it doesn't.
     for i in xrange(max_retries):
         try:
-            cursor.execute(INACTIVE_SQL)
-            connection.commit()
-            break
+            cursor.execute(GET_INACTIVE_IDS_SQL)
+            ids = tuple(r[0] for r in cursor)
+            if ids:
+                cursor.execute(INACTIVE_SQL, (ids,))
+                connection.commit()
+                break
         except Exception:
             logger.exception('Failed running deactivate query. (Try %s/%s)', i + 1, max_retries)
             sleep(.2)
