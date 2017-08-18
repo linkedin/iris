@@ -78,7 +78,14 @@ def parse_response(response, mode, source):
                                                             JOIN `target_type` on `target`.`type_id` = `target_type`.`id`
                                                             WHERE `target`.`name` = :target_name
                                                             AND `target_type`.`name` = 'user'
-                                                            AND `incident`.`active` = TRUE''', {'target_name': target_name})]
+                                                            AND LEAST(`incident`.`active`,
+                                                                IFNULL((SELECT `incident_claim_action`.`name`
+                                                                        FROM `incident_claim`
+                                                                        JOIN `incident_claim_action` ON `incident_claim_action`.`id` = `incident_claim`.`action_id`
+                                                                        WHERE `incident_claim`.`incident_id` = `incident`.`id`
+                                                                        ORDER BY `incident_claim`.`time` DESC
+                                                                        LIMIT 1), "unclaim") != "claim") = 1
+                                                           ''', {'target_name': target_name})]
             session.close()
         return msg_ids, 'claim_all'
 
@@ -173,19 +180,30 @@ def claim_incident(incident_id, owner, session=None):
 
     previous_owner = session.execute('''
       SELECT `target`.`name`
-      FROM `incident`
-      LEFT JOIN `target` ON `target`.`id` = `incident`.`owner_id`
-      WHERE `incident`.`id` = :incident_id
+      FROM `incident_claim`
+      LEFT JOIN `target` ON `target`.`id` = `incident_claim`.`target_id`
+      WHERE `incident_claim`.`incident_id` = :incident_id
+      AND `incident_claim`.`action_id` = (SELECT `incident_claim_action`.`id` FROM `incident_claim_action` WHERE `incident_claim_action`.`name` = "claim")
+      ORDER BY `incident_claim`.`time` DESC
+      LIMIT 1
     ''', {'incident_id': incident_id}).scalar()
 
     active = 0 if owner else 1
+    action = 'claim' if owner else 'unclaim'
+
+    # support unclaiming, by assigning the owner of the "unclaim" action to the previous owner
+    owner = owner if owner else previous_owner
+
     now = datetime.datetime.utcnow()
-    session.execute('''UPDATE `incident`
-                       SET `incident`.`updated` = :updated,
-                           `incident`.`active` = :active,
-                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
-                       WHERE `incident`.`id` = :incident_id''',
-                    {'incident_id': incident_id, 'active': active, 'owner': owner, 'updated': now})
+    session.execute('''
+        INSERT INTO `incident_claim` (`incident_id`, `time`, `action_id`, `target_id`)
+        VALUES (
+            :incident_id,
+            :now,
+            (SELECT `incident_claim_action`.`id` FROM `incident_claim_action` WHERE `incident_claim_action`.`name` = :action),
+            (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+        )
+    ''', {'incident_id': incident_id, 'owner': owner, 'now': now, 'action': action})
 
     session.execute('UPDATE `message` SET `active`=0 WHERE `incident_id`=:incident_id', {'incident_id': incident_id})
     session.commit()
@@ -197,26 +215,43 @@ def claim_incident(incident_id, owner, session=None):
 def claim_bulk_incidents(incident_ids, owner):
     session = db.Session()
     incident_ids = tuple(incident_ids)
-    active = 0 if owner else 1
     now = datetime.datetime.utcnow()
-    session.execute('''UPDATE `incident`
-                       SET `incident`.`updated` = :updated,
-                           `incident`.`active` = :active,
-                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
-                       WHERE `incident`.`id` IN :incident_ids''',
-                    {'incident_ids': incident_ids, 'active': active, 'owner': owner, 'updated': now})
+
+    action = 'claim' if owner else 'unclaim'
+    for incident_id in incident_ids:
+        session.execute('''
+            INSERT INTO `incident_claim` (`incident_id`, `time`, `action_id`, `target_id`)
+            VALUES (
+                :incident_id,
+                :now,
+                (SELECT `incident_claim_action`.`id` FROM `incident_claim_action` WHERE `incident_claim_action`.`name` = :action),
+                (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+            )
+        ''', {'incident_id': incident_id, 'owner': owner, 'now': now, 'action': action})
+
+    session.commit()
 
     session.execute('UPDATE `message` SET `active`=0 WHERE `incident_id` IN :incident_ids', {'incident_ids': incident_ids})
-    session.commit()
 
     claimed = set()
     not_claimed = set()
 
-    for incident_id, active in session.execute('SELECT `id`, `active` FROM `incident` WHERE `id` IN :incident_ids', {'incident_ids': incident_ids}):
-        if active == 1:
-            not_claimed.add(incident_id)
-        else:
+    check_claimed_sql = '''
+      SELECT `id`, (
+        SELECT (SELECT `incident_claim_action`.`name` FROM `incident_claim_action` WHERE `incident_claim_action`.`id` = `incident_claim`.`action_id`) = "claim"
+        FROM `incident_claim`
+        WHERE `incident_claim`.`incident_id` = `incident`.`id`
+        ORDER BY `incident_claim`.`time` DESC
+        LIMIT 1
+        )
+      FROM `incident` WHERE `id` IN :incident_ids
+    '''
+
+    for incident_id, is_claimed in session.execute(check_claimed_sql, {'incident_ids': incident_ids}):
+        if is_claimed == 1:
             claimed.add(incident_id)
+        else:
+            not_claimed.add(incident_id)
 
     session.close()
 
@@ -225,17 +260,21 @@ def claim_bulk_incidents(incident_ids, owner):
 
 def claim_incidents_from_batch_id(batch_id, owner):
     session = db.Session()
-    sql = '''UPDATE `incident`
-             JOIN `message` ON `message`.`incident_id` = `incident`.`id`
-             SET `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
-                 `incident`.`updated` = :now, `incident`.`active`=0
-             WHERE `message`.`batch` = :batch_id'''
-    args = {
-        'batch_id': batch_id,
-        'owner': owner,
-        'now': datetime.datetime.utcnow(),
-    }
-    session.execute(sql, args)
+
+    now = datetime.datetime.utcnow()
+    action = 'claim' if owner else 'unclaim'
+
+    for (incident_id, ) in session.execute('''SELECT DISTINCT `incident_id` FROM `message` WHERE `batch` = :batch_id''', {'batch_id': batch_id}):
+        session.execute('''
+            INSERT INTO `incident_claim` (`incident_id`, `time`, `action_id`, `target_id`)
+            VALUES (
+                :incident_id,
+                :now,
+                (SELECT `incident_claim_action`.`id` FROM `incident_claim_action` WHERE `incident_claim_action`.`name` = :action),
+                (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+            )
+        ''', {'incident_id': incident_id, 'owner': owner, 'now': now, 'action': action})
+
     session.execute('''UPDATE `message` `a`
                        JOIN `message` `b` ON `a`.`incident_id` = `b`.`incident_id`
                        SET `a`.`active`=0 WHERE `b`.`batch`=:batch''',
