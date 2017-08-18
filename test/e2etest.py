@@ -51,7 +51,7 @@ def username_header(username):
 def iris_messages():
     '''List of iris messages'''
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
-        cursor.execute('SELECT `id`, `incident_id` FROM `message` WHERE NOT ISNULL(`incident_id`) ORDER BY `id` DESC LIMIT 3')
+        cursor.execute('SELECT `id`, `incident_id` FROM `message` WHERE NOT ISNULL(`incident_id`) AND NOT ISNULL(`destination`) ORDER BY `id` DESC LIMIT 3')
         return [dict(id=id, incident_id=incident_id) for (id, incident_id) in cursor]
 
 
@@ -2624,6 +2624,7 @@ def test_twilio_delivery_update(fake_message_id):
     message_sid = uuid.uuid4().hex
 
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''DELETE FROM `twilio_delivery_status` WHERE `message_id` = %s''', fake_message_id)
         cursor.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
                           VALUES (%s, %s)''', (message_sid, fake_message_id))
         conn.commit()
@@ -2634,6 +2635,52 @@ def test_twilio_delivery_update(fake_message_id):
     re = requests.get(base_url + 'messages/%s' % fake_message_id)
     assert re.status_code == 200
     assert re.json()['twilio_delivery_status'] == 'delivered'
+
+
+def test_twilio_retry(fake_message_id):
+    if not fake_message_id:
+        pytest.skip('We do not have enough data in DB to do this test')
+
+    message_sid = uuid.uuid4().hex
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('''DELETE FROM `twilio_delivery_status` WHERE `message_id` = %s''', fake_message_id)
+        cursor.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
+                          VALUES (%s, %s)''', (message_sid, fake_message_id))
+        cursor.execute('''DELETE FROM `twilio_retry` WHERE `retry_id` = %(msg_id)s OR `message_id` = %(msg_id)s''',
+                       {'msg_id': fake_message_id})
+        conn.commit()
+
+    re = requests.post(base_url + 'twilio/deliveryupdate', data={'MessageSid': message_sid, 'MessageStatus': 'failed'})
+    assert re.status_code == 204
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `message_id`, `retry_id` FROM `twilio_retry` WHERE `message_id` = %s', fake_message_id)
+        assert cursor.rowcount == 1
+        row = cursor.fetchone()
+        assert row[0] == fake_message_id
+        retry_id = row[1]
+        cursor.execute('SELECT EXISTS(SELECT 1 FROM `message` WHERE `id` = %s)', retry_id)
+        assert cursor.fetchone()[0] == 1
+        retry_sid = uuid.uuid4().hex
+        cursor.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
+                          VALUES (%s, %s)''', (retry_sid, retry_id))
+        conn.commit()
+
+    re = requests.post(base_url + 'twilio/deliveryupdate', data={'MessageSid': retry_sid, 'MessageStatus': 'failed'})
+    assert re.status_code == 204
+
+    # Check failed retry doesn't create another retry
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        cursor.execute('SELECT `message_id`, `retry_id` FROM `twilio_retry` WHERE `message_id` = %s', retry_id)
+        assert cursor.rowcount == 0
+        # Clean up retry message
+        cursor.execute('DELETE FROM `message` WHERE `id` = %s', retry_id)
+        conn.commit()
+
+    re = requests.get(base_url + 'messages/%s' % fake_message_id)
+    assert re.status_code == 200
+    assert re.json()['twilio_delivery_status'] == 'failed'
 
 
 def test_configure_email_incidents(sample_application_name, sample_application_name2, sample_plan_name, sample_plan_name2, sample_email, sample_admin_user):

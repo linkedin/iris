@@ -3311,6 +3311,34 @@ class TwilioDeliveryUpdate(object):
                    WHERE `twilio_sid` = :sid''',
                 {'sid': sid, 'status': status}).rowcount
             session.commit()
+
+            if status == 'failed':
+                msg_id = session.execute(
+                    '''SELECT message_id
+                       FROM `twilio_delivery_status`
+                       WHERE `twilio_sid` = :sid''',
+                    {'sid': sid}).scalar()
+                if msg_id is None:
+                    raise HTTPBadRequest('No message id found for SID')
+                is_retry = session.execute(
+                    '''SELECT EXISTS(SELECT 1 FROM `twilio_retry`
+                                     WHERE `retry_id` = :msg_id)''', {'msg_id': msg_id}).scalar()
+                # Don't retry messages that are already a retry
+                if not is_retry:
+                    retry_id = session.execute(
+                        '''INSERT INTO `message` (`created`, `incident_id`, `application_id`,
+                                                  `target_id`, `priority_id`, `body`)
+                           SELECT NOW(), `incident_id`, `application_id`, `target_id`, `priority_id`, `body`
+                           FROM `message` WHERE `id` = :msg_id
+                        ''',
+                        {'msg_id': msg_id}
+                    ).lastrowid
+                    session.execute(
+                        '''INSERT INTO `twilio_retry` (`message_id`, `retry_id`)
+                           VALUES (:msg_id, :retry_id)
+                        ''',
+                        {'msg_id': msg_id, 'retry_id': retry_id})
+                    session.commit()
             session.close()
 
         if not affected:
