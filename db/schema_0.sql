@@ -657,6 +657,17 @@ CREATE TABLE `twilio_delivery_status` (
   CONSTRAINT `twilio_delivery_status_message_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+
+DROP TABLE IF EXISTS `twilio_retry`;
+CREATE TABLE `twilio_retry` (
+  `message_id` bigint(20) NOT NULL,
+  `retry_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`message_id`),
+  KEY `twilio_retry_retry_id_fk_idx` (`retry_id`),
+  CONSTRAINT `twilio_retry_message_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `twilio_retry_retry_id_ibfk` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 --
 -- Table structure for table `incident_emails`
 --
