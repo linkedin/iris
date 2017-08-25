@@ -1572,6 +1572,35 @@ class Incident(object):
         resp.body = payload
 
     def on_post(self, req, resp, incident_id):
+        '''
+        Claim incidents by incident id. Deactivates the incident and
+        any associated messages, preventing further escalation.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/incidents/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "owner": "jdoe"
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+               "incident_id": "123",
+               "owner": "jdoe",
+               "active": false
+           }
+
+        '''
         try:
             incident_id = int(incident_id)
         except ValueError:
@@ -1584,6 +1613,23 @@ class Incident(object):
         except KeyError:
             raise HTTPBadRequest('"owner" field required')
 
+        if owner is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid claim: no matching owner')
+                # claim_incident will close the session
         is_active = utils.claim_incident(incident_id, owner)[0]
         resp.status = HTTP_200
         resp.body = ujson.dumps({'incident_id': incident_id,
