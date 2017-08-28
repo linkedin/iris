@@ -6,6 +6,7 @@
 from __future__ import absolute_import
 from phonenumbers import (format_number as pn_format_number, parse as pn_parse,
                           PhoneNumberFormat)
+from gevent import sleep
 import datetime
 import ujson
 from . import db
@@ -180,15 +181,27 @@ def claim_incident(incident_id, owner, session=None):
 
     active = 0 if owner else 1
     now = datetime.datetime.utcnow()
-    session.execute('''UPDATE `incident`
-                       SET `incident`.`updated` = :updated,
-                           `incident`.`active` = :active,
-                           `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
-                       WHERE `incident`.`id` = :incident_id''',
-                    {'incident_id': incident_id, 'active': active, 'owner': owner, 'updated': now})
+
+    max_retries = 3
+
+    for i in xrange(max_retries):
+        try:
+            session.execute('''UPDATE `incident`
+                               SET `incident`.`updated` = :updated,
+                                   `incident`.`active` = :active,
+                                   `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :owner AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+                               WHERE `incident`.`id` = :incident_id''',
+                            {'incident_id': incident_id, 'active': active, 'owner': owner, 'updated': now})
+
+            session.commit()
+            break
+        except Exception:
+            logger.exception('Failed running claim query. (Try %s/%s)', i + 1, max_retries)
+            sleep(.2)
 
     session.execute('UPDATE `message` SET `active`=0 WHERE `incident_id`=:incident_id', {'incident_id': incident_id})
     session.commit()
+
     session.close()
 
     return active == 1, previous_owner
