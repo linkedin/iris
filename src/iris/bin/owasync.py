@@ -4,8 +4,9 @@ monkey.patch_all()  # NOQA
 from iris import metrics
 from iris.config import load_config
 from iris.client import IrisClient
-from exchangelib import DELEGATE, Account, Credentials
-from exchangelib.errors import EWSError
+import exchangelib
+import exchangelib.errors
+import exchangelib.protocol
 import sys
 import logging
 import os
@@ -51,6 +52,17 @@ email_headers_to_ignore = frozenset([('X-Autoreply', 'yes'),
                                      ('Precedence', 'bulk')])
 
 
+# per exchangelib docs, to customize the http requests sent (eg to add a proxy)
+# need to create a custom requests adapter
+class UseProxyHttpAdapter(requests.adapters.HTTPAdapter):
+    _my_proxies = None
+
+    def send(self, *args, **kwargs):
+        if self._my_proxies:
+            kwargs['proxies'] = self._my_proxies
+        return super(UseProxyHttpAdapter, self).send(*args, **kwargs)
+
+
 def is_pointless_message(headers):
     for header in email_headers_to_ignore:
         if {'name': header[0], 'value': header[1]} in headers:
@@ -64,7 +76,7 @@ def poll(account, iris_client):
     try:
         metrics.set('total_inbox_count', account.inbox.total_count)
         metrics.set('unread_inbox_count', account.inbox.unread_count)
-    except EWSError:
+    except exchangelib.errors.EWSError:
         logger.exception('Failed to gather inbox counts from OWA API')
         metrics.incr('owa_api_failure_count')
 
@@ -81,7 +93,7 @@ def poll(account, iris_client):
             message.is_read = True
             messages_to_mark_read.append((message, ('is_read', )))
 
-    except EWSError:
+    except exchangelib.errors.EWSError:
         logger.exception('Failed to iterate through inbox')
         metrics.incr('owa_api_failure_count')
 
@@ -90,7 +102,7 @@ def poll(account, iris_client):
         logger.info('will mark %s messages as read', bulk_update_count)
         try:
             account.bulk_update(items=messages_to_mark_read)
-        except EWSError:
+        except exchangelib.errors.EWSError:
             logger.exception('Failed to update read status on %s messages in bulk', bulk_update_count)
             metrics.incr('owa_api_failure_count')
 
@@ -99,6 +111,11 @@ def poll(account, iris_client):
 
 
 def relay(message, iris_client):
+    if message.headers is None:
+        logger.info('Ignoring message with no headers %s (from %s)', message.message_id, message.sender.email_address)
+        metrics.incr('message_ignore_count')
+        return
+
     # Get headers into the format the iris expects from gmail
     headers = [{'name': header.name, 'value': header.value} for header in message.headers]
 
@@ -124,6 +141,7 @@ def relay(message, iris_client):
 
 
 def main():
+    boot_time = time.time()
     config = load_config()
 
     metrics.init(config, 'iris-owa-sync', default_metrics)
@@ -139,14 +157,22 @@ def main():
 
     spawn(metrics.emit_forever)
 
-    creds = Credentials(**owaconfig['credentials'])
+    proxies = owaconfig.get('proxies')
 
-    account = Account(
-        primary_smtp_address=owaconfig['smtp_address'],
-        credentials=creds,
-        autodiscover=True,
-        access_type=DELEGATE)
-    logger.info('Receiving mail on behalf of %s', owaconfig['smtp_address'])
+    # only way to configure a proxy is to monkey-patch (http adapter) a monkey-patch (baseprotocol) :/
+    if proxies:
+        UseProxyHttpAdapter._my_proxies = proxies
+        exchangelib.protocol.BaseProtocol.HTTP_ADAPTER_CLS = UseProxyHttpAdapter
+
+    creds = exchangelib.Credentials(**owaconfig['credentials'])
+
+    config = exchangelib.Configuration(credentials=creds, **owaconfig['config'])
+
+    account = exchangelib.Account(
+        config=config,
+        access_type=exchangelib.DELEGATE,
+        **owaconfig['account'])
+    logger.info('Receiving mail on behalf of %s', owaconfig['account'].get('primary_smtp_address'))
 
     try:
         nap_time = int(owaconfig.get('sleep_interval', 60))
@@ -156,6 +182,8 @@ def main():
     while True:
         start_time = time.time()
         message_count = poll(account, iris_client)
-        run_time = time.time() - start_time
+        now = time.time()
+        run_time = now - start_time
         logger.info('Last run took %2.f seconds and processed %s messages. Waiting %s seconds until next poll..', run_time, message_count, nap_time)
+        metrics.set('uptime', now - boot_time)
         sleep(nap_time)
