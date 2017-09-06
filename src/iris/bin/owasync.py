@@ -76,7 +76,7 @@ def poll(account, iris_client):
     try:
         metrics.set('total_inbox_count', account.inbox.total_count)
         metrics.set('unread_inbox_count', account.inbox.unread_count)
-    except exchangelib.errors.EWSError:
+    except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
         logger.exception('Failed to gather inbox counts from OWA API')
         metrics.incr('owa_api_failure_count')
 
@@ -93,7 +93,7 @@ def poll(account, iris_client):
             message.is_read = True
             messages_to_mark_read.append((message, ('is_read', )))
 
-    except exchangelib.errors.EWSError:
+    except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
         logger.exception('Failed to iterate through inbox')
         metrics.incr('owa_api_failure_count')
 
@@ -102,7 +102,7 @@ def poll(account, iris_client):
         logger.info('will mark %s messages as read', bulk_update_count)
         try:
             account.bulk_update(items=messages_to_mark_read)
-        except exchangelib.errors.EWSError:
+        except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
             logger.exception('Failed to update read status on %s messages in bulk', bulk_update_count)
             metrics.incr('owa_api_failure_count')
 
