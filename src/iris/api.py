@@ -1382,9 +1382,7 @@ class Incident(object):
         except KeyError:
             raise HTTPBadRequest('"owner" field required')
 
-        with db.guarded_session() as session:
-            # claim_incident will close the session
-            is_active = utils.claim_incident(incident_id, owner, session)[0]
+        is_active = utils.claim_incident(incident_id, owner)[0]
         resp.status = HTTP_200
         resp.body = ujson.dumps({'incident_id': int(incident_id),
                                  'owner': owner,
