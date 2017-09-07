@@ -37,9 +37,10 @@ if pidfile:
         logger.exception('Failed writing pid to %s', pidfile)
 
 default_metrics = {
-    'owa_api_failure_count': 0,
-    'message_relay_success_count': 0,
-    'message_relay_failure_count': 0,
+    'owa_api_failure_count': 0,  # we fail to hit EWS api. requests timeout or similar
+    'message_relay_success_count': 0,  # iris-api gives 2xx
+    'message_relay_failure_count': 0,  # iris-api gives 5xx
+    'malformed_message_count': 0,  # iris-api gives 4xx (likely not fault, so don't blame ourselves)
     'total_inbox_count': 0,
     'unread_inbox_count': 0,
     'message_process_count': 0,
@@ -87,7 +88,11 @@ def poll(account, iris_client):
         for message in account.inbox.filter(is_read=False).order_by('-datetime_received'):
             processed_messages += 1
 
-            relay(message, iris_client)
+            try:
+                relay(message, iris_client)
+            except Exception:
+                logger.exception('Uncaught exception during message relaying')
+                metrics.incr('message_relay_failure_count')
 
             # Mark it as read in bulk later. (This syntax isn't documented)
             message.is_read = True
@@ -133,11 +138,30 @@ def relay(message, iris_client):
     data = {'headers': headers, 'body': message.text_body.strip()}
 
     try:
-        iris_client.post('response/email', json=data).raise_for_status()
-        metrics.incr('message_relay_success_count')
+        req = iris_client.post('response/email', json=data)
     except requests.exceptions.RequestException:
         metrics.incr('message_relay_failure_count')
         logger.exception('Failed posting message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
+        return
+
+    code_type = req.status_code // 100
+
+    if code_type == 5:
+        metrics.incr('message_relay_failure_count')
+        logger.error('Failed posting message %s (from %s) to iris-api. Got status code %s and response %s',
+                     message.message_id, message.sender.email_address, req.status_code, req.text)
+
+    elif code_type == 4:
+        metrics.incr('malformed_message_count')
+        logger.error('Failed posting message %s (from %s) to iris-api. Message likely malformed. Status code: %s. Response: %s',
+                     message.message_id, message.sender.email_address, req.status_code, req.text)
+
+    elif code_type == 2:
+        metrics.incr('message_relay_success_count')
+
+    else:
+        logger.error('Failed posting message %s (from %s) to iris-api. Message likely malformed. Got back strange status code: %s. Response: %s',
+                     message.message_id, message.sender.email_address, req.status_code, req.text)
 
 
 def main():
