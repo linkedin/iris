@@ -11,7 +11,7 @@ class Authenticator:
         root = os.path.abspath('./')
         self.ldap_url = config['auth']['ldap_url']
         self.cert_path = os.path.join(root, config['auth']['ldap_cert_path'])
-        self.user_suffix = config['auth']['ldap_user_suffix']
+        self.user_search_string = config['auth']['ldap_user_search_string']
         self.authenticate = self.ldap_auth
         if config.get('debug'):
             self.authenticate = self.debug_auth
@@ -23,7 +23,7 @@ class Authenticator:
 
         try:
             if password:
-                connection.simple_bind_s(username + self.user_suffix, password)
+                connection.simple_bind_s(self.user_search_string % username, password)
             else:
                 return False
         except ldap.INVALID_CREDENTIALS:
