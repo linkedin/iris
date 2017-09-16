@@ -45,6 +45,7 @@ default_metrics = {
     'unread_inbox_count': 0,
     'message_process_count': 0,
     'message_ignore_count': 0,
+    'incident_created_count': 0,
 }
 
 
@@ -158,6 +159,13 @@ def relay(message, iris_client):
 
     elif code_type == 2:
         metrics.incr('message_relay_success_count')
+
+        # If we create an incident using an email, this header will be set and will be the numeric ID
+        # of the created incident; otherwise, the header will not exist or it will be a textual
+        # error message.
+        incident_header = req.headers.get('X-IRIS-INCIDENT')
+        if isinstance(incident_header, basestring) and incident_header.isdigit():
+            metrics.incr('incident_created_count')
 
     else:
         logger.error('Failed posting message %s (from %s) to iris-api. Message likely malformed. Got back strange status code: %s. Response: %s',
