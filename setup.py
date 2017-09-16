@@ -58,6 +58,7 @@ setuptools.setup(
             'pytest-cov',
             'flake8',
             'tox',
+            'requests-mock==1.1.0',
         ],
     },
     entry_points={
