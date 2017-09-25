@@ -1375,6 +1375,11 @@ class Incident(object):
         resp.body = payload
 
     def on_post(self, req, resp, incident_id):
+        try:
+            incident_id = int(incident_id)
+        except ValueError:
+            raise HTTPBadRequest('Invalid incident id')
+
         incident_params = ujson.loads(req.context['body'])
 
         try:
@@ -1384,7 +1389,7 @@ class Incident(object):
 
         is_active = utils.claim_incident(incident_id, owner)[0]
         resp.status = HTTP_200
-        resp.body = ujson.dumps({'incident_id': int(incident_id),
+        resp.body = ujson.dumps({'incident_id': incident_id,
                                  'owner': owner,
                                  'active': is_active})
 
