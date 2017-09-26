@@ -87,8 +87,7 @@ class iris_slack(object):
         payload = self.get_message_payload(message)
         try:
             response = requests.post(self.config['base_url'],
-                                     params=payload,
-                                     headers={'Content-Type': 'application/json'},
+                                     data=payload,
                                      proxies=self.proxy)
             if response.status_code == 200:
                 data = response.json()
