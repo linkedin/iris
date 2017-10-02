@@ -2973,7 +2973,7 @@ class ResponseMixin(object):
             data = {
                 'created': datetime.datetime.utcnow(),
                 'application_id': app['id'],
-                'subject': subject,
+                'subject': subject[:240],
                 'target_id': target_id,
                 'body': body,
                 'destination': dest
