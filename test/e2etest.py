@@ -2089,7 +2089,7 @@ def test_stats():
     assert re.status_code == 200
     data = re.json()
     for key in ('total_active_users', 'total_messages_sent_today', 'total_incidents_today', 'total_messages_sent',
-                'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month'):
+                'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',):
         assert key in data
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
@@ -2114,7 +2114,9 @@ def test_app_stats(sample_application_name):
                 'total_incidents_last_month', 'total_messages_sent_last_month',
                 'pct_call_fail_last_month', 'pct_call_success_last_month', 'pct_call_other_last_month',
                 'pct_sms_fail_last_month', 'pct_sms_success_last_month', 'pct_sms_other_last_month',
-                'pct_email_fail_last_month', 'pct_email_success_last_month', 'pct_email_other_last_month'):
+                'pct_email_fail_last_month', 'pct_email_success_last_month', 'pct_email_other_last_month',
+                'total_call_retry_last_month', 'total_call_sent_last_month', 'total_sms_sent_last_month',
+                'total_slack_sent_last_month', 'total_drop_sent_last_month'):
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
 
