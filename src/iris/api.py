@@ -3598,6 +3598,11 @@ class ApplicationStats(object):
                                                                   ORDER BY time_to_claim) as time_to_claim
                                                             WHERE (SELECT @row_id := @row_id + 1)
                                                             BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
+            'total_call_retry_last_month': '''SELECT COUNT(*)
+                                              FROM `twilio_retry` JOIN `message` ON `message`.`id` = `twilio_retry`.`message_id`
+                                              WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                              AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                              AND `application_id` = %(application_id)s'''
         }
 
         query_data = {'application_id': app['id']}
@@ -3669,6 +3674,18 @@ class ApplicationStats(object):
             stats['pct_%s_success_last_month' % mode] = success_pct
             stats['pct_%s_fail_last_month' % mode] = fail_pct
             stats['pct_%s_other_last_month' % mode] = other_pct
+
+        for mode in cache.modes:
+            cursor.execute('''SELECT COUNT(*) FROM `message`
+                              WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
+                              AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
+                              AND `application_id` = %(application_id)s
+                              AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
+                           {'application_id': app['id'], 'mode': mode})
+            num_sent = cursor.fetchone()
+            if num_sent is not None:
+                num_sent = num_sent[0]
+            stats['total_%s_sent_last_month' % mode] = num_sent
 
         cursor.close()
         connection.close()
