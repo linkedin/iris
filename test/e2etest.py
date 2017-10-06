@@ -2942,6 +2942,24 @@ def test_ui_assets():
     assert re.headers['content-type'] == 'application/font-woff'
 
 
+@pytest.mark.skip(reason="Re-enable when mobile is available to all users")
+def test_mobile_key(sample_user):
+    re = requests.get(base_url + 'qrkey/%s' % sample_user)
+    assert re.status_code == 200
+    data = re.content
+    re = requests.post(base_url + 'qrkey/%s' % sample_user)
+    assert re.status_code == 201
+    assert re.content != data
+    re = requests.delete(base_url + 'qrkey/%s' % sample_user)
+    assert re.status_code == 200
+
+
+@pytest.mark.skip(reason="Re-enable when mobile is available to all users")
+def test_register_device(sample_user):
+    re = requests.post(base_url + 'devices/%s' % sample_user, json={'device_id': 'foobar', 'os': 'barbaz'})
+    assert re.status_code == 201
+
+
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):

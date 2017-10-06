@@ -1547,6 +1547,7 @@ iris = {
       url: '/v0/users/',
       postModesUrl: '/v0/users/modes/',
       reprioritizationUrl: '/v0/users/reprioritization/',
+      mobileKeyUrl: '/v0/qrkey/',
       user: window.appData.user,
       settings: null,
       reprioritizationSettings: [],
@@ -1558,6 +1559,10 @@ iris = {
       $reprioritizationToggleBtn: $('#reprioritization h4'),
       $reprioritizationAddBtn: $('#reprio-add-btn'),
       $reprioritizationTable: $('#reprioritization-table'),
+      $mobileContainer: $('#mobile-inner'),
+      $mobileToggleBtn: $('#mobile h4'),
+      $mobileRekeyBtn: $('#mobile-rekey-btn'),
+      $mobileKey: $('#mobile-key-container'),
       $addAppSelect: $('#add-application-select'),
       $addAppBtn: $('#add-application-button'),
       appsToDelete: {},
@@ -1573,6 +1578,7 @@ iris = {
       this.getUserSettings().done(function(){
         self.createContactModule();
         self.createPriorityTable();
+        self.createMobile();
         self.events();
       });
       this.getReprioritizationSettings().done(function(){
@@ -1590,6 +1596,12 @@ iris = {
       });
       this.data.$reprioritizationToggleBtn.on('click', function(){
         self.toggleReprioritization();
+      });
+      this.data.$mobileToggleBtn.on('click', function(){
+        self.toggleMobile();
+      });
+      this.data.$mobileRekeyBtn.on('click', function() {
+        self.regenMobileKey();
       });
       this.data.$addAppBtn.on('click', function(){
         self.addApplication();
@@ -1611,6 +1623,9 @@ iris = {
       }).fail(function(response){
         iris.createAlert('Error: Failed to load data -' + response.text);
       });
+    },
+    toggleMobile: function() {
+      $('#mobile').toggleClass('active')
     },
     toggleReprioritization: function() {
       $('#reprioritization').toggleClass('active')
@@ -1761,6 +1776,38 @@ iris = {
         });
       });
       this.redrawApplicationDropdown();
+    },
+    createMobile: function() {
+      $.ajax({
+        url: this.data.mobileKeyUrl + this.data.user,
+        method: 'GET',
+        dataType: 'html'
+      }).done(function(data){
+        var $mobileKeyContainer = $('#mobile-key-container');
+        $mobileKeyContainer.empty();
+        $mobileKeyContainer.append('<img width="300" height="300" id="mobile-key">');
+        $mobileKeyContainer.find('#mobile-key').attr('src', data);
+      }).fail(function(xhr){
+        // While in limited release, hide mobile auth module if not authorized
+        if (xhr.status === 403) {
+          $('#mobile').hide();
+        }
+      });
+    },
+    regenMobileKey: function () {
+      $.ajax({
+        url: this.data.mobileKeyUrl + this.data.user,
+        method: 'POST',
+        contentType: 'application/json',
+        dataType: 'html'
+      }).done(function(data){
+        var $mobileKeyContainer = $('#mobile-key-container');
+        iris.createAlert('Mobile key regenerated.', 'success');
+        $mobileKeyContainer.empty();
+        $mobileKeyContainer.append('<img width="300" height="300" id="mobile-key">');
+        $mobileKeyContainer.find('#mobile-key').attr('src', data);
+        $('#rekey-modal').modal('hide');
+      });
     },
     createBatchingTable: function(){
       var template = Handlebars.compile(this.data.batchingTemplate),

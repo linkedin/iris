@@ -160,3 +160,9 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 #  iris_app_key: ''
 #  api_host: http://localhost:16649
 #  sleep_interval: 60
+
+mobile:
+    activated: True
+    mobile_users:
+        - demo
+    mobile_url: 'http://host:16648/api/v0/mobile'

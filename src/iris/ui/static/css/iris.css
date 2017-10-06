@@ -682,6 +682,7 @@ table.dataTable thead .sorting_asc {
 
 #tracking-notification .tracking-inner h4,
 #aggregation h4,
+#mobile h4,
 #reprioritization h4 {
   color: #666;
   cursor: pointer;
@@ -699,6 +700,7 @@ table.dataTable thead .sorting_asc {
 #tracking-notification .glyphicon-triangle-bottom,
 #aggregation .glyphicon-triangle-bottom,
 #reprioritization .glyphicon-triangle-bottom,
+#mobile .glyphicon-triangle-bottom,
 .application-dangerous-actions .glyphicon-triangle-bottom
 {
   font-size: 12px;
@@ -712,6 +714,7 @@ table.dataTable thead .sorting_asc {
 #tracking-notification .glyphicon-triangle-bottom,
 #aggregation .glyphicon-triangle-bottom,
 #reprioritization .glyphicon-triangle-bottom,
+#mobile .glyphicon-triangle-bottom,
 .application-dangerous-actions .glyphicon-triangle-bottom
 {
   transform: rotate(-90deg);
@@ -722,6 +725,7 @@ table.dataTable thead .sorting_asc {
 #tracking-notification.active .glyphicon-triangle-bottom,
 #aggregation.active .glyphicon-triangle-bottom,
 #reprioritization.active .glyphicon-triangle-bottom,
+#mobile.active .glyphicon-triangle-bottom,
 .application-dangerous-actions.active .glyphicon-triangle-bottom
 {
   transform: rotate(0deg);
@@ -760,7 +764,8 @@ table.dataTable thead .sorting_asc {
   margin-left: 10px;
 }
 
-#reprio-controls {
+#reprio-controls,
+#mobile-inner{
   padding: 25px;
 }
 
@@ -768,21 +773,31 @@ table.dataTable thead .sorting_asc {
   background: #f0f3f6;
 }
 
-#reprioritization.active #reprio-inner {
+#reprioritization.active #reprio-inner,
+#mobile.active #mobile-inner {
   display: block;
 }
 
-#reprioritization #reprio-inner {
+#reprioritization #reprio-inner,
+#mobile #mobile-inner {
   display: none;
 }
 
-#reprioritization {
+#reprioritization,
+#mobile {
   clear: both;
   padding: 0;
 }
 
-#reprioritization h4 {
+#reprioritization h4,
+#mobile h4{
   padding: 25px;
+}
+
+#mobile-key-container {
+  min-width: 300px;
+  min-height: 300px;
+  border: 1px;
 }
 
 #tracking-notification {

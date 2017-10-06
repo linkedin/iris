@@ -2,4 +2,10 @@
 
 from .api import construct_falcon_api
 
-app = construct_falcon_api(True, '/tmp/foo', [], 'iris', None, ('localhost', '1234'))  # noqa
+config = {'debug': True,
+          'server': {},
+          'healthcheck_path': '/tmp/foo',
+          'allowed_origins': [],
+          'sender': {'sender_app': 'iris', 'host': 'localhost', 'port': 1234}
+          }
+app = construct_falcon_api(config)  # noqa
