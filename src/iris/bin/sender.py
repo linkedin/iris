@@ -852,11 +852,20 @@ def mark_message_as_sent(message):
         message['subject'] = ''
         logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
 
-    try:
-        cursor.execute(sql, params)
-        connection.commit()
-    except DataError:
-        logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+    max_retries = 3
+
+    # this deadlocks sometimes. try until it doesn't.
+    for i in xrange(max_retries):
+        try:
+            cursor.execute(sql, params)
+            connection.commit()
+            break
+        except DataError:
+            logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+            break
+        except Exception:
+            logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
+            sleep(.2)
 
     # Update subject and body separately, as they may fail and we don't necessarily care if they do
     if len(message['subject']) > 255:
