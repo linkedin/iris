@@ -346,11 +346,20 @@ class JinjaValidate():
         except Exception as e:
             resp.body = ujson.dumps({'error': str(e), 'lineno': e.lineno})
             resp.status = falcon.HTTP_400
-        else:
-            resp.body = ujson.dumps({
-                'template_subject': subject_template.render(sample_context),
-                'template_body': body_template.render(sample_context)
-            })
+            return
+
+        try:
+            rendered_subject = subject_template.render(sample_context),
+            rendered_body = body_template.render(sample_context)
+        except Exception as e:
+            resp.body = ujson.dumps({'error': str(e)})
+            resp.status = falcon.HTTP_400
+            return
+
+        resp.body = ujson.dumps({
+            'template_subject': rendered_subject,
+            'template_body': rendered_body
+        })
 
 
 def init(config, app):
