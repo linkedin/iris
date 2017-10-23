@@ -3,6 +3,8 @@ server:
   port: 16649
   disable_auth: True
 
+sender_workers: 1000
+
 # Enabled modules for resolving complex user roles to individual usernames, processed
 # in the order listed here.
 role_lookups:
