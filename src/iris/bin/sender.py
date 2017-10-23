@@ -29,7 +29,7 @@ from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
 from pymysql import DataError, IntegrityError
 # queue for sending messages
-from iris.sender.shared import send_queue, add_mode_stat
+from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
 # sql
 
@@ -248,7 +248,8 @@ default_sender_metrics = {
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
-    'new_incidents_cnt': 0
+    'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
+    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0
 }
 
 # TODO: make this configurable
@@ -501,8 +502,7 @@ def aggregate(now):
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
                 logger.info('aggregate - %(message_id)s pushing to send queue', m)
-                send_queue.put(m)
-                metrics.incr('send_queue_puts_cnt')
+                message_send_enqueue(m)
             elif l > 1:
                 uuid = uuid4().hex
                 m = messages[next(iter(active_message_ids))]
@@ -511,8 +511,8 @@ def aggregate(now):
 
                 # Cast from set to list, as sets are not msgpack serializable
                 m['aggregated_ids'] = list(active_message_ids)
-                send_queue.put(m)
-                metrics.incr('send_queue_puts_cnt')
+                message_send_enqueue(m)
+
                 for message_id in active_message_ids:
                     del messages[message_id]
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
@@ -565,8 +565,7 @@ def fetch_and_prepare_message():
     message_id = m['message_id']
     plan_id = m['plan_id']
     if plan_id is None:
-        send_queue.put(m)
-        metrics.incr('send_queue_puts_cnt')
+        message_send_enqueue(m)
         return
 
     plan = cache.plans[plan_id]
@@ -622,8 +621,7 @@ def fetch_and_prepare_message():
             spawn(auditlog.message_change, m['message_id'], auditlog.SENT_CHANGE, '', '', audit_msg)
         else:
             # cleared for immediate sending
-            send_queue.put(m)
-            metrics.incr('send_queue_puts_cnt')
+            message_send_enqueue(m)
 
 
 def send():
@@ -974,17 +972,10 @@ def distributed_send_message(message):
     raise Exception('Failed sending message')
 
 
-def fetch_and_send_message():
+def fetch_and_send_message(send_queue):
     message = send_queue.get()
     metrics.incr('send_queue_gets_cnt')
     sanitize_unicode_dict(message)
-
-    has_contact = set_target_contact(message)
-    if not has_contact:
-        mark_message_has_no_contact(message)
-        metrics.incr('task_failure')
-        logger.error('Failed to send message, no contact found: %s', message)
-        return
 
     if 'message_id' not in message:
         message['message_id'] = None
@@ -1082,9 +1073,9 @@ def fetch_and_send_message():
         update_message_sent_status(message, success)
 
 
-def worker():
+def worker(send_queue):
     while True:
-        fetch_and_send_message()
+        fetch_and_send_message(send_queue)
 
 
 def gwatch_renewer():
@@ -1151,6 +1142,25 @@ def sender_shutdown():
     os._exit(0)
 
 
+def message_send_enqueue(message):
+    # Set the target contact here so we determine the mode, which determines the
+    # queue it gets inserted into
+    has_contact = set_target_contact(message)
+    if not has_contact:
+        mark_message_has_no_contact(message)
+        metrics.incr('task_failure')
+        logger.error('Failed to send message, no contact found: %s', message)
+        return
+
+    message_mode = message.get('mode')
+    if message_mode and message_mode in per_mode_send_queues:
+        per_mode_send_queues[message_mode].put(message)
+        metrics.incr('send_queue_puts_cnt')
+    else:
+        logger.error('Message %s does not have proper mode %s', message, message_mode)
+        metrics.incr('send_queue_puts_fail_cnt')
+
+
 def init_sender(config):
     gevent.signal(signal.SIGINT, sender_shutdown)
     gevent.signal(signal.SIGTERM, sender_shutdown)
@@ -1211,7 +1221,8 @@ def main():
     init_plugins(config.get('plugins', {}))
     init_vendors(config.get('vendors', []), config.get('applications', []))
 
-    send_task = spawn(send)
+    if not rpc.run(config['sender']):
+        sender_shutdown()
 
     default_worker_count = 100
 
@@ -1220,16 +1231,24 @@ def main():
     except ValueError:
         worker_count = default_worker_count
 
-    logger.info('Running with %s workers', worker_count)
+    workers_per_mode = worker_count // len(api_cache.modes)
 
-    worker_tasks = [spawn(worker) for x in xrange(worker_count)]
+    logger.info('Running with %s workers with %s workers per mode', worker_count, workers_per_mode)
 
-    rpc.init(config['sender'], dict(send_message=send_message))
+    worker_tasks = {}
 
-    if not rpc.run(config['sender']):
-        sender_shutdown()
+    for mode in api_cache.modes:
+        send_queue = queue.Queue()
+        per_mode_send_queues[mode] = send_queue
+        worker_tasks[mode] = [spawn(worker, send_queue) for x in xrange(workers_per_mode)]
+
+    rpc.init(config['sender'], dict(
+        send_message=send_message,
+        message_send_enqueue=message_send_enqueue
+    ))
 
     spawn(coordinator.update_forever)
+    send_task = spawn(send)
 
     gwatch_renewer_task = None
     prune_audit_logs_task = None
@@ -1285,14 +1304,22 @@ def main():
             logger.error("send task failed, %s", send_task.exception)
             metrics.incr('task_failure')
             send_task = spawn(send)
-        bad_workers = []
-        for i, task in enumerate(worker_tasks):
-            if not bool(task):
-                logger.error("worker task failed, %s", task.exception)
-                metrics.incr('task_failure')
-                bad_workers.append(i)
-        for i in bad_workers:
-            worker_tasks[i] = spawn(worker)
+
+        for mode, send_queue in per_mode_send_queues.iteritems():
+
+            # Set metric for size of worker queue
+            metrics.set('send_queue_%s_size' % mode, len(send_queue))
+
+            # Also ensure all workers for each send queue are alive
+            bad_workers = []
+            for i, task in enumerate(worker_tasks[mode]):
+                if not bool(task):
+                    logger.error("worker task for mode %s failed, %s", mode, task.exception)
+                    metrics.incr('task_failure')
+                    bad_workers.append(i)
+
+            for i in bad_workers:
+                worker_tasks[mode][i] = spawn(worker, per_mode_send_queues[mode])
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))

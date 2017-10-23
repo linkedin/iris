@@ -8,6 +8,7 @@
 import time
 from iris.bin.sender import init_sender
 import msgpack
+import gevent.queue
 
 
 def test_configure(mocker):
@@ -68,6 +69,7 @@ fake_notification = {
     'role': 'user',
     'subject': 'test subject',
     'body': 'test body',
+    'mode': 'email',
 }
 
 fake_plan = {
@@ -104,21 +106,23 @@ def init_queue_with_item(queue, item=None):
 
 
 def test_fetch_and_prepare_message(mocker):
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
+    mocker.patch('iris.bin.sender.message_send_enqueue')
     from iris.bin.sender import (
-        fetch_and_prepare_message, message_queue, send_queue
+        fetch_and_prepare_message, message_queue, per_mode_send_queues
     )
 
-    init_queue_with_item(message_queue, fake_message)
-    init_queue_with_item(send_queue)
-
+    init_queue_with_item(message_queue, {'message_id': 1234, 'plan_id': None})
     fetch_and_prepare_message()
+    assert message_queue.qsize() == 0
+
+    send_queue = per_mode_send_queues.setdefault('email', gevent.queue.Queue())
+
+    init_queue_with_item(send_queue, {'message_id': 1234, 'plan_id': None})
 
     assert message_queue.qsize() == 0
     assert send_queue.qsize() == 1
     m = send_queue.get()
-    assert m['message_id'] == fake_message['message_id']
+    assert m['message_id'] == 1234
 
 
 def test_fetch_and_send_message(mocker):
@@ -132,8 +136,9 @@ def test_fetch_and_send_message(mocker):
         return True
 
     mocker.patch('iris.bin.sender.db')
-    mocker.patch('iris.bin.sender.send_message').return_value = 1
+    mocker.patch('iris.bin.sender.distributed_send_message').return_value = True
     mocker.patch('iris.bin.sender.quota')
+    mocker.patch('iris.metrics.stats')
     mocker.patch('iris.bin.sender.update_message_mode')
     mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent
@@ -141,15 +146,17 @@ def test_fetch_and_send_message(mocker):
     mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
     mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
-        fetch_and_send_message, send_queue
+        fetch_and_send_message, per_mode_send_queues
     )
+
+    send_queue = per_mode_send_queues.setdefault('email', gevent.queue.Queue())
 
     # drain out send queue
     while send_queue.qsize() > 0:
         send_queue.get()
     send_queue.put(fake_message)
 
-    fetch_and_send_message()
+    fetch_and_send_message(send_queue)
 
     assert send_queue.qsize() == 0
     mock_mark_message_sent.assert_called_once()
@@ -162,35 +169,30 @@ def test_no_valid_modes(mocker):
     def mock_set_target_contact(message):
         return False
 
+    mocker.patch('iris.metrics.stats')
     mocker.patch('iris.bin.sender.db')
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = False
     mock_mark_message_no_contact = mocker.patch('iris.bin.sender.mark_message_has_no_contact')
-    mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
-    mock_mark_message_sent.side_effect = check_mark_message_sent
-    mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
-    from iris.bin.sender import (
-        fetch_and_send_message, send_queue
-    )
+    from iris.bin.sender import message_send_enqueue
 
-    # drain out send queue
-    while send_queue.qsize() > 0:
-        send_queue.get()
-    send_queue.put(fake_message)
-
-    fetch_and_send_message()
-
-    assert send_queue.qsize() == 0
-    assert not mock_mark_message_sent.called
+    message_send_enqueue(fake_message)
     mock_mark_message_no_contact.assert_called_once()
 
 
 def test_handle_api_request_v0_send(mocker):
-    from iris.sender.rpc import handle_api_request
-    from iris.sender.shared import send_queue
+    from iris.bin.sender import message_send_enqueue
+    from iris.sender.rpc import handle_api_request, send_funcs
+    from iris.sender.shared import per_mode_send_queues
+
+    send_funcs['message_send_enqueue'] = message_send_enqueue
+
+    send_queue = per_mode_send_queues.setdefault('email', gevent.queue.Queue())
 
     # support expanding target
-    mocker.patch('iris.sender.cache.RoleTargets.__call__', lambda _, role, target: [target])
+    mocker.patch('iris.sender.cache.targets_for_role', lambda role, target: [target])
+    mocker.patch('iris.bin.sender.db')
+    mocker.patch('iris.metrics.stats')
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = True
 
     mock_address = mocker.MagicMock()
     mock_socket = mocker.MagicMock()
@@ -208,36 +210,6 @@ def test_handle_api_request_v0_send(mocker):
     m = send_queue.get()
     assert m['subject'] == '[%s] %s' % (fake_notification['application'],
                                         fake_notification['subject'])
-
-
-def test_handle_api_request_v0_send_with_mode(mocker):
-    from iris.sender.rpc import handle_api_request
-    from iris.sender.shared import send_queue
-
-    # support expanding target
-    mocker.patch('iris.sender.cache.RoleTargets.__call__', lambda _, role, target: [target])
-    mocker.patch('iris.bin.sender.set_target_contact')
-
-    fake_mode_notification = {}
-    fake_mode_notification.update(fake_notification)
-    fake_mode_notification['mode'] = 'sms'
-
-    mock_address = mocker.MagicMock()
-    mock_socket = mocker.MagicMock()
-    mock_socket.recv.return_value = msgpack.packb({
-        'endpoint': 'v0/send',
-        'data': fake_mode_notification,
-    })
-
-    while send_queue.qsize() > 0:
-        send_queue.get()
-
-    handle_api_request(mock_socket, mock_address)
-
-    assert send_queue.qsize() == 1
-    m = send_queue.get()
-    assert m['subject'] == '[%s] %s' % (fake_mode_notification['application'],
-                                        fake_mode_notification['subject'])
 
 
 def test_handle_api_request_v0_send_timeout(mocker):
@@ -325,9 +297,11 @@ def test_aggregate_audit_msg(mocker):
     mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
     mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
-        fetch_and_prepare_message, message_queue, send_queue,
+        fetch_and_prepare_message, message_queue, per_mode_send_queues,
         plan_aggregate_windows
     )
+
+    send_queue = per_mode_send_queues.setdefault('email', gevent.queue.Queue())
 
     init_queue_with_item(message_queue, fake_message)
     init_queue_with_item(send_queue)
@@ -364,7 +338,16 @@ def test_aggregate_audit_msg(mocker):
 
 
 def test_handle_api_notification_request_invalid_message(mocker):
-    from iris.sender.rpc import handle_api_notification_request
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = True
+    mocker.patch('iris.metrics.stats')
+
+    from iris.bin.sender import message_send_enqueue
+    from iris.sender.rpc import handle_api_notification_request, send_funcs
+    from iris.sender.shared import per_mode_send_queues
+
+    send_funcs['message_send_enqueue'] = message_send_enqueue
+    send_queue = per_mode_send_queues.setdefault('email', gevent.queue.Queue())
+
     mock_socket = mocker.MagicMock()
     handle_api_notification_request(mock_socket, mocker.MagicMock(), {
         'data': {
@@ -435,7 +418,6 @@ def test_handle_api_notification_request_invalid_message(mocker):
     })
     mock_socket.sendall.assert_called_with(msgpack.packb('OK'))
 
-    from iris.bin.sender import send_queue
     # drain out send queue
     while send_queue.qsize() > 0:
         send_queue.get()
