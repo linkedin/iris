@@ -129,6 +129,7 @@ def handle_api_notification_request(socket, address, req):
         temp_notification = notification.copy()
         temp_notification['target'] = _target
         send_queue.put(temp_notification)
+        metrics.incr('send_queue_puts_cnt')
     metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 
