@@ -1212,7 +1212,17 @@ def main():
     init_vendors(config.get('vendors', []), config.get('applications', []))
 
     send_task = spawn(send)
-    worker_tasks = [spawn(worker) for x in xrange(100)]
+
+    default_worker_count = 100
+
+    try:
+        worker_count = int(config.get('sender_workers', default_worker_count))
+    except ValueError:
+        worker_count = default_worker_count
+
+    logger.info('Running with %s workers', worker_count)
+
+    worker_tasks = [spawn(worker) for x in xrange(worker_count)]
 
     rpc.init(config['sender'], dict(send_message=send_message))
 
