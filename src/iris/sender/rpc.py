@@ -9,7 +9,7 @@ from gevent.server import StreamServer
 import msgpack
 from ..utils import msgpack_unpack_msg_from_socket, sanitize_unicode_dict
 from . import cache
-from .shared import send_queue, add_mode_stat
+from .shared import add_mode_stat
 from iris import metrics
 
 import logging
@@ -128,8 +128,7 @@ def handle_api_notification_request(socket, address, req):
     for _target in expanded_targets:
         temp_notification = notification.copy()
         temp_notification['target'] = _target
-        send_queue.put(temp_notification)
-        metrics.incr('send_queue_puts_cnt')
+        send_funcs['message_send_enqueue'](temp_notification)
     metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 

@@ -1,14 +1,13 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from gevent import queue
 from iris.metrics import stats
 import logging
 
 logger = logging.getLogger(__name__)
 
-# queue for sending messages
-send_queue = queue.Queue()
+# queue for sending messages. mode -> gevent queue
+per_mode_send_queues = {}
 
 
 def add_mode_stat(mode, runtime):
