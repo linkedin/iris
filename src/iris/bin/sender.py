@@ -247,7 +247,8 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'msg_drop_length_cnt': 0
+    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
+    'new_incidents_cnt': 0
 }
 
 # TODO: make this configurable
@@ -430,7 +431,10 @@ def escalate():
 
                 spawn(send_message, tracking_message)
     cursor.close()
-    logger.info('[*] %s new incidents', len(escalations))
+
+    new_incidents_count = len(escalations)
+    metrics.set('new_incidents_cnt', new_incidents_count)
+    logger.info('[*] %s new incidents', new_incidents_count)
 
     # then, fetch message count for current incidents
     msg_count = 0
@@ -498,6 +502,7 @@ def aggregate(now):
                 m = messages.pop(next(iter(active_message_ids)))
                 logger.info('aggregate - %(message_id)s pushing to send queue', m)
                 send_queue.put(m)
+                metrics.incr('send_queue_puts_cnt')
             elif l > 1:
                 uuid = uuid4().hex
                 m = messages[next(iter(active_message_ids))]
@@ -507,6 +512,7 @@ def aggregate(now):
                 # Cast from set to list, as sets are not msgpack serializable
                 m['aggregated_ids'] = list(active_message_ids)
                 send_queue.put(m)
+                metrics.incr('send_queue_puts_cnt')
                 for message_id in active_message_ids:
                     del messages[message_id]
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
@@ -560,6 +566,7 @@ def fetch_and_prepare_message():
     plan_id = m['plan_id']
     if plan_id is None:
         send_queue.put(m)
+        metrics.incr('send_queue_puts_cnt')
         return
 
     plan = cache.plans[plan_id]
@@ -616,6 +623,7 @@ def fetch_and_prepare_message():
         else:
             # cleared for immediate sending
             send_queue.put(m)
+            metrics.incr('send_queue_puts_cnt')
 
 
 def send():
@@ -968,6 +976,7 @@ def distributed_send_message(message):
 
 def fetch_and_send_message():
     message = send_queue.get()
+    metrics.incr('send_queue_gets_cnt')
     sanitize_unicode_dict(message)
 
     has_contact = set_target_contact(message)
