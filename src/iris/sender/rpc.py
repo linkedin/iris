@@ -196,8 +196,13 @@ def handle_api_request(socket, address):
 
 
 def run(sender_config):
-    StreamServer((sender_config['host'], sender_config['port']),
-                 handle_api_request).start()
+    try:
+        StreamServer((sender_config['host'], sender_config['port']),
+                     handle_api_request).start()
+        return True
+    except Exception:
+        logger.exception('Failed binding to sender RPC port')
+        return False
 
 
 def init(sender_config, _send_funcs):

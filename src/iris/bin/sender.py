@@ -1206,7 +1206,9 @@ def main():
     worker_tasks = [spawn(worker) for x in xrange(100)]
 
     rpc.init(config['sender'], dict(send_message=send_message))
-    rpc.run(config['sender'])
+
+    if not rpc.run(config['sender']):
+        sender_shutdown()
 
     spawn(coordinator.update_forever)
 
