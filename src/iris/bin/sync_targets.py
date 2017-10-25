@@ -32,6 +32,7 @@ stats_reset = {
     'users_failed_to_add': 0,
     'users_failed_to_update': 0,
     'users_purged': 0,
+    'others_purged': 0,
     'teams_added': 0,
     'teams_failed_to_add': 0,
     'user_contacts_updated': 0,
@@ -92,27 +93,30 @@ def get_predefined_users(config):
     return users
 
 
-def prune_user(engine, username):
-    metrics.incr('users_purged')
+def prune_target(engine, target_name, target_type):
+    if target_type == 'user':
+        metrics.incr('users_purged')
+    else:
+        metrics.incr('others_purged')
 
     try:
-        engine.execute('''DELETE FROM `target` WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', username)
-        logger.info('Deleted inactive user %s', username)
+        engine.execute('''DELETE FROM `target` WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = %s)''', (target_name, target_type))
+        logger.info('Deleted inactive target %s', target_name)
 
     # The user has messages or some other user data which should be preserved.
     # Just mark as inactive.
     except IntegrityError:
-        logger.info('Marking user %s inactive', username)
-        engine.execute('''UPDATE `target` SET `active` = FALSE WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', username)
+        logger.info('Marking target %s inactive', target_name)
+        engine.execute('''UPDATE `target` SET `active` = FALSE WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = %s)''', (target_name, target_type))
 
     except SQLAlchemyError as e:
-        logger.error('Deleting user %s failed: %s', username, e)
+        logger.error('Deleting target %s failed: %s', target_name, e)
         metrics.incr('sql_errors')
 
 
 def fetch_teams_from_oncall(oncall_base_url):
     try:
-        return requests.get('%s/api/v0/teams?fields=name' % oncall_base_url).json()
+        return requests.get('%s/api/v0/teams?fields=name&active=1' % oncall_base_url).json()
     except (ValueError, requests.exceptions.RequestException):
         logger.exception('Failed hitting oncall endpoint to fetch list of team names')
         return []
@@ -257,6 +261,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
     # sync teams between iris and oncall
     teams_to_insert = oncall_team_names - iris_team_names
+    teams_to_deactivate = iris_team_names - oncall_team_names
 
     logger.info('Teams to insert (%d)' % len(teams_to_insert))
     for t in teams_to_insert:
@@ -271,11 +276,13 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     session.commit()
     session.close()
 
-    # mark users inactive
+    # mark users/teams inactive
     if purge_old_users:
         logger.info('Users to mark inactive (%d)' % len(users_to_mark_inactive))
         for username in users_to_mark_inactive:
-            prune_user(engine, username)
+            prune_target(engine, username, 'user')
+        for team in teams_to_deactivate:
+            prune_target(engine, team, 'team')
 
 
 def get_ldap_lists(l, search_strings, parent_list=None):
