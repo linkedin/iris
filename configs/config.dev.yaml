@@ -59,6 +59,7 @@ db: &db
     pool_timeout: 60
 sender:
   debug: True
+  process_title: iris-sender
   host: 127.0.0.1
   port: 2321
 

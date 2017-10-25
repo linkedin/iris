@@ -11,6 +11,7 @@ import os
 import socket
 import gevent
 import signal
+import setproctitle
 
 from collections import defaultdict
 from iris.plugins import init_plugins
@@ -1165,6 +1166,12 @@ def init_sender(config):
     gevent.signal(signal.SIGINT, sender_shutdown)
     gevent.signal(signal.SIGTERM, sender_shutdown)
     gevent.signal(signal.SIGQUIT, sender_shutdown)
+
+    process_title = config['sender'].get('process_title')
+
+    if process_title and isinstance(process_title, basestring):
+        setproctitle.setproctitle(process_title)
+        logger.info('Changing process name to %s', process_title)
 
     api_host = config['sender'].get('api_host', 'http://localhost:16649')
     db.init(config)
