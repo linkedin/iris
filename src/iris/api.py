@@ -14,6 +14,7 @@ import re
 import os
 import datetime
 import logging
+import pyqrcode
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
@@ -25,6 +26,7 @@ import falcon.uri
 
 from collections import defaultdict
 from streql import equals
+from base64 import b64encode
 
 from . import db
 from . import utils
@@ -3694,6 +3696,136 @@ class ApplicationStats(object):
         resp.body = ujson.dumps(stats, sort_keys=True)
 
 
+class Devices(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp, user):
+        data = ujson.loads(req.context['body'])
+        device_uuid = data.get('device_id')
+        os = data.get('os')
+
+        if user is None or device_uuid is None or os is None:
+            raise HTTPBadRequest('Missing parameters for adding device')
+
+        # Open database connection
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''INSERT IGNORE INTO device (device_uuid, os, user_id)
+                          VALUES (%s,
+                                  %s,
+                                  (SELECT `id` FROM `target` WHERE `name` = %s
+                                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')))''',
+                       (device_uuid, os, user))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # disconnect from server
+        resp.status = falcon.HTTP_201
+
+
+# FIXME: temporary check to limit allowed users to a small group
+def check_allowed(req, resp, resource, params):
+    if req.context['username'] not in resource.allowed_users:
+        raise falcon.HTTPForbidden()
+
+
+@falcon.before(check_allowed)
+class QRKey(object):
+    allow_read_no_auth = False
+
+    def __init__(self, mobile_url, users):
+        self.mobile_url = mobile_url
+        self.allowed_users = users
+
+    def png_to_datauri(self, png):
+        return 'data:image/png;base64,%s' % png
+
+    def generate_secret(self, user):
+        # Generate crypto-secure 256 bit secret
+        random_bytes = os.urandom(32)
+        secret = b64encode(random_bytes).decode('utf-8')
+
+        data = {'secret': secret,
+                'api_url': self.mobile_url}
+        code = pyqrcode.create(ujson.dumps(data))
+        image_as_str = code.png_as_base64_str(scale=5)
+
+        # Open database connection
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                '''UPDATE `user` SET `mobile_key` = %s
+                   WHERE `target_id` = (SELECT `id` FROM `target` WHERE `name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))''',
+                (secret, user))
+            if cursor.rowcount == 0:
+                raise HTTPNotFound()
+            # Commit your changes in the database
+            conn.commit()
+        except falcon.HTTPError:
+            raise
+        except:
+            logger.exception('Failed to generate key for user %s', user)
+            raise falcon.HTTPError('Error generating key')
+        finally:
+            cursor.close()
+            conn.close()
+
+        return self.png_to_datauri(image_as_str)
+
+    def on_get(self, req, resp, user):
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            '''SELECT `mobile_key` FROM `user`
+               WHERE `target_id` = (SELECT `id` FROM `target` WHERE `name` = %s
+                 AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))''',
+            user)
+        secret = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if secret is None:
+            raise HTTPNotFound()
+        else:
+            secret = secret[0]
+        data = {'secret': secret,
+                'api_url': self.mobile_url}
+        if data['secret'] is None:
+            data = self.generate_secret(user)
+        else:
+            code = pyqrcode.create(ujson.dumps(data))
+            image_as_str = code.png_as_base64_str(scale=5)
+            data = self.png_to_datauri(image_as_str)
+
+        # return png base64 of qrcode
+        resp.status = falcon.HTTP_200
+        resp.body = data
+
+    def on_post(self, req, resp, user):
+        # return png base64 of qrcode
+        resp.body = self.generate_secret(user)
+        resp.status = falcon.HTTP_201
+
+    def on_delete(self, req, resp, user):
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            '''UPDATE `user` SET `mobile_key` = NULL
+               WHERE `target_id` = (SELECT `id` FROM `target` WHERE `name` = %s
+                 AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))''',
+            user)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        resp.status = falcon.HTTP_201
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -3706,7 +3838,23 @@ def json_error_serializer(req, resp, exception):
     resp.content_type = 'application/json'
 
 
-def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr):
+def construct_falcon_api(config):
+    healthcheck_path = config['healthcheck_path']
+    allowed_origins = config.get('allowed_origins', [])
+    iris_sender_app = config['sender'].get('sender_app')
+    mobile_settings = config.get('mobile', {})
+    mobile_active = mobile_settings.get('activated', False)
+    mobile_users = mobile_settings.get('mobile_users', set())
+    mobile_url = mobile_settings.get('mobile_url')
+
+    debug = False
+    if config['server'].get('disable_auth'):
+        debug = True
+
+    default_master_sender = config['sender'].get('master_sender', config['sender'])
+    default_sender_addr = (default_master_sender['host'], default_master_sender['port'])
+    zk_hosts = config['sender'].get('zookeeper_cluster', False)
+
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
@@ -3767,6 +3915,10 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/stats', Stats())
 
+    if mobile_active:
+        api.add_route('/v0/qrkey/{user}', QRKey(mobile_url, mobile_users))
+        api.add_route('/v0/devices/{user}', Devices())
+
     api.add_route('/healthcheck', Healthcheck(healthcheck_path))
     return api
 
@@ -3776,21 +3928,9 @@ def get_api(config):
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
-    healthcheck_path = config['healthcheck_path']
-    allowed_origins = config.get('allowed_origins', [])
-    iris_sender_app = config['sender'].get('sender_app')
-
-    debug = False
-    if config['server'].get('disable_auth'):
-        debug = True
-
-    default_master_sender = config['sender'].get('master_sender', config['sender'])
-    default_master_sender_addr = (default_master_sender['host'], default_master_sender['port'])
-    zk_hosts = config['sender'].get('zookeeper_cluster', False)
 
     # all notifications go through master sender for now
-    app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr)
+    app = construct_falcon_api(config)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)

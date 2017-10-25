@@ -40,6 +40,8 @@ setuptools.setup(
         'webassets==0.12.0',
         'python-ldap==2.4.9',
         'exchangelib==1.10.0',
+        'PyQRCode==1.2.1',
+        'pypng==0.0.18',
     ],
     extras_require={
         'kazoo': ['kazoo==2.3.1'],

@@ -1,5 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
+<!-- Re-key mobile app confirmation modal -->
+<div class="modal fade" id="rekey-modal" tabindex="-1" role="dialog" aria-labelledby="mobile-rekey-btn">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Re-key mobile app</h4>
+      </div>
+      <div class="modal-body">
+        This will regenerate your key for mobile app authentication, invalidating any previous keys. After re-keying, you will be unable to use the mobile app until you scan the newly generated code.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="mobile-rekey-btn">Re-key application</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="main user-settings">
   <h3>Settings</h3>
   <div class="module module-blue clearfix border-all user-module user-contact-module col-md-3 col-sm-3 col-xs-3">
@@ -32,6 +51,14 @@
       <select data-type="dst_mode" id="reprio-dest-mode" class="form-control border-bottom"></select>
       <button type="button" class="btn btn-primary btn-sm" id="reprio-add-btn">Add</button>
     </div>
+  </div>
+</div>
+<div id="mobile" class="module">
+  <h4>Mobile Authentication <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+  <div class="border-top" id="mobile-inner">
+    Scan this code with your phone to register your device with the Iris mobile app server.
+    <div id="mobile-key-container"></div>
+    <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#rekey-modal">Re-key application</button>
   </div>
 </div>
 {% raw %}
