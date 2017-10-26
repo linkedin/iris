@@ -250,7 +250,7 @@ default_sender_metrics = {
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
-    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0
+    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0
 }
 
 # TODO: make this configurable
@@ -1052,6 +1052,7 @@ def fetch_and_send_message(send_queue):
         success = distributed_send_message(message)
     except Exception:
         logger.exception('Failed to send message: %s', message)
+        add_mode_stat(message['mode'], None)
         if message['mode'] == 'email':
             metrics.incr('task_failure')
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
@@ -1064,6 +1065,7 @@ def fetch_and_send_message(send_queue):
             # nope - log and bail
             except Exception:
                 metrics.incr('task_failure')
+                add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
     if success:
         metrics.incr('message_send_cnt')
@@ -1327,6 +1329,7 @@ def main():
 
             for i in bad_workers:
                 worker_tasks[mode][i] = spawn(worker, per_mode_send_queues[mode])
+                metrics.incr('workers_respawn_cnt')
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))
