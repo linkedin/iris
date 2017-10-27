@@ -180,6 +180,7 @@ PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DAT
 
 # When a rendered message body is longer than this number of characters, drop it.
 MAX_MESSAGE_BODY_LENGTH = 40000
+MAX_MESSAGE_RETRIES = 2
 
 # logging
 logger = logging.getLogger()
@@ -250,7 +251,8 @@ default_sender_metrics = {
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
-    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0
+    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
+    'message_retry_cnt': 0
 }
 
 # TODO: make this configurable
@@ -976,7 +978,15 @@ def distributed_send_message(message):
 def fetch_and_send_message(send_queue):
     message = send_queue.get()
     metrics.incr('send_queue_gets_cnt')
-    sanitize_unicode_dict(message)
+
+    retry_count = message.get('retry_count')
+    is_retry = retry_count is not None
+    if is_retry and retry_count >= MAX_MESSAGE_RETRIES:
+        logger.warning('Maximum retry count for %s breached')
+        return
+
+    if not is_retry:
+        sanitize_unicode_dict(message)
 
     if 'message_id' not in message:
         message['message_id'] = None
@@ -984,7 +994,7 @@ def fetch_and_send_message(send_queue):
     drop_mode_id = api_cache.modes.get('drop')
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
-    if not quota.allow_send(message):
+    if not is_retry and not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
@@ -1018,38 +1028,43 @@ def fetch_and_send_message(send_queue):
 
         return
 
-    render(message)
+    # Only render this message and validate its body/etc if it's not a retry, in which case this
+    # step would have been done before
+    if not is_retry:
+        render(message)
 
-    if message.get('body') is None:
-        message['body'] = ''
+        if message.get('body') is None:
+            message['body'] = ''
 
-    # Drop this message, and mark it as dropped, rather than sending it, if its
-    # body is too long and we were normally going to send it anyway.
-    body_length = len(message['body'])
-    if body_length > MAX_MESSAGE_BODY_LENGTH:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
-                    message['message_id'], body_length)
-        spawn(auditlog.message_change,
-              message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
-              'Dropping due to excessive body length (%s > %s chars)' % (
-                  body_length, MAX_MESSAGE_BODY_LENGTH))
+        # Drop this message, and mark it as dropped, rather than sending it, if its
+        # body is too long and we were normally going to send it anyway.
+        body_length = len(message['body'])
+        if body_length > MAX_MESSAGE_BODY_LENGTH:
+            logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                        message['message_id'], body_length)
+            spawn(auditlog.message_change,
+                  message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+                  'Dropping due to excessive body length (%s > %s chars)' % (
+                      body_length, MAX_MESSAGE_BODY_LENGTH))
 
-        metrics.incr('msg_drop_length_cnt')
+            metrics.incr('msg_drop_length_cnt')
 
-        # Truncate this here to avoid a duplicate log message in
-        # mark_message_as_sent(), as we still need to call that to update the body/subject
-        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
+            # Truncate this here to avoid a duplicate log message in
+            # mark_message_as_sent(), as we still need to call that to update the body/subject
+            message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
-        if drop_mode_id:
-            message['mode'] = 'drop'
-            message['mode_id'] = drop_mode_id
+            if drop_mode_id:
+                message['mode'] = 'drop'
+                message['mode_id'] = drop_mode_id
 
-        mark_message_as_sent(message)
-        return
+            mark_message_as_sent(message)
+            return
 
     success = False
     try:
         success = distributed_send_message(message)
+
+        print success
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
@@ -1071,6 +1086,13 @@ def fetch_and_send_message(send_queue):
         metrics.incr('message_send_cnt')
         if message['message_id']:
             mark_message_as_sent(message)
+
+    else:
+        # If we're not successful, try retrying it
+        message['retry_count'] = message.get('retry_count', 0) + 1
+        message_send_enqueue(message)
+        metrics.incr('message_retry_cnt')
+        logger.info('Message %s failed. Re-queuing for retry (%s/%s).', message, message['retry_count'], MAX_MESSAGE_RETRIES)
 
     if message['message_id']:
         update_message_sent_status(message, success)
@@ -1147,14 +1169,17 @@ def sender_shutdown():
 
 def message_send_enqueue(message):
     # Set the target contact here so we determine the mode, which determines the
-    # queue it gets inserted into
-    has_contact = set_target_contact(message)
-    if not has_contact:
-        mark_message_has_no_contact(message)
-        metrics.incr('task_failure')
-        logger.error('Failed to send message, no contact found: %s', message)
-        return
+    # queue it gets inserted into. Skip this step if it's a retry because we'd
+    # already have the message's contact info decided
+    if not message.get('retry_count'):
+        has_contact = set_target_contact(message)
+        if not has_contact:
+            mark_message_has_no_contact(message)
+            metrics.incr('task_failure')
+            logger.error('Failed to send message, no contact found: %s', message)
+            return
 
+    print 'will queue again'
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
         per_mode_send_queues[message_mode].put(message)

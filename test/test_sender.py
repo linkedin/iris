@@ -161,6 +161,72 @@ def test_fetch_and_send_message(mocker):
     assert send_queue.qsize() == 0
     mock_mark_message_sent.assert_called_once()
 
+def test_message_retry(mocker):
+    def check_mark_message_sent(m):
+        assert m['message_id'] == fake_message['message_id']
+
+    def mock_set_target_contact(message):
+        message['destination'] = 'foo@example.com'
+        message['mode'] = 'sms'
+        message['mode_id'] = 1
+        return True
+
+    mocker.patch('iris.bin.sender.db')
+    mock_distributed_send_message = mocker.patch('iris.bin.sender.distributed_send_message')
+    mock_distributed_send_message.return_value = False
+    mocker.patch('iris.bin.sender.quota')
+    mocker.patch('iris.bin.sender.update_message_mode')
+    mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
+    mock_mark_message_sent.side_effect = check_mark_message_sent
+    mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
+    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
+    mock_iris_client.get.return_value.json.return_value = fake_plan
+    from iris.bin.sender import (
+        fetch_and_send_message, per_mode_send_queues, metrics, default_sender_metrics,
+        add_mode_stat
+    )
+
+    def fail_send_message(message):
+        add_mode_stat(message['mode'], None)
+
+    mock_distributed_send_message.side_effect = fail_send_message
+
+    metrics.stats.update(default_sender_metrics)
+
+    send_queue = per_mode_send_queues.setdefault('sms', gevent.queue.Queue())
+
+    # drain out send queue
+    while send_queue.qsize() > 0:
+        send_queue.get()
+    send_queue.put(fake_message.copy())
+
+    mock_distributed_send_message.reset_mock()
+    fetch_and_send_message(send_queue)
+    mock_distributed_send_message.assert_called()
+
+    # will retry first time
+    assert send_queue.qsize() == 1
+    mock_mark_message_sent.assert_not_called()
+
+    mock_distributed_send_message.reset_mock()
+    fetch_and_send_message(send_queue)
+    mock_distributed_send_message.assert_called()
+
+    # will retry a 2nd time
+    assert send_queue.qsize() == 1
+    mock_mark_message_sent.assert_not_called()
+
+    mock_distributed_send_message.reset_mock()
+    fetch_and_send_message(send_queue)
+
+    # will not retry a 3rd time
+    assert send_queue.qsize() == 0
+    mock_distributed_send_message.assert_not_called()
+
+    # we retried after it failed the first time
+    assert metrics.stats['message_retry_cnt'] == 2
+    assert metrics.stats['sms_fail'] == 2
+
 
 def test_no_valid_modes(mocker):
     def check_mark_message_sent(m):
@@ -173,6 +239,7 @@ def test_no_valid_modes(mocker):
     mocker.patch('iris.bin.sender.db')
     mocker.patch('iris.bin.sender.set_target_contact').return_value = False
     mock_mark_message_no_contact = mocker.patch('iris.bin.sender.mark_message_has_no_contact')
+    mock_mark_message_no_contact.reset_mock()
     from iris.bin.sender import message_send_enqueue
 
     message_send_enqueue(fake_message)
