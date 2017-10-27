@@ -161,6 +161,7 @@ def test_fetch_and_send_message(mocker):
     assert send_queue.qsize() == 0
     mock_mark_message_sent.assert_called_once()
 
+
 def test_message_retry(mocker):
     def check_mark_message_sent(m):
         assert m['message_id'] == fake_message['message_id']
