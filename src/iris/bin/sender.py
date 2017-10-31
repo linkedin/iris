@@ -982,7 +982,7 @@ def fetch_and_send_message(send_queue):
     retry_count = message.get('retry_count')
     is_retry = retry_count is not None
     if is_retry and retry_count >= MAX_MESSAGE_RETRIES:
-        logger.warning('Maximum retry count for %s breached')
+        logger.warning('Maximum retry count (%s) for %s breached', MAX_MESSAGE_RETRIES, message)
         return
 
     if not is_retry:
