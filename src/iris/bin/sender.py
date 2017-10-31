@@ -1258,7 +1258,6 @@ def main():
     if not rpc.run(config['sender']):
         sender_shutdown()
 
-
     default_worker_count = 100
 
     try:
