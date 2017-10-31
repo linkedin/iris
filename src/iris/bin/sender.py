@@ -1258,6 +1258,7 @@ def main():
     if not rpc.run(config['sender']):
         sender_shutdown()
 
+
     default_worker_count = 100
 
     try:
@@ -1265,16 +1266,21 @@ def main():
     except ValueError:
         worker_count = default_worker_count
 
-    workers_per_mode = worker_count // len(api_cache.modes)
+    workers_per_mode_cnt = worker_count // len(api_cache.modes)
+    workers_per_mode = {mode: workers_per_mode_cnt for mode in api_cache.modes}
 
-    logger.info('Running with %s workers with %s workers per mode', worker_count, workers_per_mode)
+    # Hard code workers for each mode manually in config
+    workers_per_mode_config = config.get('sender', {}).get('workers_per_mode', {})
+    workers_per_mode.update({mode: int(workers_per_mode_config[mode]) for mode in api_cache.modes if mode in workers_per_mode_config})
+
+    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
 
     worker_tasks = {}
 
-    for mode in api_cache.modes:
+    for mode, worker_count in workers_per_mode.iteritems():
         send_queue = queue.Queue()
         per_mode_send_queues[mode] = send_queue
-        worker_tasks[mode] = [spawn(worker, send_queue) for x in xrange(workers_per_mode)]
+        worker_tasks[mode] = [spawn(worker, send_queue) for x in xrange(worker_count)]
 
     rpc.init(config['sender'], dict(
         send_message=send_message,
