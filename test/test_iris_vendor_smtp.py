@@ -42,7 +42,16 @@ def test_smtp_send_email(mocker):
         ['iris@bar'],
         ['foo@bar'],
         CheckEmailString())
-    mocked_SMPT.return_value.quit.assert_called_once_with()
+
+    mocked_SMPT.reset_mock()
+
+    smtp_vendor.send_email({
+        'destination': 'foo@bar',
+        'subject': 'hello',
+        'body': 'world',
+    })
+
+    mocked_SMPT.assert_not_called()
 
 
 def test_smtp_unicode(mocker):
