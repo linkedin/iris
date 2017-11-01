@@ -243,6 +243,126 @@ are replaced with <code class="code docutils literal"><span class="pre">-</span>
 </div>
 </dd></dl>
 
+<dl class="post">
+<dt id="post--v0-plans">
+<code class="descname">POST </code><code class="descname">/v0/plans</code><a class="headerlink" href="#post--v0-plans" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Plan create endpoint. Plans can either be static, defining role/targets in plan creation,
+or dynamic, leaving these fields blank during creation and determining role/targets at
+incident creation time.
+Static plan example:</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/plans</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+
+{
+    &quot;aggregation_reset&quot;: 300,
+    &quot;aggregation_window&quot;: 300,
+    &quot;creator&quot;: &quot;user-foo&quot;,
+    &quot;description&quot;: &quot;this is a plan&quot;,
+    &quot;name&quot;: &quot;plan-foo&quot;,
+    &quot;steps&quot;: [
+        [
+            {
+                &quot;priority&quot;: &quot;urgent&quot;,
+                &quot;repeat&quot;: 0,
+                &quot;role&quot;: &quot;user&quot;,
+                &quot;target&quot;: &quot;demo&quot;,
+                &quot;template&quot;: &quot;template-foo&quot;,
+                &quot;wait&quot;: 0
+            }
+        ]
+    ],
+    &quot;threshold_count&quot;: 10,
+    &quot;threshold_window&quot;: 900
+}
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">201</span> <span class="ne">Created</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="mi">1</span>
+</pre></div>
+</div>
+<p>Aggregation: If a user receives more than $threshold_count messages from this plan via a
+given medium within $threshold_window seconds, group their messages for $aggregation_window
+seconds. After $aggregation_reset seconds without a message, aggregation stops.</p>
+<p>For a static plan, &#8220;steps&#8221; should be a list of arrays of JSON objects defining  &#8220;priority&#8221;,
+&#8220;repeat&#8221;, &#8220;role&#8221;, &#8220;target&#8221;, &#8220;template&#8221;, and &#8220;wait&#8221;. Each array of objects represents a step
+in the plan, with the JSON objects representing the notifications delivered in that step. These
+notifications occur in parallel with one another within a given step. Descriptions of these
+parameters:</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">priority:</th><td class="field-body">Priority of messages sent by this step sub-part</td>
+</tr>
+<tr class="field-even field"><th class="field-name">repeat:</th><td class="field-body">Number of times this message will be repeated (e.g. repeat == 0 =&gt; 1 message)</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">role:</th><td class="field-body">Role of the target</td>
+</tr>
+<tr class="field-even field"><th class="field-name">target:</th><td class="field-body">Name of the target</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">template:</th><td class="field-body">Name of the template user to format this message</td>
+</tr>
+<tr class="field-even field"><th class="field-name">wait:</th><td class="field-body">Time to wait until sending a repeat message or moving on to the next plan step.</td>
+</tr>
+</tbody>
+</table>
+<p>Dynamic plan example:</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/plans</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+
+{
+    &quot;aggregation_reset&quot;: 300,
+    &quot;aggregation_window&quot;: 300,
+    &quot;creator&quot;: &quot;user-foo&quot;,
+    &quot;description&quot;: &quot;this is a plan&quot;,
+    &quot;isValid&quot;: true,
+    &quot;name&quot;: &quot;plan-foo&quot;,
+    &quot;steps&quot;: [
+        [
+            {
+                &quot;dynamic_index&quot;: 0,
+                &quot;priority&quot;: &quot;urgent&quot;,
+                &quot;repeat&quot;: 0,
+                &quot;template&quot;: &quot;template-foo&quot;,
+                &quot;wait&quot;: 0
+            }
+        ]
+    ],
+    &quot;threshold_count&quot;: 10,
+    &quot;threshold_window&quot;: 900
+}
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">201</span> <span class="ne">Created</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="mi">1</span>
+</pre></div>
+</div>
+<p>For dynamic plans, step sub-parts define a &#8220;dynamic index&#8221; rather than a role/target
+combination. These indices must span a range from 0..n, where n is the largest dynamic
+index provided. At incident creation time, a mapping of dynamic index to role/target
+is provided to define the recipient of a message. See incidents POST endpoint for details.</p>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-incidents">
 <h3>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h3>
@@ -289,6 +409,23 @@ are replaced with <code class="code docutils literal"><span class="pre">-</span>
 <li>context json blob is longer than 655355 bytes</li>
 <li>none of the templates used in the plan supports the given application</li>
 </ul>
+<p>To create an incident for a dynamic plan (one that defines dynamic targets), an
+additional <cite>dynamic_targets</cite> field must be passed along with the plan and context.
+Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
+<cite>dynamic_targets</cite> parameter should take the following form:</p>
+<div class="highlight-json"><div class="highlight"><pre><span></span><span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;jdoe&quot;</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;team&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;team-foo&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>This will map target 0 to the user &#8220;jdoe&#8221;, and target 1 to the team &#8220;team-foo&#8221;.</p>
 </div></blockquote>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
