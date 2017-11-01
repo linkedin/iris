@@ -25,7 +25,6 @@ class iris_smtp(object):
             IM_SUPPORT: self.send_email,
         }
         self.mx_sorted = []
-        self.smtp_handles = {}  # map mailserver -> connection handle
 
         self.smtp_timeout = config.get('timeout', 10)
         if config.get('smtp_server'):
@@ -95,47 +94,20 @@ class iris_smtp(object):
             m.attach(mt)
 
         conn = None
-        used_mx = None
 
         for mx in self.mx_sorted:
-            old_handle = self.smtp_handles.get(mx)
-
-            # Use previously created connection
-            if old_handle:
-                conn = old_handle
-                used_mx = mx
+            try:
+                smtp = SMTP(timeout=self.smtp_timeout)
+                smtp.connect(mx[1], 25)
+                conn = smtp
                 break
-
-            # Otherwise try making a new one and storing it
-            else:
-                logger.info('Opening new MX connection for %s', mx)
-                try:
-                    smtp = SMTP(timeout=self.smtp_timeout)
-                    smtp.connect(mx[1], 25)
-                    conn = smtp
-                    self.smtp_handles[mx] = conn
-                    used_mx = mx
-                    break
-                except Exception as e:
-                    logger.exception('Failed connecting to %s: %s', mx, e)
+            except Exception as e:
+                logger.exception(e)
 
         if not conn:
             raise Exception('Failed to get smtp connection.')
-
-        try:
-            conn.sendmail([from_address], [message['destination']], m.as_string())
-        except Exception as e:
-            logger.exception('Failed sending email through %s: %s', used_mx, e)
-
-            # When we fail, remove this handle from our map so we try connecting again next round
-            self.smtp_handles.pop(used_mx, None)
-
-            try:
-                conn.quit()
-            except Exception:
-                logger.exception('Failed closing SMTP connection')
-
-            return None
+        conn.sendmail([from_address], [message['destination']], m.as_string())
+        conn.quit()
 
         return time.time() - start
 
