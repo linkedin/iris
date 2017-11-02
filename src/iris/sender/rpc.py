@@ -137,28 +137,17 @@ def handle_slave_send(socket, address, req):
     message = req['data']
     message_id = message.get('message_id', '?')
 
+    message['to_slave'] = True
+
     try:
-        runtime = send_funcs['send_message'](message)
+        runtime = send_funcs['message_send_enqueue'](message)
         add_mode_stat(message['mode'], runtime)
-
-        metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
-        metrics.add_new_metrics({metrics_key: 0})
-        metrics.incr(metrics_key)
-
-        if runtime is not None:
-            response = 'OK'
-            access_logger.info('Message (ID %s) from master %s sent successfully',
-                               message_id, address)
-            metrics.incr('slave_message_send_success_cnt')
-        else:
-            response = 'FAIL'
-            access_logger.error(
-                'Got falsy value from send_message for message (ID %s) from master %s: %s',
-                message_id, address, runtime)
-            metrics.incr('slave_message_send_fail_cnt')
+        response = 'OK'
+        access_logger.info('Message (ID %s) from master %s queued successfully', message_id, address)
     except Exception:
         response = 'FAIL'
-        logger.exception('Sending message (ID %s) from master %s failed.')
+        logger.exception('Queueing message (ID %s) from master %s failed.')
+        access_logger.error('Failed queueing message (ID %s) from master %s: %s', message_id, address, runtime)
         metrics.incr('slave_message_send_fail_cnt')
 
     socket.sendall(msgpack.packb(response))
