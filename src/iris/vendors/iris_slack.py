@@ -103,5 +103,5 @@ class iris_slack(object):
         except Exception:
             logger.exception('Slack post request failed')
 
-    def send(self, message):
+    def send(self, message, customizations=None):
         return self.modes[message['mode']](message)

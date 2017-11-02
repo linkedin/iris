@@ -43,9 +43,13 @@ class iris_smtp(object):
         else:
             raise ValueError('Missing SMTP config for sender')
 
-    def send_email(self, message):
+    def send_email(self, message, customizations=None):
         md = markdown.Markdown()
-        from_address = self.config['from']
+
+        if isinstance(customizations, dict):
+            from_address = customizations.get('from', self.config['from'])
+        else:
+            from_address = self.config['from']
 
         start = time.time()
         m = MIMEMultipart('alternative')
@@ -111,5 +115,5 @@ class iris_smtp(object):
 
         return time.time() - start
 
-    def send(self, message):
-        return self.modes[message['mode']](message)
+    def send(self, message, customizations=None):
+        return self.modes[message['mode']](message, customizations)

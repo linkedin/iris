@@ -15,7 +15,7 @@ import setproctitle
 
 from collections import defaultdict
 from iris.plugins import init_plugins
-from iris.vendors import init_vendors, send_message
+from iris.vendors import IrisVendorManager
 from iris.sender import auditlog
 from iris import metrics
 from uuid import uuid4
@@ -432,8 +432,7 @@ def escalate():
                         html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], str(e))
                         logger.exception(html_body)
                     tracking_message['email_html'] = html_body
-
-                spawn(send_message, tracking_message)
+                message_send_enqueue(tracking_message)
     cursor.close()
 
     new_incidents_count = len(escalations)
@@ -946,7 +945,7 @@ def mark_message_has_no_contact(message):
         'Ignore message as we failed to resolve target contact')
 
 
-def distributed_send_message(message):
+def distributed_send_message(message, vendor_manager):
     # If I am the master and this message isn't for a slave, attempt
     # sending my messages through my slaves.
     if not message.get('to_slave') and coordinator.am_i_master():
@@ -963,7 +962,7 @@ def distributed_send_message(message):
 
     logger.info('Sending message (ID %s) locally', message.get('message_id', '?'))
 
-    runtime = send_message(message)
+    runtime = vendor_manager.send_message(message)
     add_mode_stat(message['mode'], runtime)
 
     metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
@@ -976,7 +975,7 @@ def distributed_send_message(message):
     raise Exception('Failed sending message')
 
 
-def fetch_and_send_message(send_queue):
+def fetch_and_send_message(send_queue, vendor_manager):
     message = send_queue.get()
     metrics.incr('send_queue_gets_cnt')
 
@@ -1065,7 +1064,7 @@ def fetch_and_send_message(send_queue):
 
     success = False
     try:
-        success = distributed_send_message(message)
+        success = distributed_send_message(message, vendor_manager)
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
@@ -1077,7 +1076,7 @@ def fetch_and_send_message(send_queue):
             set_target_fallback_mode(message)
             render(message)
             try:
-                success = distributed_send_message(message)
+                success = distributed_send_message(message, vendor_manager)
             # nope - log and bail
             except Exception:
                 metrics.incr('task_failure')
@@ -1105,9 +1104,10 @@ def fetch_and_send_message(send_queue):
         update_message_sent_status(message, success)
 
 
-def worker(send_queue):
+def worker(send_queue, config):
+    vendor_manager = IrisVendorManager(config.get('vendors', []), config.get('applications', []))
     while True:
-        fetch_and_send_message(send_queue)
+        fetch_and_send_message(send_queue, vendor_manager)
 
 
 def gwatch_renewer():
@@ -1260,7 +1260,6 @@ def main():
     logger.info('[-] bootstraping sender...')
     init_sender(config)
     init_plugins(config.get('plugins', {}))
-    init_vendors(config.get('vendors', []), config.get('applications', []))
 
     if not rpc.run(config['sender']):
         sender_shutdown()
@@ -1286,7 +1285,7 @@ def main():
     for mode, worker_count in workers_per_mode.iteritems():
         send_queue = queue.Queue()
         per_mode_send_queues[mode] = send_queue
-        worker_tasks[mode] = [spawn(worker, send_queue) for x in xrange(worker_count)]
+        worker_tasks[mode] = [spawn(worker, send_queue, config) for x in xrange(worker_count)]
 
     rpc.init(config['sender'], dict(
         message_send_enqueue=message_send_enqueue
@@ -1364,7 +1363,7 @@ def main():
                     bad_workers.append(i)
 
             for i in bad_workers:
-                worker_tasks[mode][i] = spawn(worker, per_mode_send_queues[mode])
+                worker_tasks[mode][i] = spawn(worker, per_mode_send_queues[mode], config)
                 metrics.incr('workers_respawn_cnt')
 
         now = time.time()
