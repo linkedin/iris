@@ -947,8 +947,9 @@ def mark_message_has_no_contact(message):
 
 
 def distributed_send_message(message):
-    # If I am the master, attempt sending my messages through my slaves.
-    if coordinator.am_i_master():
+    # If I am the master and this message isn't for a slave, attempt
+    # sending my messages through my slaves.
+    if not message.get('to_slave') and coordinator.am_i_master():
         try:
             if coordinator.slave_count and coordinator.slaves:
                 for i, address in enumerate(coordinator.slaves):
@@ -991,10 +992,12 @@ def fetch_and_send_message(send_queue):
     if 'message_id' not in message:
         message['message_id'] = None
 
+    message_to_slave = message.get('to_slave', False)
+
     drop_mode_id = api_cache.modes.get('drop')
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
-    if not is_retry and not quota.allow_send(message):
+    if not is_retry and not message_to_slave and not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
@@ -1030,7 +1033,7 @@ def fetch_and_send_message(send_queue):
 
     # Only render this message and validate its body/etc if it's not a retry, in which case this
     # step would have been done before
-    if not is_retry:
+    if not is_retry and not message_to_slave:
         render(message)
 
         if message.get('body') is None:
@@ -1063,8 +1066,6 @@ def fetch_and_send_message(send_queue):
     success = False
     try:
         success = distributed_send_message(message)
-
-        print success
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
@@ -1087,12 +1088,18 @@ def fetch_and_send_message(send_queue):
         if message['message_id']:
             mark_message_as_sent(message)
 
+        if message_to_slave:
+            metrics.incr('slave_message_send_success_cnt')
+
     else:
         # If we're not successful, try retrying it
         message['retry_count'] = message.get('retry_count', 0) + 1
         message_send_enqueue(message)
         metrics.incr('message_retry_cnt')
         logger.info('Message %s failed. Re-queuing for retry (%s/%s).', message, message['retry_count'], MAX_MESSAGE_RETRIES)
+
+        if message_to_slave:
+            metrics.incr('slave_message_send_fail_cnt')
 
     if message['message_id']:
         update_message_sent_status(message, success)
@@ -1282,7 +1289,6 @@ def main():
         worker_tasks[mode] = [spawn(worker, send_queue) for x in xrange(worker_count)]
 
     rpc.init(config['sender'], dict(
-        send_message=send_message,
         message_send_enqueue=message_send_enqueue
     ))
 
