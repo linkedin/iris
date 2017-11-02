@@ -139,5 +139,5 @@ class iris_twilio(object):
 
         return send_time
 
-    def send(self, message):
+    def send(self, message, customizations=None):
         return self.modes[message['mode']](message)

@@ -7,6 +7,7 @@
 
 import time
 from iris.bin.sender import init_sender
+from iris.vendors import IrisVendorManager
 import msgpack
 import gevent.queue
 
@@ -135,6 +136,7 @@ def test_fetch_and_send_message(mocker):
         message['mode_id'] = 1
         return True
 
+    vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
     mocker.patch('iris.bin.sender.distributed_send_message').return_value = True
     mocker.patch('iris.bin.sender.quota')
@@ -156,7 +158,7 @@ def test_fetch_and_send_message(mocker):
         send_queue.get()
     send_queue.put(fake_message)
 
-    fetch_and_send_message(send_queue)
+    fetch_and_send_message(send_queue, vendors)
 
     assert send_queue.qsize() == 0
     mock_mark_message_sent.assert_called_once()
@@ -172,6 +174,7 @@ def test_message_retry(mocker):
         message['mode_id'] = 1
         return True
 
+    vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
     mock_distributed_send_message = mocker.patch('iris.bin.sender.distributed_send_message')
     mock_distributed_send_message.return_value = False
@@ -180,6 +183,7 @@ def test_message_retry(mocker):
     mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent
     mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
+    mocker.patch('iris.bin.sender.set_target_fallback_mode').side_effect = mock_set_target_contact
     mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
     mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
@@ -187,7 +191,7 @@ def test_message_retry(mocker):
         add_mode_stat
     )
 
-    def fail_send_message(message):
+    def fail_send_message(message, vendors=None):
         add_mode_stat(message['mode'], None)
 
     mock_distributed_send_message.side_effect = fail_send_message
@@ -202,7 +206,7 @@ def test_message_retry(mocker):
     send_queue.put(fake_message.copy())
 
     mock_distributed_send_message.reset_mock()
-    fetch_and_send_message(send_queue)
+    fetch_and_send_message(send_queue, vendors)
     mock_distributed_send_message.assert_called()
 
     # will retry first time
@@ -210,7 +214,7 @@ def test_message_retry(mocker):
     mock_mark_message_sent.assert_not_called()
 
     mock_distributed_send_message.reset_mock()
-    fetch_and_send_message(send_queue)
+    fetch_and_send_message(send_queue, vendors)
     mock_distributed_send_message.assert_called()
 
     # will retry a 2nd time
@@ -218,7 +222,7 @@ def test_message_retry(mocker):
     mock_mark_message_sent.assert_not_called()
 
     mock_distributed_send_message.reset_mock()
-    fetch_and_send_message(send_queue)
+    fetch_and_send_message(send_queue, vendors)
 
     # will not retry a 3rd time
     assert send_queue.qsize() == 0
