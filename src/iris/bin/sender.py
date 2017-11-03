@@ -12,10 +12,11 @@ import socket
 import gevent
 import signal
 import setproctitle
+import copy
 
 from collections import defaultdict
 from iris.plugins import init_plugins
-from iris.vendors import IrisVendorManager
+from iris.vendors import IrisVendorManager, iris_smtp
 from iris.sender import auditlog
 from iris import metrics
 from uuid import uuid4
@@ -235,6 +236,14 @@ quota = None
 # Coordinator object for sender master election
 coordinator = None
 
+# Mode -> [{'greenlet': greenlet, 'kill_set': gevent.Event}]
+worker_tasks = defaultdict(list)
+
+# MX -> [{'greenlet': greenlet, 'kill_set': gevent.Event}]
+autoscale_email_worker_tasks = defaultdict(list)
+
+# support the 2nd control+c force exiting sender without waiting for tasks to finish
+shutdown_started = False
 
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
@@ -976,7 +985,11 @@ def distributed_send_message(message, vendor_manager):
 
 
 def fetch_and_send_message(send_queue, vendor_manager):
-    message = send_queue.get()
+    try:
+        message = send_queue.get(True, 4)
+    except queue.Empty:
+        return
+
     metrics.incr('send_queue_gets_cnt')
 
     retry_count = message.get('retry_count')
@@ -1104,10 +1117,159 @@ def fetch_and_send_message(send_queue, vendor_manager):
         update_message_sent_status(message, success)
 
 
-def worker(send_queue, config):
-    vendor_manager = IrisVendorManager(config.get('vendors', []), config.get('applications', []))
+def worker(send_queue, worker_config, kill_set):
+    vendor_manager = IrisVendorManager(worker_config.get('vendors', []), worker_config.get('applications', []))
     while True:
         fetch_and_send_message(send_queue, vendor_manager)
+
+        if kill_set.is_set():
+            vendor_manager.cleanup()
+            return
+
+
+def maintain_workers(config):
+    # We mangle this config dict a bit and pass it around. Avoid latering the main one
+    config = copy.deepcopy(config)
+
+    # Determine counts for "normal" modes
+    default_worker_count = 100
+
+    try:
+        worker_count = int(config.get('sender_workers', default_worker_count))
+    except ValueError:
+        worker_count = default_worker_count
+
+    workers_per_mode_cnt = worker_count // len(api_cache.modes)
+    workers_per_mode = {mode: workers_per_mode_cnt for mode in api_cache.modes}
+
+    # Email scale up/down. For this trickyness to work: 1) Only one SMTP vendor 2) It has "autoscale" enabled
+    # 3) It uses SMTP gateway instead of hard coded mx_servers
+
+    email_vendor = None
+    email_mx_gateway = None
+    email_smtp_workers = None
+    configured_vendors = config['vendors']
+    for vendor in configured_vendors:
+        if vendor['type'] == 'iris_smtp':
+            email_mx_gateway = vendor.get('smtp_gateway')
+            if not email_mx_gateway:
+                break
+
+            if not vendor.get('autoscale'):
+                logger.warning('Ignoring possibly auto scaled MX gateway %s', email_mx_gateway)
+                break
+
+            email_vendor = vendor
+            break
+
+    # Hard code workers for each mode manually in config
+    workers_per_mode_config = config.get('sender', {}).get('workers_per_mode', {})
+    workers_per_mode.update({mode: int(workers_per_mode_config[mode]) for mode in api_cache.modes if mode in workers_per_mode_config})
+
+    email_autoscale = email_vendor is not None
+
+    if email_autoscale:
+        try:
+            email_smtp_workers = iris_smtp.iris_smtp.determine_worker_count(email_vendor)
+        except Exception:
+            logger.exception('Failed determining MX records this round')
+            email_smtp_workers = None
+
+        old_email_worker_count = workers_per_mode.pop('email', None)
+        if old_email_worker_count:
+            logger.info('Going with autoscaled smtp workers instead of %d', old_email_worker_count)
+
+        # Remove all smtp vendor objects so they don't get initialized unnecessarily
+        config['vendors'] = [vendor for vendor in config['vendors'] if vendor['type'] != 'iris_smtp']
+
+    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
+
+    # Make sure all the counts and distributions for "normal" workers are proper, including email if we're not doing MX record
+    # autoscaling
+
+    for mode, worker_count in workers_per_mode.iteritems():
+        mode_tasks = worker_tasks[mode]
+        if mode_tasks:
+            for task in mode_tasks:
+                if not bool(task['greenlet']):
+                    logger.error("worker task for mode %s failed, %s. Respawning", mode, task['task'].exception)
+                    kill_set = gevent.event.Event()
+                    task.update({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
+                    metrics.incr('workers_respawn_cnt')
+        else:
+            for x in xrange(worker_count):
+                kill_set = gevent.event.Event()
+                mode_tasks.append({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
+
+    # Maintain, grow, and shrink email workers
+    if email_autoscale and email_smtp_workers:
+        logger.info('Configuring auto scaling smtp records')
+        email_queue = per_mode_send_queues['email']
+        tasks_to_kill = []
+
+        # Adjust worker count
+        for mx, correct_worker_count in email_smtp_workers.iteritems():
+            mx_workers = autoscale_email_worker_tasks[mx]
+            current_task_count = len(mx_workers)
+
+            # Correct amount of workers
+            if current_task_count == correct_worker_count:
+                logger.info('MX record %s has the correct number of tasks %d', mx, correct_worker_count)
+
+            # Need more workers
+            elif current_task_count < correct_worker_count:
+                new_task_count = correct_worker_count - current_task_count
+                logger.info('Auto scaling MX record %s UP %d tasks', mx, new_task_count)
+
+                # Configure this email worker with just one hard coded mx server, the one this
+                # worker will correspond to
+                email_vendor_config = copy.deepcopy(email_vendor)
+                email_vendor_config['smtp_server'] = mx
+                email_vendor_config.pop('smtp_gateway', None)
+                worker_config = copy.deepcopy(config)
+                worker_config['vendors'] = [email_vendor_config]
+
+                for x in xrange(new_task_count):
+                    kill_set = gevent.event.Event()
+                    mx_workers.append({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
+
+            # Need less workers
+            elif current_task_count > correct_worker_count:
+                kill_task_count = current_task_count - correct_worker_count
+                logger.info('Auto scaling MX record %s DOWN %d tasks', mx, kill_task_count)
+                for x in xrange(kill_task_count):
+                    try:
+                        tasks_to_kill.append(mx_workers.pop())
+                    except IndexError:
+                        break
+
+        # Kill MX records no longer in use
+        kill_mx = autoscale_email_worker_tasks.viewkeys() - email_smtp_workers.viewkeys()
+        for mx in kill_mx:
+            workers = autoscale_email_worker_tasks[mx]
+            if workers:
+                logger.info('Removing %d tasks for unused MX %s', len(workers), mx)
+                tasks_to_kill += workers
+            del autoscale_email_worker_tasks[mx]
+
+        # Make sure all existing workers are alive
+        for mx, mx_tasks in autoscale_email_worker_tasks.iteritems():
+            email_vendor_config = copy.deepcopy(email_vendor)
+            email_vendor_config['smtp_server'] = mx
+            email_vendor_config.pop('smtp_gateway', None)
+            worker_config = copy.deepcopy(config)
+            worker_config['vendors'] = [email_vendor_config]
+
+            for task in mx_tasks:
+                if not bool(task['greenlet']):
+                    kill_set = gevent.event.Event()
+                    task.update({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
+                    logger.error("worker email task for mx %s failed, %s. Respawning", mx, task['greenlet'].exception)
+                    metrics.incr('workers_respawn_cnt')
+
+        # Kill all of the workers who shouldn't exist anymore
+        for task in tasks_to_kill:
+            task['kill_set'].set()
 
 
 def gwatch_renewer():
@@ -1164,11 +1326,37 @@ def mock_gwatch_renewer():
 
 
 def sender_shutdown():
-    logger.info('Shutting server..')
+    global shutdown_started
+
+    # Make control+c or some other kill signal force quit the second time it happens
+    if shutdown_started:
+        logger.info('Force exiting')
+        os._exit(0)
+    else:
+        shutdown_started = True
+        logger.info('Shutting server..')
 
     # Immediately release all locks and give up any master status and slave presence
     if coordinator:
         coordinator.leave_cluster()
+
+    for tasks in worker_tasks.itervalues():
+        for task in tasks:
+            task['kill_set'].set()
+
+    for tasks in autoscale_email_worker_tasks.itervalues():
+        for task in tasks:
+            task['kill_set'].set()
+
+    logger.info('Waiting for sender workers to shut down')
+
+    for tasks in worker_tasks.itervalues():
+        for task in tasks:
+            task['greenlet'].join()
+
+    for tasks in autoscale_email_worker_tasks.itervalues():
+        for task in tasks:
+            task['greenlet'].join()
 
     # Force quit. Avoid sender process existing longer than it needs to
     os._exit(0)
@@ -1264,28 +1452,8 @@ def main():
     if not rpc.run(config['sender']):
         sender_shutdown()
 
-    default_worker_count = 100
-
-    try:
-        worker_count = int(config.get('sender_workers', default_worker_count))
-    except ValueError:
-        worker_count = default_worker_count
-
-    workers_per_mode_cnt = worker_count // len(api_cache.modes)
-    workers_per_mode = {mode: workers_per_mode_cnt for mode in api_cache.modes}
-
-    # Hard code workers for each mode manually in config
-    workers_per_mode_config = config.get('sender', {}).get('workers_per_mode', {})
-    workers_per_mode.update({mode: int(workers_per_mode_config[mode]) for mode in api_cache.modes if mode in workers_per_mode_config})
-
-    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
-
-    worker_tasks = {}
-
-    for mode, worker_count in workers_per_mode.iteritems():
-        send_queue = queue.Queue()
-        per_mode_send_queues[mode] = send_queue
-        worker_tasks[mode] = [spawn(worker, send_queue, config) for x in xrange(worker_count)]
+    for mode in api_cache.modes:
+        per_mode_send_queues[mode] = queue.Queue()
 
     rpc.init(config['sender'], dict(
         message_send_enqueue=message_send_enqueue
@@ -1293,6 +1461,8 @@ def main():
 
     spawn(coordinator.update_forever)
     send_task = spawn(send)
+
+    maintain_workers(config)
 
     gwatch_renewer_task = None
     prune_audit_logs_task = None
@@ -1354,17 +1524,7 @@ def main():
             # Set metric for size of worker queue
             metrics.set('send_queue_%s_size' % mode, len(send_queue))
 
-            # Also ensure all workers for each send queue are alive
-            bad_workers = []
-            for i, task in enumerate(worker_tasks[mode]):
-                if not bool(task):
-                    logger.error("worker task for mode %s failed, %s", mode, task.exception)
-                    metrics.incr('task_failure')
-                    bad_workers.append(i)
-
-            for i in bad_workers:
-                worker_tasks[mode][i] = spawn(worker, per_mode_send_queues[mode], config)
-                metrics.incr('workers_respawn_cnt')
+        maintain_workers(config)
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))

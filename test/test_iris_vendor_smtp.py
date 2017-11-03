@@ -42,6 +42,7 @@ def test_smtp_send_email(mocker):
         ['iris@bar'],
         ['foo@bar'],
         CheckEmailString())
+    smtp_vendor.cleanup()
     mocked_SMPT.return_value.quit.assert_called_once_with()
 
 
