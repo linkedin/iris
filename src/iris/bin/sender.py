@@ -1192,7 +1192,7 @@ def maintain_workers(config):
         if mode_tasks:
             for task in mode_tasks:
                 if not bool(task['greenlet']):
-                    logger.error("worker task for mode %s failed, %s. Respawning", mode, task['task'].exception)
+                    logger.error("worker task for mode %s failed, %s. Respawning", mode, task['greenlet'].exception)
                     kill_set = gevent.event.Event()
                     task.update({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
                     metrics.incr('workers_respawn_cnt')
