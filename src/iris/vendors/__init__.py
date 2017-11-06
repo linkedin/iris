@@ -20,6 +20,7 @@ class IrisVendorManager():
         self.max_tries_per_message = 5
         self.vendors_iter = {}
         self.app_specific_vendors_iter = defaultdict(dict)
+        self.all_vendor_instances = []
 
         applications = {}
 
@@ -48,6 +49,7 @@ class IrisVendorManager():
 
         for mode, instances in vendor_instances.iteritems():
             random.shuffle(instances)
+            self.all_vendor_instances += instances
             self.vendors_iter[mode] = itertools.cycle(instances)
 
         for application_name, modes in app_vendor_instances.iteritems():
@@ -68,3 +70,9 @@ class IrisVendorManager():
                 continue
 
         raise IrisVendorException('All %s vendors failed for %s' % (message['mode'], message))
+
+    def cleanup(self):
+        for vendors in self.all_vendor_instances:
+            cleanup_method = getattr(vendors, 'cleanup', None)
+            if cleanup_method:
+                cleanup_method()
