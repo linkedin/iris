@@ -9,7 +9,6 @@ from gevent.server import StreamServer
 import msgpack
 from ..utils import msgpack_unpack_msg_from_socket, sanitize_unicode_dict
 from . import cache
-from .shared import add_mode_stat
 from iris import metrics
 
 import logging
@@ -141,7 +140,6 @@ def handle_slave_send(socket, address, req):
 
     try:
         runtime = send_funcs['message_send_enqueue'](message)
-        add_mode_stat(message['mode'], runtime)
         response = 'OK'
         access_logger.info('Message (ID %s) from master %s queued successfully', message_id, address)
     except Exception:

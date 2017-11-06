@@ -898,11 +898,21 @@ def mark_message_as_sent(message):
     else:
         update_ids = tuple([message['message_id']])
 
-    try:
-        cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
-        connection.commit()
-    except DataError:
-        logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+    max_retries = 3
+
+    # this deadlocks sometimes. try until it doesn't.
+    for i in xrange(max_retries):
+        try:
+            cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
+            connection.commit()
+            break
+        except DataError:
+            logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+            break
+        except Exception:
+            logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
+            break
+            sleep(.2)
 
     cursor.close()
     connection.close()
@@ -1374,7 +1384,6 @@ def message_send_enqueue(message):
             logger.error('Failed to send message, no contact found: %s', message)
             return
 
-    print 'will queue again'
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
         per_mode_send_queues[message_mode].put(message)
