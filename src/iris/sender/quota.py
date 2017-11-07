@@ -5,7 +5,7 @@ from time import time
 from gevent import spawn, sleep
 from collections import deque
 from datetime import datetime
-from iris.sender.shared import send_queue
+from iris.sender.shared import per_mode_send_queues
 import iris.cache
 from iris import metrics
 import logging
@@ -269,4 +269,4 @@ class ApplicationQuota(object):
                          'If this continues, your messages will eventually be dropped on the floor and an Iris incident will be raised.\n\n'
                          'Regards,\nIris') % (username, application, limit, duration, )
             }
-            send_queue.put(message)
+            per_mode_send_queues['email'].put(message)

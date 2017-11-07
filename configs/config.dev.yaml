@@ -3,6 +3,8 @@ server:
   port: 16649
   disable_auth: True
 
+sender_workers: 1000
+
 # Enabled modules for resolving complex user roles to individual usernames, processed
 # in the order listed here.
 role_lookups:
@@ -57,8 +59,13 @@ db: &db
     pool_timeout: 60
 sender:
   debug: True
+  process_title: iris-sender
   host: 127.0.0.1
   port: 2321
+
+  # Number of gevent workers per mode we send
+  workers_per_mode:
+    email: 500
 
   # Default sender to reach out to if we can't determine one programmatically
   master_sender:

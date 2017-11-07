@@ -9,7 +9,6 @@ from gevent.server import StreamServer
 import msgpack
 from ..utils import msgpack_unpack_msg_from_socket, sanitize_unicode_dict
 from . import cache
-from .shared import send_queue, add_mode_stat
 from iris import metrics
 
 import logging
@@ -128,7 +127,7 @@ def handle_api_notification_request(socket, address, req):
     for _target in expanded_targets:
         temp_notification = notification.copy()
         temp_notification['target'] = _target
-        send_queue.put(temp_notification)
+        send_funcs['message_send_enqueue'](temp_notification)
     metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 
@@ -137,28 +136,16 @@ def handle_slave_send(socket, address, req):
     message = req['data']
     message_id = message.get('message_id', '?')
 
+    message['to_slave'] = True
+
     try:
-        runtime = send_funcs['send_message'](message)
-        add_mode_stat(message['mode'], runtime)
-
-        metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
-        metrics.add_new_metrics({metrics_key: 0})
-        metrics.incr(metrics_key)
-
-        if runtime is not None:
-            response = 'OK'
-            access_logger.info('Message (ID %s) from master %s sent successfully',
-                               message_id, address)
-            metrics.incr('slave_message_send_success_cnt')
-        else:
-            response = 'FAIL'
-            access_logger.error(
-                'Got falsy value from send_message for message (ID %s) from master %s: %s',
-                message_id, address, runtime)
-            metrics.incr('slave_message_send_fail_cnt')
+        runtime = send_funcs['message_send_enqueue'](message)
+        response = 'OK'
+        access_logger.info('Message (ID %s) from master %s queued successfully', message_id, address)
     except Exception:
         response = 'FAIL'
-        logger.exception('Sending message (ID %s) from master %s failed.')
+        logger.exception('Queueing message (ID %s) from master %s failed.')
+        access_logger.error('Failed queueing message (ID %s) from master %s: %s', message_id, address, runtime)
         metrics.incr('slave_message_send_fail_cnt')
 
     socket.sendall(msgpack.packb(response))
@@ -196,8 +183,13 @@ def handle_api_request(socket, address):
 
 
 def run(sender_config):
-    StreamServer((sender_config['host'], sender_config['port']),
-                 handle_api_request).start()
+    try:
+        StreamServer((sender_config['host'], sender_config['port']),
+                     handle_api_request).start()
+        return True
+    except Exception:
+        logger.exception('Failed binding to sender RPC port')
+        return False
 
 
 def init(sender_config, _send_funcs):

@@ -1022,6 +1022,111 @@ class Plans(object):
         resp.body = payload
 
     def on_post(self, req, resp):
+        '''
+        Plan create endpoint. Plans can either be static, defining role/targets in plan creation,
+        or dynamic, leaving these fields blank during creation and determining role/targets at
+        incident creation time.
+        Static plan example:
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            POST /v0/plans HTTP/1.1
+
+            {
+                "aggregation_reset": 300,
+                "aggregation_window": 300,
+                "creator": "user-foo",
+                "description": "this is a plan",
+                "name": "plan-foo",
+                "steps": [
+                    [
+                        {
+                            "priority": "urgent",
+                            "repeat": 0,
+                            "role": "user",
+                            "target": "demo",
+                            "template": "template-foo",
+                            "wait": 0
+                        }
+                    ]
+                ],
+                "threshold_count": 10,
+                "threshold_window": 900
+            }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 201 Created
+            Content-Type: application/json
+
+            1
+
+        Aggregation: If a user receives more than $threshold_count messages from this plan via a
+        given medium within $threshold_window seconds, group their messages for $aggregation_window
+        seconds. After $aggregation_reset seconds without a message, aggregation stops.
+
+        For a static plan, "steps" should be a list of arrays of JSON objects defining  "priority",
+        "repeat", "role", "target", "template", and "wait". Each array of objects represents a step
+        in the plan, with the JSON objects representing the notifications delivered in that step. These
+        notifications occur in parallel with one another within a given step. Descriptions of these
+        parameters:
+
+        :priority: Priority of messages sent by this step sub-part
+        :repeat: Number of times this message will be repeated (e.g. repeat == 0 => 1 message)
+        :role: Role of the target
+        :target: Name of the target
+        :template: Name of the template user to format this message
+        :wait: Time to wait until sending a repeat message or moving on to the next plan step.
+
+        Dynamic plan example:
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            POST /v0/plans HTTP/1.1
+
+            {
+                "aggregation_reset": 300,
+                "aggregation_window": 300,
+                "creator": "user-foo",
+                "description": "this is a plan",
+                "isValid": true,
+                "name": "plan-foo",
+                "steps": [
+                    [
+                        {
+                            "dynamic_index": 0,
+                            "priority": "urgent",
+                            "repeat": 0,
+                            "template": "template-foo",
+                            "wait": 0
+                        }
+                    ]
+                ],
+                "threshold_count": 10,
+                "threshold_window": 900
+            }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 201 Created
+            Content-Type: application/json
+
+            1
+
+        For dynamic plans, step sub-parts define a "dynamic index" rather than a role/target
+        combination. These indices must span a range from 0..n, where n is the largest dynamic
+        index provided. At incident creation time, a mapping of dynamic index to role/target
+        is provided to define the recipient of a message. See incidents POST endpoint for details.
+
+        '''
         plan_params = ujson.loads(req.context['body'])
         try:
             run_validation('plan', plan_params)
@@ -1210,6 +1315,26 @@ class Incidents(object):
         - application is invalid
         - context json blob is longer than 655355 bytes
         - none of the templates used in the plan supports the given application
+
+        To create an incident for a dynamic plan (one that defines dynamic targets), an
+        additional `dynamic_targets` field must be passed along with the plan and context.
+        Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
+        `dynamic_targets` parameter should take the following form:
+
+        .. sourcecode:: json
+
+            [
+                {
+                    "role": "user",
+                    "target": "jdoe"
+                },
+                {
+                    "role": "team",
+                    "target": "team-foo"
+                }
+            ]
+
+        This will map target 0 to the user "jdoe", and target 1 to the team "team-foo".
         '''
         incident_params = ujson.loads(req.context['body'])
         dynamic_targets = []
@@ -2007,6 +2132,11 @@ class Target(object):
         if 'startswith' in req.params:
             req.params['startswith'] = req.params['startswith'] + '%'
             filters_sql.append('`name` like :startswith')
+
+        active = req.get_param_as_bool('active')
+        if active is not None:
+            req.params['active'] = active
+            filters_sql.append('`active` = :active')
 
         sql = 'SELECT `name` FROM `target`'
         if filters_sql:

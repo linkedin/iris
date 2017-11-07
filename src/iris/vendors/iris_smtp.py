@@ -12,11 +12,13 @@ import dns.resolver
 import dns.exception
 import logging
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class iris_smtp(object):
     supports = frozenset([EMAIL_SUPPORT, IM_SUPPORT])
+
+    last_autoscale_mx_lookup = {}
 
     def __init__(self, config):
         self.config = config
@@ -25,6 +27,8 @@ class iris_smtp(object):
             IM_SUPPORT: self.send_email,
         }
         self.mx_sorted = []
+        self.last_conn = None
+        self.last_conn_server = None
 
         self.smtp_timeout = config.get('timeout', 10)
         if config.get('smtp_server'):
@@ -43,9 +47,13 @@ class iris_smtp(object):
         else:
             raise ValueError('Missing SMTP config for sender')
 
-    def send_email(self, message):
+    def send_email(self, message, customizations=None):
         md = markdown.Markdown()
-        from_address = self.config['from']
+
+        if isinstance(customizations, dict):
+            from_address = customizations.get('from', self.config['from'])
+        else:
+            from_address = self.config['from']
 
         start = time.time()
         m = MIMEMultipart('alternative')
@@ -95,21 +103,96 @@ class iris_smtp(object):
 
         conn = None
 
-        for mx in self.mx_sorted:
-            try:
-                smtp = SMTP(timeout=self.smtp_timeout)
-                smtp.connect(mx[1], 25)
-                conn = smtp
-                break
-            except Exception as e:
-                logger.exception(e)
+        # Try reusing previous connection in this worker if we have one
+        if self.last_conn:
+            conn = self.last_conn
+        else:
+            for mx in self.mx_sorted:
+                try:
+                    smtp = SMTP(timeout=self.smtp_timeout)
+                    smtp.connect(mx[1], 25)
+                    conn = smtp
+                    self.last_conn = conn
+                    self.last_conn_server = mx[1]
+                    break
+                except Exception as e:
+                    logger.exception(e)
 
         if not conn:
             raise Exception('Failed to get smtp connection.')
-        conn.sendmail([from_address], [message['destination']], m.as_string())
-        conn.quit()
+
+        try:
+            conn.sendmail([from_address], [message['destination']], m.as_string())
+        except Exception:
+            logger.exception('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
+
+            try:
+                conn.quit()
+            except:
+                pass
+
+            # If we can't send it, try reconnecting and then sending it one more time before
+            # giving up
+            for mx in self.mx_sorted:
+                try:
+                    smtp = SMTP(timeout=self.smtp_timeout)
+                    smtp.connect(mx[1], 25)
+                    conn = smtp
+                    self.last_conn = conn
+                    self.last_conn_server = mx[1]
+                    break
+                except Exception as e:
+                    logger.exception('Failed reconnecting to %s to send message', self.last_conn_server)
+                    self.last_conn = None
+                    return None
+
+            try:
+                conn.sendmail([from_address], [message['destination']], m.as_string())
+                logger.info('Message successfully sent through %s after reconnecting', self.last_conn_server)
+            except Exception:
+                logger.exception('Failed sending email through %s after trying to reconnect', self.last_conn_server)
+                return None
 
         return time.time() - start
 
-    def send(self, message):
-        return self.modes[message['mode']](message)
+    def send(self, message, customizations=None):
+        return self.modes[message['mode']](message, customizations)
+
+    def cleanup(self):
+        if self.last_conn:
+            logger.info('Trying to quit smtp connection to %s', self.last_conn_server)
+            try:
+                self.last_conn.quit()
+            except:
+                pass
+
+    @classmethod
+    def determine_worker_count(cls, vendor):
+        mx_gateway = vendor.get('smtp_gateway')
+        connections_per_mx = int(vendor.get('tasks_per_mx', 4))
+
+        last_lookup = cls.last_autoscale_mx_lookup.get(mx_gateway)
+        now = time.time()
+
+        if last_lookup and last_lookup[0] > now:
+            logger.info('Using old MX results for %s; next MX refresh in %d seconds', mx_gateway, last_lookup[0] - now)
+            return last_lookup[1]
+        else:
+            logger.info('Refreshing MX records for %s', mx_gateway)
+
+            try:
+                mx_result = dns.resolver.query(mx_gateway, 'MX')
+                mx_hosts = [mx.exchange.to_text().strip('.') for mx in mx_result]
+            except dns.exception.DNSException as e:
+                mx_hosts = []
+
+                if last_lookup:
+                    logger.error('Failed looking up MX: %s; returning old results.', e)
+                    return last_lookup[1]
+                else:
+                    raise Exception('MX error, and we don\'t have old results to fall back on: %s' % e)
+
+            mx_host_counts = {mx: connections_per_mx for mx in mx_hosts}
+            cls.last_autoscale_mx_lookup[mx_gateway] = (mx_result.expiration, mx_host_counts)
+            logger.info('Next MX refresh for %s in %d seconds', mx_gateway, mx_result.expiration - now)
+            return mx_host_counts

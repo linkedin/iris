@@ -42,6 +42,7 @@ setuptools.setup(
         'exchangelib==1.10.0',
         'PyQRCode==1.2.1',
         'pypng==0.0.18',
+        'setproctitle==1.1.8',
     ],
     extras_require={
         'kazoo': ['kazoo==2.3.1'],

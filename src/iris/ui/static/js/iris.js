@@ -2603,7 +2603,7 @@ iris = {
               datumTokenizer: Bloodhound.tokenizers.obj.whitespace('value'),
               queryTokenizer: Bloodhound.tokenizers.whitespace,
               remote: {
-                url: itemType == 'plan' ? self.data.planUrl : self.data.targetUrl + type + '?startswith=%QUERY',
+                url: itemType == 'plan' ? self.data.planUrl : self.data.targetUrl + type + '?startswith=%QUERY&active=1',
                 wildcard: '%QUERY',
                 transform: function(response) {
                   if (itemType == 'plan') {

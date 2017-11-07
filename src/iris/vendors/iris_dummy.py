@@ -13,9 +13,13 @@ class iris_dummy(object):
     def __init__(self, config):
         self.time_taken = 1
 
-    def send(self, message):
+    def send(self, message, customizations=None):
+        if isinstance(customizations, dict):
+            time_taken = customizations.get('time_taken', self.time_taken)
+        else:
+            time_taken = self.time_taken
         if 'email_subject' in message:
             logger.info('SEND: %(destination)s %(email_subject)s', message)
         else:
             logger.info('SEND: %(mode)s %(application)s %(destination)s %(subject).25s', message)
-        return self.time_taken
+        return time_taken

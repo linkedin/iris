@@ -11,10 +11,12 @@ import os
 import socket
 import gevent
 import signal
+import setproctitle
+import copy
 
 from collections import defaultdict
 from iris.plugins import init_plugins
-from iris.vendors import init_vendors, send_message
+from iris.vendors import IrisVendorManager, iris_smtp
 from iris.sender import auditlog
 from iris import metrics
 from uuid import uuid4
@@ -29,7 +31,7 @@ from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
 from pymysql import DataError, IntegrityError
 # queue for sending messages
-from iris.sender.shared import send_queue, add_mode_stat
+from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
 # sql
 
@@ -179,6 +181,7 @@ PRUNE_OLD_AUDIT_LOGS_SQL = '''DELETE FROM `message_changelog` WHERE `date` < DAT
 
 # When a rendered message body is longer than this number of characters, drop it.
 MAX_MESSAGE_BODY_LENGTH = 40000
+MAX_MESSAGE_RETRIES = 2
 
 # logging
 logger = logging.getLogger()
@@ -233,6 +236,14 @@ quota = None
 # Coordinator object for sender master election
 coordinator = None
 
+# Mode -> [{'greenlet': greenlet, 'kill_set': gevent.Event}]
+worker_tasks = defaultdict(list)
+
+# MX -> [{'greenlet': greenlet, 'kill_set': gevent.Event}]
+autoscale_email_worker_tasks = defaultdict(list)
+
+# support the 2nd control+c force exiting sender without waiting for tasks to finish
+shutdown_started = False
 
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
@@ -247,7 +258,10 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'msg_drop_length_cnt': 0
+    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
+    'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
+    'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
+    'message_retry_cnt': 0
 }
 
 # TODO: make this configurable
@@ -427,10 +441,12 @@ def escalate():
                         html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], str(e))
                         logger.exception(html_body)
                     tracking_message['email_html'] = html_body
-
-                spawn(send_message, tracking_message)
+                message_send_enqueue(tracking_message)
     cursor.close()
-    logger.info('[*] %s new incidents', len(escalations))
+
+    new_incidents_count = len(escalations)
+    metrics.set('new_incidents_cnt', new_incidents_count)
+    logger.info('[*] %s new incidents', new_incidents_count)
 
     # then, fetch message count for current incidents
     msg_count = 0
@@ -497,7 +513,7 @@ def aggregate(now):
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
                 logger.info('aggregate - %(message_id)s pushing to send queue', m)
-                send_queue.put(m)
+                message_send_enqueue(m)
             elif l > 1:
                 uuid = uuid4().hex
                 m = messages[next(iter(active_message_ids))]
@@ -506,7 +522,8 @@ def aggregate(now):
 
                 # Cast from set to list, as sets are not msgpack serializable
                 m['aggregated_ids'] = list(active_message_ids)
-                send_queue.put(m)
+                message_send_enqueue(m)
+
                 for message_id in active_message_ids:
                     del messages[message_id]
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
@@ -559,7 +576,7 @@ def fetch_and_prepare_message():
     message_id = m['message_id']
     plan_id = m['plan_id']
     if plan_id is None:
-        send_queue.put(m)
+        message_send_enqueue(m)
         return
 
     plan = cache.plans[plan_id]
@@ -615,7 +632,7 @@ def fetch_and_prepare_message():
             spawn(auditlog.message_change, m['message_id'], auditlog.SENT_CHANGE, '', '', audit_msg)
         else:
             # cleared for immediate sending
-            send_queue.put(m)
+            message_send_enqueue(m)
 
 
 def send():
@@ -881,11 +898,21 @@ def mark_message_as_sent(message):
     else:
         update_ids = tuple([message['message_id']])
 
-    try:
-        cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
-        connection.commit()
-    except DataError:
-        logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+    max_retries = 3
+
+    # this deadlocks sometimes. try until it doesn't.
+    for i in xrange(max_retries):
+        try:
+            cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
+            connection.commit()
+            break
+        except DataError:
+            logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+            break
+        except Exception:
+            logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
+            break
+            sleep(.2)
 
     cursor.close()
     connection.close()
@@ -937,9 +964,10 @@ def mark_message_has_no_contact(message):
         'Ignore message as we failed to resolve target contact')
 
 
-def distributed_send_message(message):
-    # If I am the master, attempt sending my messages through my slaves.
-    if coordinator.am_i_master():
+def distributed_send_message(message, vendor_manager):
+    # If I am the master and this message isn't for a slave, attempt
+    # sending my messages through my slaves.
+    if not message.get('to_slave') and coordinator.am_i_master():
         try:
             if coordinator.slave_count and coordinator.slaves:
                 for i, address in enumerate(coordinator.slaves):
@@ -953,7 +981,7 @@ def distributed_send_message(message):
 
     logger.info('Sending message (ID %s) locally', message.get('message_id', '?'))
 
-    runtime = send_message(message)
+    runtime = vendor_manager.send_message(message)
     add_mode_stat(message['mode'], runtime)
 
     metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
@@ -966,24 +994,32 @@ def distributed_send_message(message):
     raise Exception('Failed sending message')
 
 
-def fetch_and_send_message():
-    message = send_queue.get()
-    sanitize_unicode_dict(message)
-
-    has_contact = set_target_contact(message)
-    if not has_contact:
-        mark_message_has_no_contact(message)
-        metrics.incr('task_failure')
-        logger.error('Failed to send message, no contact found: %s', message)
+def fetch_and_send_message(send_queue, vendor_manager):
+    try:
+        message = send_queue.get(True, 4)
+    except queue.Empty:
         return
+
+    metrics.incr('send_queue_gets_cnt')
+
+    retry_count = message.get('retry_count')
+    is_retry = retry_count is not None
+    if is_retry and retry_count >= MAX_MESSAGE_RETRIES:
+        logger.warning('Maximum retry count for %s breached')
+        return
+
+    if not is_retry:
+        sanitize_unicode_dict(message)
 
     if 'message_id' not in message:
         message['message_id'] = None
 
+    message_to_slave = message.get('to_slave', False)
+
     drop_mode_id = api_cache.modes.get('drop')
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
-    if not quota.allow_send(message):
+    if not is_retry and not message_to_slave and not quota.allow_send(message):
         logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
@@ -1017,40 +1053,44 @@ def fetch_and_send_message():
 
         return
 
-    render(message)
+    # Only render this message and validate its body/etc if it's not a retry, in which case this
+    # step would have been done before
+    if not is_retry and not message_to_slave:
+        render(message)
 
-    if message.get('body') is None:
-        message['body'] = ''
+        if message.get('body') is None:
+            message['body'] = ''
 
-    # Drop this message, and mark it as dropped, rather than sending it, if its
-    # body is too long and we were normally going to send it anyway.
-    body_length = len(message['body'])
-    if body_length > MAX_MESSAGE_BODY_LENGTH:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
-                    message['message_id'], body_length)
-        spawn(auditlog.message_change,
-              message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
-              'Dropping due to excessive body length (%s > %s chars)' % (
-                  body_length, MAX_MESSAGE_BODY_LENGTH))
+        # Drop this message, and mark it as dropped, rather than sending it, if its
+        # body is too long and we were normally going to send it anyway.
+        body_length = len(message['body'])
+        if body_length > MAX_MESSAGE_BODY_LENGTH:
+            logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                        message['message_id'], body_length)
+            spawn(auditlog.message_change,
+                  message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
+                  'Dropping due to excessive body length (%s > %s chars)' % (
+                      body_length, MAX_MESSAGE_BODY_LENGTH))
 
-        metrics.incr('msg_drop_length_cnt')
+            metrics.incr('msg_drop_length_cnt')
 
-        # Truncate this here to avoid a duplicate log message in
-        # mark_message_as_sent(), as we still need to call that to update the body/subject
-        message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
+            # Truncate this here to avoid a duplicate log message in
+            # mark_message_as_sent(), as we still need to call that to update the body/subject
+            message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
-        if drop_mode_id:
-            message['mode'] = 'drop'
-            message['mode_id'] = drop_mode_id
+            if drop_mode_id:
+                message['mode'] = 'drop'
+                message['mode_id'] = drop_mode_id
 
-        mark_message_as_sent(message)
-        return
+            mark_message_as_sent(message)
+            return
 
     success = False
     try:
-        success = distributed_send_message(message)
+        success = distributed_send_message(message, vendor_manager)
     except Exception:
         logger.exception('Failed to send message: %s', message)
+        add_mode_stat(message['mode'], None)
         if message['mode'] == 'email':
             metrics.incr('task_failure')
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
@@ -1059,23 +1099,187 @@ def fetch_and_send_message():
             set_target_fallback_mode(message)
             render(message)
             try:
-                success = distributed_send_message(message)
+                success = distributed_send_message(message, vendor_manager)
             # nope - log and bail
             except Exception:
                 metrics.incr('task_failure')
+                add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
     if success:
         metrics.incr('message_send_cnt')
         if message['message_id']:
             mark_message_as_sent(message)
 
+        if message_to_slave:
+            metrics.incr('slave_message_send_success_cnt')
+
+    else:
+        # If we're not successful, try retrying it
+        message['retry_count'] = message.get('retry_count', 0) + 1
+        message_send_enqueue(message)
+        metrics.incr('message_retry_cnt')
+        logger.info('Message %s failed. Re-queuing for retry (%s/%s).', message, message['retry_count'], MAX_MESSAGE_RETRIES)
+
+        if message_to_slave:
+            metrics.incr('slave_message_send_fail_cnt')
+
     if message['message_id']:
         update_message_sent_status(message, success)
 
 
-def worker():
+def worker(send_queue, worker_config, kill_set):
+    vendor_manager = IrisVendorManager(worker_config.get('vendors', []), worker_config.get('applications', []))
     while True:
-        fetch_and_send_message()
+        fetch_and_send_message(send_queue, vendor_manager)
+
+        if kill_set.is_set():
+            vendor_manager.cleanup()
+            return
+
+
+def maintain_workers(config):
+    # We mangle this config dict a bit and pass it around. Avoid latering the main one
+    config = copy.deepcopy(config)
+
+    # Determine counts for "normal" modes
+    default_worker_count = 100
+
+    try:
+        worker_count = int(config.get('sender_workers', default_worker_count))
+    except ValueError:
+        worker_count = default_worker_count
+
+    workers_per_mode_cnt = worker_count // len(api_cache.modes)
+    workers_per_mode = {mode: workers_per_mode_cnt for mode in api_cache.modes}
+
+    # Email scale up/down. For this trickyness to work: 1) Only one SMTP vendor 2) It has "autoscale" enabled
+    # 3) It uses SMTP gateway instead of hard coded mx_servers
+
+    email_vendor = None
+    email_mx_gateway = None
+    email_smtp_workers = None
+    configured_vendors = config['vendors']
+    for vendor in configured_vendors:
+        if vendor['type'] == 'iris_smtp':
+            email_mx_gateway = vendor.get('smtp_gateway')
+            if not email_mx_gateway:
+                break
+
+            if not vendor.get('autoscale'):
+                logger.warning('Ignoring possibly auto scaled MX gateway %s', email_mx_gateway)
+                break
+
+            email_vendor = vendor
+            break
+
+    # Hard code workers for each mode manually in config
+    workers_per_mode_config = config.get('sender', {}).get('workers_per_mode', {})
+    workers_per_mode.update({mode: int(workers_per_mode_config[mode]) for mode in api_cache.modes if mode in workers_per_mode_config})
+
+    email_autoscale = email_vendor is not None
+
+    if email_autoscale:
+        try:
+            email_smtp_workers = iris_smtp.iris_smtp.determine_worker_count(email_vendor)
+        except Exception:
+            logger.exception('Failed determining MX records this round')
+            email_smtp_workers = None
+
+        old_email_worker_count = workers_per_mode.pop('email', None)
+        if old_email_worker_count:
+            logger.info('Going with autoscaled smtp workers instead of %d', old_email_worker_count)
+
+        # Remove all smtp vendor objects so they don't get initialized unnecessarily
+        config['vendors'] = [vendor for vendor in config['vendors'] if vendor['type'] != 'iris_smtp']
+
+    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
+
+    # Make sure all the counts and distributions for "normal" workers are proper, including email if we're not doing MX record
+    # autoscaling
+
+    for mode, worker_count in workers_per_mode.iteritems():
+        mode_tasks = worker_tasks[mode]
+        if mode_tasks:
+            for task in mode_tasks:
+                if not bool(task['greenlet']):
+                    logger.error("worker task for mode %s failed, %s. Respawning", mode, task['greenlet'].exception)
+                    kill_set = gevent.event.Event()
+                    task.update({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
+                    metrics.incr('workers_respawn_cnt')
+        else:
+            for x in xrange(worker_count):
+                kill_set = gevent.event.Event()
+                mode_tasks.append({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
+
+    # Maintain, grow, and shrink email workers
+    if email_autoscale and email_smtp_workers:
+        logger.info('Configuring auto scaling smtp records')
+        email_queue = per_mode_send_queues['email']
+        tasks_to_kill = []
+
+        # Adjust worker count
+        for mx, correct_worker_count in email_smtp_workers.iteritems():
+            mx_workers = autoscale_email_worker_tasks[mx]
+            current_task_count = len(mx_workers)
+
+            # Correct amount of workers
+            if current_task_count == correct_worker_count:
+                logger.info('MX record %s has the correct number of tasks %d', mx, correct_worker_count)
+
+            # Need more workers
+            elif current_task_count < correct_worker_count:
+                new_task_count = correct_worker_count - current_task_count
+                logger.info('Auto scaling MX record %s UP %d tasks', mx, new_task_count)
+
+                # Configure this email worker with just one hard coded mx server, the one this
+                # worker will correspond to
+                email_vendor_config = copy.deepcopy(email_vendor)
+                email_vendor_config['smtp_server'] = mx
+                email_vendor_config.pop('smtp_gateway', None)
+                worker_config = copy.deepcopy(config)
+                worker_config['vendors'] = [email_vendor_config]
+
+                for x in xrange(new_task_count):
+                    kill_set = gevent.event.Event()
+                    mx_workers.append({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
+
+            # Need less workers
+            elif current_task_count > correct_worker_count:
+                kill_task_count = current_task_count - correct_worker_count
+                logger.info('Auto scaling MX record %s DOWN %d tasks', mx, kill_task_count)
+                for x in xrange(kill_task_count):
+                    try:
+                        tasks_to_kill.append(mx_workers.pop())
+                    except IndexError:
+                        break
+
+        # Kill MX records no longer in use
+        kill_mx = autoscale_email_worker_tasks.viewkeys() - email_smtp_workers.viewkeys()
+        for mx in kill_mx:
+            workers = autoscale_email_worker_tasks[mx]
+            if workers:
+                logger.info('Removing %d tasks for unused MX %s', len(workers), mx)
+                tasks_to_kill += workers
+            del autoscale_email_worker_tasks[mx]
+
+        # Make sure all existing workers are alive
+        for mx, mx_tasks in autoscale_email_worker_tasks.iteritems():
+            email_vendor_config = copy.deepcopy(email_vendor)
+            email_vendor_config['smtp_server'] = mx
+            email_vendor_config.pop('smtp_gateway', None)
+            worker_config = copy.deepcopy(config)
+            worker_config['vendors'] = [email_vendor_config]
+
+            for task in mx_tasks:
+                if not bool(task['greenlet']):
+                    kill_set = gevent.event.Event()
+                    task.update({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
+                    logger.error("worker email task for mx %s failed, %s. Respawning", mx, task['greenlet'].exception)
+                    metrics.incr('workers_respawn_cnt')
+
+        # Kill all of the workers who shouldn't exist anymore
+        for task in tasks_to_kill:
+            task['kill_set'].set()
 
 
 def gwatch_renewer():
@@ -1132,20 +1336,73 @@ def mock_gwatch_renewer():
 
 
 def sender_shutdown():
-    logger.info('Shutting server..')
+    global shutdown_started
+
+    # Make control+c or some other kill signal force quit the second time it happens
+    if shutdown_started:
+        logger.info('Force exiting')
+        os._exit(0)
+    else:
+        shutdown_started = True
+        logger.info('Shutting server..')
 
     # Immediately release all locks and give up any master status and slave presence
     if coordinator:
         coordinator.leave_cluster()
 
+    for tasks in worker_tasks.itervalues():
+        for task in tasks:
+            task['kill_set'].set()
+
+    for tasks in autoscale_email_worker_tasks.itervalues():
+        for task in tasks:
+            task['kill_set'].set()
+
+    logger.info('Waiting for sender workers to shut down')
+
+    for tasks in worker_tasks.itervalues():
+        for task in tasks:
+            task['greenlet'].join()
+
+    for tasks in autoscale_email_worker_tasks.itervalues():
+        for task in tasks:
+            task['greenlet'].join()
+
     # Force quit. Avoid sender process existing longer than it needs to
     os._exit(0)
+
+
+def message_send_enqueue(message):
+    # Set the target contact here so we determine the mode, which determines the
+    # queue it gets inserted into. Skip this step if it's a retry because we'd
+    # already have the message's contact info decided
+    if not message.get('retry_count'):
+        has_contact = set_target_contact(message)
+        if not has_contact:
+            mark_message_has_no_contact(message)
+            metrics.incr('task_failure')
+            logger.error('Failed to send message, no contact found: %s', message)
+            return
+
+    message_mode = message.get('mode')
+    if message_mode and message_mode in per_mode_send_queues:
+        per_mode_send_queues[message_mode].put(message)
+        metrics.incr('send_queue_puts_cnt')
+    else:
+        logger.error('Message %s does not have proper mode %s', message, message_mode)
+        metrics.incr('send_queue_puts_fail_cnt')
 
 
 def init_sender(config):
     gevent.signal(signal.SIGINT, sender_shutdown)
     gevent.signal(signal.SIGTERM, sender_shutdown)
     gevent.signal(signal.SIGQUIT, sender_shutdown)
+
+    process_title = config['sender'].get('process_title')
+
+    if process_title and isinstance(process_title, basestring):
+        setproctitle.setproctitle(process_title)
+        logger.info('Changing process name to %s', process_title)
 
     api_host = config['sender'].get('api_host', 'http://localhost:16649')
     db.init(config)
@@ -1200,15 +1457,21 @@ def main():
     logger.info('[-] bootstraping sender...')
     init_sender(config)
     init_plugins(config.get('plugins', {}))
-    init_vendors(config.get('vendors', []), config.get('applications', []))
 
-    send_task = spawn(send)
-    worker_tasks = [spawn(worker) for x in xrange(100)]
+    if not rpc.run(config['sender']):
+        sender_shutdown()
 
-    rpc.init(config['sender'], dict(send_message=send_message))
-    rpc.run(config['sender'])
+    for mode in api_cache.modes:
+        per_mode_send_queues[mode] = queue.Queue()
+
+    rpc.init(config['sender'], dict(
+        message_send_enqueue=message_send_enqueue
+    ))
 
     spawn(coordinator.update_forever)
+    send_task = spawn(send)
+
+    maintain_workers(config)
 
     gwatch_renewer_task = None
     prune_audit_logs_task = None
@@ -1264,14 +1527,13 @@ def main():
             logger.error("send task failed, %s", send_task.exception)
             metrics.incr('task_failure')
             send_task = spawn(send)
-        bad_workers = []
-        for i, task in enumerate(worker_tasks):
-            if not bool(task):
-                logger.error("worker task failed, %s", task.exception)
-                metrics.incr('task_failure')
-                bad_workers.append(i)
-        for i in bad_workers:
-            worker_tasks[i] = spawn(worker)
+
+        for mode, send_queue in per_mode_send_queues.iteritems():
+
+            # Set metric for size of worker queue
+            metrics.set('send_queue_%s_size' % mode, len(send_queue))
+
+        maintain_workers(config)
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))
