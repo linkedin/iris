@@ -742,6 +742,9 @@ def set_target_contact_by_priority(message):
 
 
 def set_target_contact(message):
+    # If we already have a destination set (eg incident tracking emails) no-op this
+    if 'destination' in message:
+        return True
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
     try:
         if 'mode' in message or 'mode_id' in message:
@@ -984,9 +987,11 @@ def distributed_send_message(message, vendor_manager):
     runtime = vendor_manager.send_message(message)
     add_mode_stat(message['mode'], runtime)
 
-    metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
-    metrics.add_new_metrics({metrics_key: 0})
-    metrics.incr(metrics_key)
+    # application is not present for incident tracking emails
+    if 'application' in message:
+        metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
+        metrics.add_new_metrics({metrics_key: 0})
+        metrics.incr(metrics_key)
 
     if runtime is not None:
         return True
@@ -1429,7 +1434,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
+    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'))
 
     global coordinator
     zk_hosts = config['sender'].get('zookeeper_cluster', False)

@@ -346,7 +346,7 @@ def test_quotas(mocker):
                  )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
-    quotas = ApplicationQuota(None, None, None)
+    quotas = ApplicationQuota(None, None, None, None)
     sleep(1)
     assert quotas.allow_send({'application': 'testapp'})
     assert quotas.allow_send({'application': 'testapp'})
