@@ -29,7 +29,7 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
-from pymysql import DataError, IntegrityError
+from pymysql import DataError, IntegrityError, InternalError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
@@ -943,7 +943,7 @@ def update_message_sent_status(message, status):
                            ON DUPLICATE KEY UPDATE `status` =  :status''',
                         {'message_id': message_id, 'status': status})
         session.commit()
-    except (DataError, IntegrityError):
+    except (DataError, IntegrityError, InternalError):
         logger.exception('Failed setting message sent status for message %s', message)
     finally:
         session.close()
@@ -978,7 +978,7 @@ def distributed_send_message(message, vendor_manager):
                         logger.error('Failed using all configured slaves; resorting to local send_message')
                         break
                     if rpc.send_message_to_slave(message, address):
-                        return True
+                        return True, False
         except StopIteration:
             logger.warning('No more slaves. Sending locally.')
 
@@ -994,7 +994,7 @@ def distributed_send_message(message, vendor_manager):
         metrics.incr(metrics_key)
 
     if runtime is not None:
-        return True
+        return True, True
 
     raise Exception('Failed sending message')
 
@@ -1091,8 +1091,9 @@ def fetch_and_send_message(send_queue, vendor_manager):
             return
 
     success = False
+    sent_locally = False
     try:
-        success = distributed_send_message(message, vendor_manager)
+        success, sent_locally = distributed_send_message(message, vendor_manager)
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
@@ -1104,15 +1105,16 @@ def fetch_and_send_message(send_queue, vendor_manager):
             set_target_fallback_mode(message)
             render(message)
             try:
-                success = distributed_send_message(message, vendor_manager)
+                success, sent_locally = distributed_send_message(message, vendor_manager)
             # nope - log and bail
             except Exception:
                 metrics.incr('task_failure')
                 add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
+                sent_locally = True
     if success:
         metrics.incr('message_send_cnt')
-        if message['message_id']:
+        if message['message_id'] and sent_locally:
             mark_message_as_sent(message)
 
         if message_to_slave:
@@ -1128,7 +1130,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
         if message_to_slave:
             metrics.incr('slave_message_send_fail_cnt')
 
-    if message['message_id']:
+    if message['message_id'] and sent_locally:
         update_message_sent_status(message, success)
 
 
