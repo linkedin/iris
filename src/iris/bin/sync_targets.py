@@ -389,20 +389,6 @@ def batch_remove_ldap_memberships(session, list_id, members):
     session.commit()
 
 
-def batch_remove_ldap_lists(session, list_names, list_type_id):
-    # Remove these in chunks to avoid a gigantic 'where ID in (..)'
-    # query that has thousands of entries.
-    deletes_per_match = 50
-    for lists_this_batch in batch_items_from_list(list_names, deletes_per_match):
-        affected = session.execute('''DELETE FROM `target`
-                                      WHERE `name` IN :list_names
-                                      AND `type_id` = :type_id''',
-                                   {'type_id': list_type_id, 'list_names': tuple(lists_this_batch)}).rowcount
-
-        logger.info('Deleted %s old mailing lists', affected)
-    session.commit()
-
-
 def sync_ldap_lists(ldap_settings, engine):
     try:
         l = ldap.initialize(ldap_settings['connection']['url'])
@@ -443,7 +429,8 @@ def sync_ldap_lists(ldap_settings, engine):
     kill_lists = existing_ldap_lists - {item[1] for item in ldap_lists}
     if kill_lists:
         metrics.incr('ldap_lists_removed', len(kill_lists))
-        batch_remove_ldap_lists(session, kill_lists, list_type_id)
+        for ldap_list in kill_lists:
+            prune_target(engine, ldap_list, mailing_list_type_name)
 
     user_add_count = 0
 
