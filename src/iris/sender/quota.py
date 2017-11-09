@@ -134,6 +134,11 @@ class ApplicationQuota(object):
         if not application:
             return True
 
+        # Purpose of quotas is to protect downstreams. If we're already going to drop this message,
+        # don't let it account against quota.
+        if message.get('mode') == 'drop':
+            return True
+
         rate = self.rates.get(application)
 
         if not rate:

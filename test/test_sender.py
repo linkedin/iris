@@ -349,6 +349,19 @@ def test_quotas(mocker):
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
     quotas = ApplicationQuota(None, None, None, None)
     sleep(1)
+
+    # ensure drop messages don't count
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+
+    assert stats['quota_soft_exceed_cnt'] == 0
+    assert stats['quota_hard_exceed_cnt'] == 0
+
+    # but normal ones do
     assert quotas.allow_send({'application': 'testapp'})
     assert quotas.allow_send({'application': 'testapp'})
     assert quotas.allow_send({'application': 'testapp'})  # Breach soft quota
