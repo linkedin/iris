@@ -1357,6 +1357,9 @@ def sender_shutdown():
     if coordinator:
         coordinator.leave_cluster()
 
+    # Stop sender RPC server
+    rpc.shutdown()
+
     for tasks in worker_tasks.itervalues():
         for task in tasks:
             task['kill_set'].set()
@@ -1457,6 +1460,7 @@ def init_sender(config):
 
 def main():
     global config
+    global shutdown_started
     config = load_config()
 
     start_time = time.time()
@@ -1486,6 +1490,15 @@ def main():
     interval = 60
     logger.info('[*] sender bootstrapped')
     while True:
+
+        # When the shutdown starts, avoid doing sender tasks but keep this
+        # loop open as the shutdown function terminates the app once messages
+        # are done sending.
+        if shutdown_started:
+            logger.info('--> Shutdown in progress')
+            sleep(30)
+            continue
+
         runtime = int(time.time())
         logger.info('--> sender looop started.')
 
