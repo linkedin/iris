@@ -18,6 +18,7 @@ access_logger = logging.getLogger('RPC:access')
 
 send_funcs = {}
 rpc_timeout = None
+rpc_server = None
 
 
 def msgpack_handle_sets(obj):
@@ -183,13 +184,22 @@ def handle_api_request(socket, address):
 
 
 def run(sender_config):
+    global rpc_server
     try:
-        StreamServer((sender_config['host'], sender_config['port']),
-                     handle_api_request).start()
+        rpc_server = StreamServer((sender_config['host'], sender_config['port']),
+                                  handle_api_request)
+        rpc_server.start()
         return True
     except Exception:
         logger.exception('Failed binding to sender RPC port')
         return False
+
+
+def shutdown():
+    global rpc_server
+    if rpc_server:
+        logger.info('Stopping RPC server')
+        rpc_server.close()
 
 
 def init(sender_config, _send_funcs):

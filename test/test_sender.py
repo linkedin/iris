@@ -138,7 +138,7 @@ def test_fetch_and_send_message(mocker):
 
     vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
-    mocker.patch('iris.bin.sender.distributed_send_message').return_value = True
+    mocker.patch('iris.bin.sender.distributed_send_message').return_value = True, True
     mocker.patch('iris.bin.sender.quota')
     mocker.patch('iris.metrics.stats')
     mocker.patch('iris.bin.sender.update_message_mode')
@@ -177,7 +177,7 @@ def test_message_retry(mocker):
     vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
     mock_distributed_send_message = mocker.patch('iris.bin.sender.distributed_send_message')
-    mock_distributed_send_message.return_value = False
+    mock_distributed_send_message.return_value = (False, True)
     mocker.patch('iris.bin.sender.quota')
     mocker.patch('iris.bin.sender.update_message_mode')
     mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
@@ -193,6 +193,7 @@ def test_message_retry(mocker):
 
     def fail_send_message(message, vendors=None):
         add_mode_stat(message['mode'], None)
+        return False, True
 
     mock_distributed_send_message.side_effect = fail_send_message
 
@@ -346,8 +347,21 @@ def test_quotas(mocker):
                  )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
-    quotas = ApplicationQuota(None, None, None)
+    quotas = ApplicationQuota(None, None, None, None)
     sleep(1)
+
+    # ensure drop messages don't count
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+    assert quotas.allow_send({'application': 'testapp', 'mode': 'drop'})
+
+    assert stats['quota_soft_exceed_cnt'] == 0
+    assert stats['quota_hard_exceed_cnt'] == 0
+
+    # but normal ones do
     assert quotas.allow_send({'application': 'testapp'})
     assert quotas.allow_send({'application': 'testapp'})
     assert quotas.allow_send({'application': 'testapp'})  # Breach soft quota

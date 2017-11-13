@@ -155,6 +155,12 @@ class Coordinator(object):
                 logger.info('Releasing lock')
                 self.lock.release()
 
+        # Make us not the master
+        self.is_master = False
+
+        # Avoid sending metrics that we are still the master when we're not
+        metrics.set('is_master_sender', 0)
+
     def event_listener(self, state):
         if state == KazooState.LOST or state == KazooState.SUSPENDED:
             logger.info('ZK state transitioned to %s. Resetting master status.', state)

@@ -29,7 +29,7 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
-from pymysql import DataError, IntegrityError
+from pymysql import DataError, IntegrityError, InternalError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
@@ -742,6 +742,9 @@ def set_target_contact_by_priority(message):
 
 
 def set_target_contact(message):
+    # If we already have a destination set (eg incident tracking emails) no-op this
+    if 'destination' in message:
+        return True
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
     try:
         if 'mode' in message or 'mode_id' in message:
@@ -940,7 +943,7 @@ def update_message_sent_status(message, status):
                            ON DUPLICATE KEY UPDATE `status` =  :status''',
                         {'message_id': message_id, 'status': status})
         session.commit()
-    except (DataError, IntegrityError):
+    except (DataError, IntegrityError, InternalError):
         logger.exception('Failed setting message sent status for message %s', message)
     finally:
         session.close()
@@ -975,7 +978,7 @@ def distributed_send_message(message, vendor_manager):
                         logger.error('Failed using all configured slaves; resorting to local send_message')
                         break
                     if rpc.send_message_to_slave(message, address):
-                        return True
+                        return True, False
         except StopIteration:
             logger.warning('No more slaves. Sending locally.')
 
@@ -984,12 +987,14 @@ def distributed_send_message(message, vendor_manager):
     runtime = vendor_manager.send_message(message)
     add_mode_stat(message['mode'], runtime)
 
-    metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
-    metrics.add_new_metrics({metrics_key: 0})
-    metrics.incr(metrics_key)
+    # application is not present for incident tracking emails
+    if 'application' in message:
+        metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
+        metrics.add_new_metrics({metrics_key: 0})
+        metrics.incr(metrics_key)
 
     if runtime is not None:
-        return True
+        return True, True
 
     raise Exception('Failed sending message')
 
@@ -1086,8 +1091,9 @@ def fetch_and_send_message(send_queue, vendor_manager):
             return
 
     success = False
+    sent_locally = False
     try:
-        success = distributed_send_message(message, vendor_manager)
+        success, sent_locally = distributed_send_message(message, vendor_manager)
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
@@ -1099,15 +1105,16 @@ def fetch_and_send_message(send_queue, vendor_manager):
             set_target_fallback_mode(message)
             render(message)
             try:
-                success = distributed_send_message(message, vendor_manager)
+                success, sent_locally = distributed_send_message(message, vendor_manager)
             # nope - log and bail
             except Exception:
                 metrics.incr('task_failure')
                 add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
+                sent_locally = True
     if success:
         metrics.incr('message_send_cnt')
-        if message['message_id']:
+        if message['message_id'] and sent_locally:
             mark_message_as_sent(message)
 
         if message_to_slave:
@@ -1123,7 +1130,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
         if message_to_slave:
             metrics.incr('slave_message_send_fail_cnt')
 
-    if message['message_id']:
+    if message['message_id'] and sent_locally:
         update_message_sent_status(message, success)
 
 
@@ -1350,6 +1357,9 @@ def sender_shutdown():
     if coordinator:
         coordinator.leave_cluster()
 
+    # Stop sender RPC server
+    rpc.shutdown()
+
     for tasks in worker_tasks.itervalues():
         for task in tasks:
             task['kill_set'].set()
@@ -1429,7 +1439,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, config['sender'].get('sender_app'))
+    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'))
 
     global coordinator
     zk_hosts = config['sender'].get('zookeeper_cluster', False)
@@ -1450,6 +1460,7 @@ def init_sender(config):
 
 def main():
     global config
+    global shutdown_started
     config = load_config()
 
     start_time = time.time()
@@ -1479,6 +1490,15 @@ def main():
     interval = 60
     logger.info('[*] sender bootstrapped')
     while True:
+
+        # When the shutdown starts, avoid doing sender tasks but keep this
+        # loop open as the shutdown function terminates the app once messages
+        # are done sending.
+        if shutdown_started:
+            logger.info('--> Shutdown in progress')
+            sleep(30)
+            continue
+
         runtime = int(time.time())
         logger.info('--> sender looop started.')
 

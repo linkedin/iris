@@ -5,7 +5,6 @@ from time import time
 from gevent import spawn, sleep
 from collections import deque
 from datetime import datetime
-from iris.sender.shared import per_mode_send_queues
 import iris.cache
 from iris import metrics
 import logging
@@ -59,9 +58,10 @@ soft_quota_notification_interval = 600
 
 class ApplicationQuota(object):
 
-    def __init__(self, db, expand_targets, sender_app):
+    def __init__(self, db, expand_targets, message_send_enqueue, sender_app):
         self.db = db
         self.expand_targets = expand_targets
+        self.message_send_enqueue = message_send_enqueue
         self.iris_application = None
         if sender_app:
             self.iris_application = iris.cache.applications.get(sender_app)
@@ -132,6 +132,11 @@ class ApplicationQuota(object):
         application = message.get('application')
 
         if not application:
+            return True
+
+        # Purpose of quotas is to protect downstreams. If we're already going to drop this message,
+        # don't let it account against quota.
+        if message.get('mode') == 'drop':
             return True
 
         rate = self.rates.get(application)
@@ -269,4 +274,4 @@ class ApplicationQuota(object):
                          'If this continues, your messages will eventually be dropped on the floor and an Iris incident will be raised.\n\n'
                          'Regards,\nIris') % (username, application, limit, duration, )
             }
-            per_mode_send_queues['email'].put(message)
+            self.message_send_enqueue(message)
