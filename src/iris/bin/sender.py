@@ -245,6 +245,11 @@ autoscale_email_worker_tasks = defaultdict(list)
 # support the 2nd control+c force exiting sender without waiting for tasks to finish
 shutdown_started = False
 
+# Set of active message IDs currently being sent, to avoid re-sending messages that are currently
+# just blocked on a downstream such as smtp
+message_ids_being_sent = set()
+
+
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
     'email_min': 0, 'email_avg': 0, 'im_cnt': 0, 'im_total': 0, 'im_fail': 0, 'im_sent': 0,
@@ -261,7 +266,7 @@ default_sender_metrics = {
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
-    'message_retry_cnt': 0
+    'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0
 }
 
 # TODO: make this configurable
@@ -1112,6 +1117,11 @@ def fetch_and_send_message(send_queue, vendor_manager):
                 add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
                 sent_locally = True
+
+    # Take it out of our list of active queued messages if it's there
+    if message['message_id']:
+        message_ids_being_sent.discard(message['message_id'])
+
     if success:
         metrics.incr('message_send_cnt')
         if message['message_id'] and sent_locally:
@@ -1383,6 +1393,13 @@ def sender_shutdown():
 
 
 def message_send_enqueue(message):
+
+    # If this message has an ID, avoid queueing it twice, assuming it's not a retry
+    message_id = message.get('message_id')
+    if message_id is not None and message_id in message_ids_being_sent and not message.get('retry_count'):
+        logger.debug('Not-requeueing message %s', message)
+        return
+
     # Set the target contact here so we determine the mode, which determines the
     # queue it gets inserted into. Skip this step if it's a retry because we'd
     # already have the message's contact info decided
@@ -1396,6 +1413,8 @@ def message_send_enqueue(message):
 
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
+        if message_id is not None:
+            message_ids_being_sent.add(message_id)
         per_mode_send_queues[message_mode].put(message)
         metrics.incr('send_queue_puts_cnt')
     else:
@@ -1557,6 +1576,8 @@ def main():
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))
+
+        metrics.set('message_ids_being_sent_cnt', len(message_ids_being_sent))
 
         spawn(metrics.emit)
 
