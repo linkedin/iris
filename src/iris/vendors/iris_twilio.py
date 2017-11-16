@@ -109,11 +109,11 @@ class iris_twilio(object):
             payload['message_id'] = message_id
             payload['instruction'] = plugin.get_phone_menu_text()
             relay_cb_url = '%s/api/v0/twilio/calls/gather?%s' % (
-                self.config['relay_base_url'], urllib.urlencode(payload)
+                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
         else:
             relay_cb_url = '%s/api/v0/twilio/calls/say?%s' % (
-                self.config['relay_base_url'], urllib.urlencode(payload)
+                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
 
         start = time.time()
