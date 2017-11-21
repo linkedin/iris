@@ -1368,6 +1368,15 @@ iris = {
     init: function(){
       var location = window.location.pathname.split('/'),
           path = this.data.id = location[location.length - 1];
+
+      Handlebars.registerHelper('eachSorted', function(context, options) {
+        var ret = "";
+        Object.keys(context).sort().forEach(function(key) {
+          ret = ret + options.fn({key: key, value: context[key]});
+        })
+        return ret;
+      });
+
       this.getIncident(path);
     },
     events: function(){

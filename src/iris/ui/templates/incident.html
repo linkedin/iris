@@ -37,18 +37,18 @@
       {{#> context_template}}
         <label><strong>Context:</strong></label>
         <table id="context-table">
-          {{#each context}}
+          {{#eachSorted context}}
             {{#if this}}
             <tr>
               <td class="context-label">
-                <strong>{{@key}}:</strong>
+                <strong>{{key}}:</strong>
               </td>
               <td class="context-data">
-                {{this}}
+                {{value}}
               </td>
             </tr>
           {{/if}}
-          {{/each}}
+          {{/eachSorted}}
         </table>
       {{/context_template}}
     </div>
