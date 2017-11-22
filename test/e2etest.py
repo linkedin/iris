@@ -1201,17 +1201,17 @@ def test_post_alertmanager(sample_user, sample_team, sample_application_name, sa
         "alerts": [{
             "status": "firing",
             "labels": {
-                 "instance": "my-instance-001",
-                 "job": "trigger-my-alert",
-                 "monitor": "codelab-monitor",
-                 "alertname": "some_metric_high"
+                "instance": "my-instance-001",
+                "job": "trigger-my-alert",
+                "monitor": "codelab-monitor",
+                "alertname": "some_metric_high"
             },
             "endsAt": "0001-01-01T00:00:00Z",
             "generatorURL": "http://4cdbcaad4617:9090/graph?g0.expr=some_metric+%3E+2&g0.tab=0",
             "startsAt": "2017-11-20T09:41:07.805Z",
             "annotations": {
-                 "description": "my-instance-001 - trigger-my-alert :: Because, you know. Things. 3.14",
-                 "summary": "You should NEVER have more than two some_metric whatevers on my-instance-001"
+                "description": "my-instance-001 - trigger-my-alert :: Because, you know. Things. 3.14",
+                "summary": "You should NEVER have more than two some_metric whatevers on my-instance-001"
             }
         }],
         "version": "4",
