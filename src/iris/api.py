@@ -669,7 +669,23 @@ class AuthMiddleware(object):
 
         # Proceed with authenticating this route as a third party application
         try:
-            app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+            # Ignore HMAC requirements for Alertmanager, which doesn't support it
+            if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'alertmanager' and method == 'POST':
+                qs = parse_qs(req.env['QUERY_STRING'])
+
+                app = qs['application'][0]
+                if not app:
+                    raise HTTPBadRequest('Missing application keyvalue in query string')
+
+                # extract the target plan from the body, groupLabels, iris_plan label
+                alert_params = ujson.loads(req.context['body'])
+                if 'groupLabels' not in alert_params or 'iris_plan' not in alert_params['groupLabels']:
+                    raise HTTPBadRequest('Missing iris_plan label in groupLabels, in body')
+
+                req.context['plan'] = alert_params['groupLabels']['iris_plan']
+            else:
+                app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+
             if app not in cache.applications:
                 logger.warn('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
@@ -683,6 +699,35 @@ class AuthMiddleware(object):
         method = req.method
 
         if resource.allow_read_no_auth and method == 'GET':
+            return
+
+        # Ignore HMAC requirements for Alertmanager, which doesn't support it
+        if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'alertmanager' and method == 'POST':
+            qs = parse_qs(req.env['QUERY_STRING'])
+
+            app_name = qs['application'][0]
+            app = cache.applications.get(app_name)
+            if not app:
+                logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
+                raise HTTPUnauthorized('Authentication failure', '', [])
+
+            req.context['app'] = app
+
+            # determine if we're correctly using an application key
+            api_key = qs['key'][0]
+            if not api_key:
+                logger.warn('Did not provide application key for "%s"', app_name)
+                raise HTTPUnauthorized('Authentication failure', '', [])
+            if not api_key == str(app['key']):
+                logger.warn('Application key invalid')
+                raise HTTPUnauthorized('Authentication failure', '', [])
+
+            # extract the target plan from the body, groupLabels, iris_plan label
+            alert_params = ujson.loads(req.context['body'])
+            if 'groupLabels' not in alert_params or 'iris_plan' not in alert_params['groupLabels']:
+                raise HTTPBadRequest('Missing iris_plan label in groupLabels, in body')
+
+            req.context['plan'] = alert_params['groupLabels']['iris_plan']
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
@@ -1233,6 +1278,125 @@ class Plans(object):
         resp.body = ujson.dumps(plan_id)
         resp.set_header('Location', '/plans/%s' % plan_id)
 
+class Alertmanager(object):
+    allow_read_no_auth = False
+
+    def on_get(self, req, resp):
+        raise HTTPNotFound()
+
+    def on_post(self, req, resp):
+        '''
+        This endpoint is compatible with the webhook post from Alertmanager.
+        Simply configure alertmanager with a receiver pointing to iris, like
+        so:
+
+        receivers:
+        - name: 'iris-team1'
+          webhook_configs:
+            - url: http://iris:16649/v0/alertmanager?application=test-app&key=sdffdssdf
+
+        Where application points to an application and key it's key, in Iris.
+
+        For every POST from alertmanager, a new incident will be created.
+        '''
+        alert_params = ujson.loads(req.context['body'])
+        if not all (k in alert_params for k in ("version", "status", "alerts")):
+            raise HTTPBadRequest('missing version, status and/or alert attributes')
+
+        with db.guarded_session() as session:
+            plan = req.context['plan']
+            plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
+                                      {'plan': plan}).scalar()
+            if not plan_id:
+                raise HTTPNotFound()
+
+            app = req.context['app']
+
+            # create new context
+            context = {}
+            str_fields = ['status', 'groupKey', 'version', 'receiver', 'externalURL']
+
+            for field in str_fields:
+                context[field] = alert_params[field]
+
+            cnt = 0
+            for alert in alert_params['alerts']:
+                cnt = cnt + 1
+                field_prefix = "alert_" + str(cnt) + "_"
+                context[field_prefix + "status"] = alert['status']
+                context[field_prefix + "endsAt"] = alert['endsAt']
+                context[field_prefix + "generatorURL"] = alert['generatorURL']
+                context[field_prefix + "startsAt"] = alert['startsAt']
+
+                labels = "; ".join([k + ": " + v for k, v in alert['labels'].items()])
+                context[field_prefix + "labels"] = labels
+
+                annotations = "; ".join([k + ": " + v for k, v in alert['annotations'].items()])
+                context[field_prefix + "annotations"] = annotations
+
+            for k, val in alert_params['groupLabels'].iteritems():
+                context['groupLabel_' + k] = val
+
+            for k, val in alert_params['commonLabels'].iteritems():
+                context['commonLabels_' + k] = val
+
+            for k, val in alert_params['commonAnnotations'].iteritems():
+                context['commonAnnotations_' + k] = val
+
+            context_json_str = ujson.dumps(context)
+            if len(context_json_str) > 65535:
+                logger.warn('POST to alertmanager exceeded acceptable size')
+                raise HTTPBadRequest('Context too long')
+
+            app_template_count = session.execute('''
+                SELECT EXISTS (
+                  SELECT 1 FROM
+                  `plan_notification`
+                  JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                  JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                  WHERE `plan_notification`.`plan_id` = :plan_id
+                  AND `template_content`.`application_id` = :app_id
+                )
+            ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
+
+            if not app_template_count:
+                logger.warn('no plan template exists for this app')
+                raise HTTPBadRequest('No plan template actions exist for this app')
+
+            data = {
+                'plan_id': plan_id,
+                'created': datetime.datetime.utcnow(),
+                'application_id': app['id'],
+                'context': context_json_str,
+                'current_step': 0,
+                'active': True,
+            }
+
+            # if status is resolved, insert into the incident database
+            # with a dynamic target and a plan that only ever sends out
+            # 1 notification. This allows us to do 'resolved' notifications
+            # without escalation
+            if alert['status'] == "resolved":
+                logger.info("got resolved incident")
+                # lookup plan role and target
+                # then insert incident with special resolved plan
+                incident_id = session.execute(
+                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                               `current_step`, `active`, `application_id`)
+                       VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                    data).lastrowid
+            else:
+                incident_id = session.execute(
+                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                               `current_step`, `active`, `application_id`)
+                       VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                    data).lastrowid
+
+            session.commit()
+            session.close()
+        resp.status = HTTP_201
+        resp.set_header('Location', '/incidents/%s' % incident_id)
+        resp.body = ujson.dumps(incident_id)
 
 class Incidents(object):
     allow_read_no_auth = True
@@ -3853,6 +4017,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/incidents/{incident_id}', Incident())
     api.add_route('/v0/incidents', Incidents())
+
+    api.add_route('/v0/alertmanager', Alertmanager())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())

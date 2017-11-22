@@ -1186,6 +1186,49 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
     assert re.json() == {'description': 'Role user is not appropriate for target %s in step 1' % sample_team, 'title': 'Invalid role'}
 
 
+def test_post_alertmanager(sample_user, sample_team, sample_application_name, sample_template_name):
+    data = {
+        "status": "firing",
+        "groupLabels": {
+                "alertname": "some_metric_high",
+                "iris_plan": "demo-test-incident-post"
+        },
+        "groupKey": "{}:{alertname=some_metric_high}",
+        "commonAnnotations": {
+                "description": "my-instance-001 - trigger-my-alert :: Because, you know. Things. 3.14",
+                "summary": "You should NEVER have more than two some_metric whatevers on my-instance-001"
+        },
+        "alerts": [{
+                "status": "firing",
+                "labels": {
+                        "instance": "my-instance-001",
+                        "job": "trigger-my-alert",
+                        "monitor": "codelab-monitor",
+                        "alertname": "some_metric_high"
+                },
+                "endsAt": "0001-01-01T00:00:00Z",
+                "generatorURL": "http://4cdbcaad4617:9090/graph?g0.expr=some_metric+%3E+2&g0.tab=0",
+                "startsAt": "2017-11-20T09:41:07.805Z",
+                "annotations": {
+                        "description": "my-instance-001 - trigger-my-alert :: Because, you know. Things. 3.14",
+                        "summary": "You should NEVER have more than two some_metric whatevers on my-instance-001"
+                }
+        }],
+        "version": "4",
+        "receiver": "iris-tes",
+        "externalURL": "http://f61c3d89fa07:9093",
+        "commonLabels": {
+                "instance": "my-instance-001",
+                "job": "trigger-my-alert",
+                "monitor": "codelab-monitor",
+                "alertname": "some_metric_high"
+        }
+
+    }
+    re = requests.post(base_url + 'alertmanager' + "?application=" + sample_application_name + "&key=a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49", json=data)
+    assert re.status_code == 201
+
+
 def test_post_incident(sample_user, sample_team, sample_application_name, sample_template_name):
     data = {
         "creator": sample_user,
