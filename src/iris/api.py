@@ -1278,6 +1278,7 @@ class Plans(object):
         resp.body = ujson.dumps(plan_id)
         resp.set_header('Location', '/plans/%s' % plan_id)
 
+
 class Alertmanager(object):
     allow_read_no_auth = False
 
@@ -1300,7 +1301,7 @@ class Alertmanager(object):
         For every POST from alertmanager, a new incident will be created.
         '''
         alert_params = ujson.loads(req.context['body'])
-        if not all (k in alert_params for k in ("version", "status", "alerts")):
+        if not all(k in alert_params for k in ("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
         with db.guarded_session() as session:
@@ -1382,6 +1383,7 @@ class Alertmanager(object):
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
+
 
 class Incidents(object):
     allow_read_no_auth = True
