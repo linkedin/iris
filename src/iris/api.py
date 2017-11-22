@@ -1360,7 +1360,6 @@ class Alertmanager(object):
             ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
-                logger.warn('no plan template exists for this app')
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
             data = {
@@ -1372,25 +1371,11 @@ class Alertmanager(object):
                 'active': True,
             }
 
-            # if status is resolved, insert into the incident database
-            # with a dynamic target and a plan that only ever sends out
-            # 1 notification. This allows us to do 'resolved' notifications
-            # without escalation
-            if alert['status'] == "resolved":
-                logger.info("got resolved incident")
-                # lookup plan role and target
-                # then insert incident with special resolved plan
-                incident_id = session.execute(
+            incident_id = session.execute(
                     '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
                                                `current_step`, `active`, `application_id`)
                        VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                    data).lastrowid
-            else:
-                incident_id = session.execute(
-                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                               `current_step`, `active`, `application_id`)
-                       VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                    data).lastrowid
+                       data).lastrowid
 
             session.commit()
             session.close()
