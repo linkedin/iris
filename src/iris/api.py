@@ -671,7 +671,7 @@ class AuthMiddleware(object):
         # Proceed with authenticating this route as a third party application
         try:
             # Ignore HMAC requirements for custom webhooks
-            if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhooks'
+            if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhooks':
                 qs = parse_qs(req.env['QUERY_STRING'])
 
                 app = qs['application'][0]
@@ -696,7 +696,7 @@ class AuthMiddleware(object):
             return
 
         # Ignore HMAC requirements for custom webhooks
-        if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhook'
+        if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhook':
             qs = parse_qs(req.env['QUERY_STRING'])
 
             app_name = qs['application'][0]
