@@ -167,3 +167,9 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 #  iris_app_key: ''
 #  api_host: http://localhost:16649
 #  sleep_interval: 60
+#
+## Custom webhooks can be created and put in src/iris/webhooks.
+## Refer to their class name in this array.
+## The webhook will be available at /v0/webhooks/$name and requires being called with
+## ?application=xxx&key=xxx
+#  webhooks: []
