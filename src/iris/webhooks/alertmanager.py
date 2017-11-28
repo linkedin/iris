@@ -1,23 +1,14 @@
 from __future__ import absolute_import
 
-import time
-import hmac
-import hashlib
-import base64
-import re
-import os
 import datetime
 import logging
-from urlparse import parse_qs
 import ujson
-from falcon import HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest, HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound, HTTPInternalServerError, API
-from sqlalchemy.exc import IntegrityError
-
-from collections import defaultdict
+from falcon import HTTP_201, HTTPBadRequest, HTTPNotFound
 
 from iris import db
 
 logger = logging.getLogger(__name__)
+
 
 class alertmanager(object):
     allow_read_no_auth = False
@@ -42,7 +33,7 @@ class alertmanager(object):
         '''
         logger.info("alertmanager hit!")
         alert_params = ujson.loads(req.context['body'])
-        if not all (k in alert_params for k in ("version", "status", "alerts")):
+        if not all (k in alert_params for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
         with db.guarded_session() as session:
