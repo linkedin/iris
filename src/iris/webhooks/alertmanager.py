@@ -33,7 +33,7 @@ class alertmanager(object):
         '''
         logger.info("alertmanager hit!")
         alert_params = ujson.loads(req.context['body'])
-        if not all (k in alert_params for k in("version", "status", "alerts")):
+        if not all(k in alert_params for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
         with db.guarded_session() as session:
