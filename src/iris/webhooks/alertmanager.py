@@ -31,13 +31,12 @@ class alertmanager(object):
 
         For every POST from alertmanager, a new incident will be created.
         '''
-        logger.info("alertmanager hit!")
         alert_params = ujson.loads(req.context['body'])
         if not all(k in alert_params for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
         with db.guarded_session() as session:
-            plan = req.context['plan']
+            plan = alert_params['groupLabels']['iris_plan']
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': plan}).scalar()
             if not plan_id:
@@ -105,25 +104,11 @@ class alertmanager(object):
                 'active': True,
             }
 
-            # if status is resolved, insert into the incident database
-            # with a dynamic target and a plan that only ever sends out
-            # 1 notification. This allows us to do 'resolved' notifications
-            # without escalation
-            if alert['status'] == "resolved":
-                logger.info("got resolved incident")
-                # lookup plan role and target
-                # then insert incident with special resolved plan
-                incident_id = session.execute(
-                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                               `current_step`, `active`, `application_id`)
-                       VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                    data).lastrowid
-            else:
-                incident_id = session.execute(
-                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                               `current_step`, `active`, `application_id`)
-                       VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                    data).lastrowid
+            incident_id = session.execute(
+                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                           `current_step`, `active`, `application_id`)
+                   VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                data).lastrowid
 
             session.commit()
             session.close()
