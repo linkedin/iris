@@ -2942,6 +2942,41 @@ def test_ui_assets():
     assert re.headers['content-type'] == 'application/font-woff'
 
 
+def test_timezones_list():
+    re = requests.get(base_url + 'timezones', allow_redirects=False)
+    assert re.status_code == 200
+    assert isinstance(re.json(), list)
+
+
+def test_user_update_timezone(sample_user):
+    re = requests.get(base_url + 'timezones', allow_redirects=False)
+    timezones = list(set(re.json()))
+
+    if len(timezones) < 2:
+        pytest.skip('Skipping timezone test as we have no timezones configured')
+
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    # Change it to the first one and see if it sticks
+    re = session.put(base_url + 'users/settings/' + sample_user,
+                     json={'timezone': timezones[0]})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/settings/' + sample_user)
+    assert re.status_code == 200
+    assert re.json()['timezone'] == timezones[0]
+
+    # Then change it to another one and see if that one sticks
+    re = session.put(base_url + 'users/settings/' + sample_user,
+                     json={'timezone': timezones[1]})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/settings/' + sample_user)
+    assert re.status_code == 200
+    assert re.json()['timezone'] == timezones[1]
+
+
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):

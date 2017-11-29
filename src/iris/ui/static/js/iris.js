@@ -1547,9 +1547,12 @@ iris = {
       url: '/v0/users/',
       postModesUrl: '/v0/users/modes/',
       reprioritizationUrl: '/v0/users/reprioritization/',
+      settingsUrl: '/v0/users/settings/',
+      timezonesUrl: '/v0/timezones',
       user: window.appData.user,
       settings: null,
       reprioritizationSettings: [],
+      supportedTimezones: [],
       $page: $('.main'),
       $priority: $('#priority-table'),
       $batching: $('#batching-table'),
@@ -1565,7 +1568,9 @@ iris = {
       batchingTemplate: $('#batching-template').html(),
       subheaderTemplate: $('#user-contact-template').html(),
       reprioritizationTemplate: $('#reprioritization-table-template').html(),
-      postModel: {}
+      postModel: {},
+      $timezoneSelect: $('#timezone-select'),
+      $timezoneSave: $('#timezone-save')
     },
     init: function(){
       iris.changeTitle('Settings');
@@ -1577,6 +1582,9 @@ iris = {
       });
       this.getReprioritizationSettings().done(function(){
         self.populateReprioritization();
+      });
+      this.loadSupportedTimezones().done(function(){
+        self.populateTimezone();
       });
     },
     events: function(){
@@ -1596,6 +1604,12 @@ iris = {
       });
       this.data.$addAppSelect.change(function() {
         self.data.$addAppBtn.prop('disabled', $(this).val() == '');
+      });
+      this.data.$timezoneSelect.change(function() {
+        self.data.$timezoneSave.prop('disabled', $(this).val() == '');
+      });
+      this.data.$timezoneSave.on('click', function(){
+        self.saveTimezone();
       });
       self.data.$saveBtn.prop('disabled', true);
       self.data.$addAppBtn.prop('disabled', true);
@@ -1863,6 +1877,41 @@ iris = {
         delete this.data.appsToDelete[app];
       }
       this.createPriorityTable();
+    },
+    loadSupportedTimezones: function() {
+      var self = this;
+      return $.getJSON(this.data.timezonesUrl).done(function(response){
+        self.data.supportedTimezones = response;
+      }).fail(function(response){
+        iris.createAlert('Error: Failed to load supported timezones -' + response.text);
+      });
+    },
+    saveTimezone: function() {
+      $.ajax({
+        url: this.data.settingsUrl + this.data.user,
+        data: JSON.stringify({'timezone': this.data.$timezoneSelect.val()}),
+        method: 'PUT',
+        contentType: 'application/json'
+      }).done(function(){
+        iris.createAlert('Settings saved.', 'success');
+      }).fail(function(){
+        iris.createAlert('Failed to save settings', 'danger');
+      });
+    },
+    populateTimezone: function() {
+      var self = this,
+          configured_timezone = window.appData.user_settings.timezone;
+      self.data.$timezoneSelect.empty();
+      if (!configured_timezone) {
+        self.data.$timezoneSelect.append($('<option value="">').text('Browser Default'));
+        self.data.$timezoneSave.prop('disabled', true);
+      }
+      self.data.supportedTimezones.forEach(function(name) {
+        self.data.$timezoneSelect.append($('<option>').text(name));
+      });
+      if (configured_timezone) {
+        self.data.$timezoneSelect.val(configured_timezone);
+      }
     }
   }, //end iris.user
   applications: {
@@ -2688,7 +2737,11 @@ iris = {
     });
     Handlebars.registerHelper('convertToLocal', function(time){
       if (time) {
-        return moment.unix(time).local().format('YYYY-MM-DD HH:mm:ss [GMT]ZZ');
+        if (window.appData.user_settings.timezone) {
+          return moment.unix(time).tz(window.appData.user_settings.timezone).toString();
+        } else {
+          return moment.unix(time).local().toString();
+        }
       }
     });
     Handlebars.registerHelper('breakLines', function(text, type){
