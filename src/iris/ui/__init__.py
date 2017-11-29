@@ -28,7 +28,8 @@ assets_env.register('jquery_libs', Bundle('js/jquery-2.1.4.min.js', 'js/jquery.d
                                           'js/handlebars.min.js', 'js/hopscotch.min.js',
                                           output='bundles/jquery.libs.js'))
 assets_env.register('bootstrap_libs', Bundle('js/bootstrap.min.js', 'js/typeahead.js',
-                                             'js/bootstrap-datetimepicker.js',
+                                             'js/bootstrap-datetimepicker.js', 'js/moment-timezone.js',
+                                             'js/moment-tz-data.js',
                                              output='bundles/bootstrap.libs.js'))
 assets_env.register('iris_js', Bundle('js/iris.js', filters='rjsmin', output='bundles/iris.js'))
 assets_env.register('css_libs', Bundle('css/bootstrap.min.css', 'css/bootstrap-datetimepicker.css',
