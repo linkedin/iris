@@ -500,7 +500,8 @@ WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id
 get_applications_query = '''SELECT
     `id`, `name`, `context_template`, `sample_context`, `summary_template`
 FROM `application`
-WHERE `auth_only` is False'''
+WHERE `auth_only` is False
+ORDER BY `name` ASC'''
 
 get_vars_query = 'SELECT `name`, `required` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
