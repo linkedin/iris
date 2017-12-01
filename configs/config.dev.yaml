@@ -128,7 +128,7 @@ vendors: []
 
 # Hipchat support requires adding a new mode called "hipchat", in iris' mode table
 # Also, uncomment the hipchat workers to the sender['workers_per_mode'] hash above
-# Messages will be sent to $room_id with $username getting a mention
+# Messages will be sent to $room_id with $username getting a mention.
 #  - type: iris_hipchat
 #    name: hipchat
 #    auth_token: 'mytoken'
