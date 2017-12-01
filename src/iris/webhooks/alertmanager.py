@@ -35,6 +35,9 @@ class alertmanager(object):
         if not all(k in alert_params for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
+        if not 'iris_plan' in alert_params["groupLabels"]:
+            raise HTTPBadRequest('missing iris_plan in group labels')
+
         with db.guarded_session() as session:
             plan = alert_params['groupLabels']['iris_plan']
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
