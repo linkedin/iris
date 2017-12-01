@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 
 from iris.vendors.iris_hipchat import iris_hipchat
-import ujson as json
 
 
 def test_message_construction_for_incident():
