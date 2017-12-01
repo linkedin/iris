@@ -77,6 +77,7 @@ sender:
   # Number of gevent workers per mode we send
   workers_per_mode:
     email: 500
+    #hipchat: 10
 
   # Default sender to reach out to if we can't determine one programmatically
   master_sender:
@@ -124,6 +125,16 @@ vendors: []
 #    auth_token: ''
 #    twilio_number: ''
 #    relay_base_url: ''
+
+# Hipchat support requires adding a new mode called "hipchat", in iris' mode table
+# Also, uncomment the hipchat workers to the sender['workers_per_mode'] hash above
+# Messages will be sent to $room_id with $username getting a mention
+#  - type: iris_hipchat
+#    name: hipchat
+#    auth_token: 'mytoken'
+#    debug: False
+#    base_url: 'https://api.hipchat.com'
+#    room_id: 1234567
 
 applications:
  - dummy_app
