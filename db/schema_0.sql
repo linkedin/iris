@@ -572,7 +572,7 @@ CREATE TABLE `user_setting` (
   `user_id` bigint(20) NOT NULL,
   `name` varchar(255) NOT NULL,
   `value` varchar(255) NOT NULL,
-  PRIMARY KEY (`user_id`),
+  PRIMARY KEY (`user_id`, `name`),
   CONSTRAINT `user_setting_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;

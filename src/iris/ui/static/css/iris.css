@@ -1400,6 +1400,7 @@ table.dataTable thead .sorting_asc {
 
 #priority-inner {
   width: 100%;
+  margin-bottom: 30px;
 }
 
 #priority-table {
@@ -1763,4 +1764,8 @@ span.twitter-typeahead {
 }
 .input-group.input-group-sm span.twitter-typeahead .tt-dropdown-menu {
   top: 28px !important;
+}
+
+#timezone-select {
+  width: auto;
 }

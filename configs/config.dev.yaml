@@ -40,6 +40,17 @@ user_session:
 #    port: 8086
 #    database: iris
 
+supported_timezones:
+  - 'US/Pacific'
+  - 'US/Eastern'
+  - 'US/Central'
+  - 'US/Mountain'
+  - 'US/Alaska'
+  - 'US/Hawaii'
+  - 'Asia/Kolkata'
+  - 'Asia/Shanghai'
+  - 'UTC'
+
 db: &db
   conn:
     kwargs:

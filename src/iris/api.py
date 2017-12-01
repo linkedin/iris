@@ -518,6 +518,21 @@ check_username_admin_query = '''SELECT `user`.`admin`
                                 WHERE `target`.`name` = %s
                                 AND `target_type`.`name` = "user"'''
 
+get_username_settings_query = '''SELECT `user_setting`.`name`, `user_setting`.`value`
+                                 FROM `user_setting`
+                                 JOIN `target` ON `target`.`id` = `user_setting`.`user_id`
+                                 JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                 WHERE `target`.`name` = %s
+                                 AND `target_type`.`name` = "user"'''
+
+update_username_settings_query = '''INSERT INTO `user_setting` (`user_id`, `name`, `value`)
+                                    VALUES (
+                                      (SELECT `target`.`id` FROM `target` JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                       WHERE `target`.`name` = %(username)s AND `target_type`.`name` = "user"),
+                                      %(name)s,
+                                      %(value)s)
+                                    ON DUPLICATE KEY UPDATE `value` = %(value)s'''
+
 check_application_ownership_query = '''SELECT 1
                                        FROM `application_owner`
                                        JOIN `target` on `target`.`id` = `application_owner`.`user_id`
@@ -798,6 +813,7 @@ class ACLMiddleware(object):
     def process_resource(self, req, resp, resource, params):
         self.process_frontend_routes(req, resource)
         self.process_admin_acl(req, resource, params)
+        self.load_user_settings(req)
 
     def process_frontend_routes(self, req, resource):
         if req.context['username']:
@@ -837,6 +853,21 @@ class ACLMiddleware(object):
             path_username = params.get('username')
             if not equals(path_username, req.context['username']):
                 raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
+
+    def load_user_settings(self, req):
+        req.context['user_settings'] = {}
+
+        if not req.context['username']:
+            return
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(get_username_settings_query, req.context['username'])
+        settings = dict(cursor)
+        cursor.close()
+        connection.close()
+
+        req.context['user_settings'] = settings
 
 
 class Plan(object):
@@ -3080,6 +3111,57 @@ class User(object):
         resp.body = ujson.dumps(user_data)
 
 
+class UserSettings(object):
+    allow_read_no_auth = False
+    enforce_user = True
+
+    def __init__(self, supported_timezones):
+        self.supported_timezones = supported_timezones
+
+    def on_get(self, req, resp, username):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(get_username_settings_query, req.context['username'])
+        settings = dict(cursor)
+        cursor.close()
+        connection.close()
+
+        resp.body = ujson.dumps(settings)
+
+    def on_put(self, req, resp, username):
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+
+        chosen_timezone = data.get('timezone')
+        if chosen_timezone and chosen_timezone in self.supported_timezones:
+            try:
+                cursor.execute(update_username_settings_query, {'name': 'timezone', 'value': chosen_timezone, 'username': req.context['username']})
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting timezone to %s for user %s', chosen_timezone, req.context['username'])
+
+        cursor.close()
+        connection.close()
+
+        resp.body = '[]'
+        resp.status = HTTP_204
+
+
+class SupportedTimezones(object):
+    allow_read_no_auth = True
+
+    def __init__(self, supported_timezones):
+        self.supported_timezones = supported_timezones
+
+    def on_get(self, req, resp):
+        resp.body = ujson.dumps(self.supported_timezones)
+
+
 class ResponseMixin(object):
     allow_read_no_auth = False
 
@@ -3868,7 +3950,7 @@ def json_error_serializer(req, resp, exception):
     resp.content_type = 'application/json'
 
 
-def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr, config):
+def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr, supported_timezones, config):
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
@@ -3901,6 +3983,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/templates', Templates())
 
     api.add_route('/v0/users/{username}', User())
+    api.add_route('/v0/users/settings/{username}', UserSettings(supported_timezones))
     api.add_route('/v0/users/modes/{username}', UserModes())
     api.add_route('/v0/users/reprioritization/{username}', Reprioritization())
     api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
@@ -3928,6 +4011,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
     api.add_route('/v0/stats', Stats())
+
+    api.add_route('/v0/timezones', SupportedTimezones(supported_timezones))
 
     api.add_route('/healthcheck', Healthcheck(healthcheck_path))
 
@@ -3959,10 +4044,11 @@ def get_api(config):
     default_master_sender = config['sender'].get('master_sender', config['sender'])
     default_master_sender_addr = (default_master_sender['host'], default_master_sender['port'])
     zk_hosts = config['sender'].get('zookeeper_cluster', False)
+    supported_timezones = config.get('supported_timezones', [])
 
     # all notifications go through master sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, config)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, supported_timezones, config)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)
