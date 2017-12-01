@@ -1,7 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-import ujson
 import logging
 import requests
 import time
@@ -33,23 +32,22 @@ class iris_hipchat(object):
         self.notification_url = '{0}/v2/room/{1}/notification'.format(self.endpoint_url, self.room_id)
         self.headers = {
             'Content-type': 'application/json',
-            }
+        }
 
     def get_message_payload(self, message):
         """Send notification to specified HipChat room"""
         clean_message = "@{0} {1}".format(message['destination'], message['body'])
-        self.message_dict = {
+        message_dict = {
             'message': clean_message,
             'color': 'red',
             'notify': 'true',
             'message_format': "text",
         }
-        return self.message_dict
+        return message_dict
 
     def send_message(self, message):
         start = time.time()
-        payload = ujson.dumps(self.get_message_payload(message))
-        logger.info('tmpdebug msg: %s', ujson.dumps(message))
+        payload = self.get_message_payload(message)
         if self.debug:
             logger.info('debug: %s', self.message_dict)
         else:
@@ -57,7 +55,7 @@ class iris_hipchat(object):
                 response = requests.post(self.notification_url,
                                          headers=self.headers,
                                          params=self.params,
-                                         data=payload,
+                                         json=payload,
                                          proxies=self.proxy)
                 if response.status_code == 200 or response.status_code == 204:
                     return time.time() - start
