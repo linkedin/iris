@@ -16,6 +16,23 @@ class alertmanager(object):
     def on_get(self, req, resp):
         raise HTTPNotFound()
 
+    def validate_post(self, body):
+        if not all(k in body for k in("version", "status", "alerts")):
+            raise HTTPBadRequest('missing version, status and/or alert attributes')
+
+        if not 'iris_plan' in body["groupLabels"]:
+            raise HTTPBadRequest('missing iris_plan in group labels')
+
+
+    def create_context(self, body):
+        context_json_str = ujson.dumps(body)
+        if len(context_json_str) > 65535:
+            logger.warn('POST to alertmanager exceeded acceptable size')
+            raise HTTPBadRequest('Context too long')
+
+        return context_json_str
+
+
     def on_post(self, req, resp):
         '''
         This endpoint is compatible with the webhook post from Alertmanager.
@@ -27,16 +44,13 @@ class alertmanager(object):
           webhook_configs:
             - url: http://iris:16649/v0/webhooks/alertmanager?application=test-app&key=sdffdssdf
 
-        Where application points to an application and key it's key, in Iris.
+        Where application points to an application and key in Iris.
 
-        For every POST from alertmanager, a new incident will be created.
+        For every POST from alertmanager, a new incident will be created, if the iris_plan label
+        is attached to an alert.
         '''
         alert_params = ujson.loads(req.context['body'])
-        if not all(k in alert_params for k in("version", "status", "alerts")):
-            raise HTTPBadRequest('missing version, status and/or alert attributes')
-
-        if not 'iris_plan' in alert_params["groupLabels"]:
-            raise HTTPBadRequest('missing iris_plan in group labels')
+        self.validate_post(alert_params)
 
         with db.guarded_session() as session:
             plan = alert_params['groupLabels']['iris_plan']
@@ -47,41 +61,7 @@ class alertmanager(object):
 
             app = req.context['app']
 
-            # create new context
-            context = {}
-            str_fields = ['status', 'groupKey', 'version', 'receiver', 'externalURL']
-
-            for field in str_fields:
-                context[field] = alert_params[field]
-
-            cnt = 0
-            for alert in alert_params['alerts']:
-                cnt = cnt + 1
-                field_prefix = "alert_" + str(cnt) + "_"
-                context[field_prefix + "status"] = alert['status']
-                context[field_prefix + "endsAt"] = alert['endsAt']
-                context[field_prefix + "generatorURL"] = alert['generatorURL']
-                context[field_prefix + "startsAt"] = alert['startsAt']
-
-                labels = "; ".join([k + ": " + v for k, v in alert['labels'].items()])
-                context[field_prefix + "labels"] = labels
-
-                annotations = "; ".join([k + ": " + v for k, v in alert['annotations'].items()])
-                context[field_prefix + "annotations"] = annotations
-
-            for k, val in alert_params['groupLabels'].iteritems():
-                context['groupLabel_' + k] = val
-
-            for k, val in alert_params['commonLabels'].iteritems():
-                context['commonLabels_' + k] = val
-
-            for k, val in alert_params['commonAnnotations'].iteritems():
-                context['commonAnnotations_' + k] = val
-
-            context_json_str = ujson.dumps(context)
-            if len(context_json_str) > 65535:
-                logger.warn('POST to alertmanager exceeded acceptable size')
-                raise HTTPBadRequest('Context too long')
+            context_json_str = self.create_context(alert_params)
 
             app_template_count = session.execute('''
                 SELECT EXISTS (
@@ -115,6 +95,7 @@ class alertmanager(object):
 
             session.commit()
             session.close()
+
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
