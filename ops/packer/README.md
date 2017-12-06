@@ -4,7 +4,8 @@ Build steps
 Generate JSON for packer:
 
 ```bash
-python gen_packer_cfg.py ./iris.yaml
+mkdir output
+python gen_packer_cfg.py ./iris.yaml | tail -n +2 > ./output/iris.json
 ```
 
 Build and publish AWS AMI:
