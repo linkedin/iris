@@ -1,4 +1,4 @@
-from gevent import monkey, sleep, spawn
+from gevent import monkey, sleep
 monkey.patch_all()  # NOQA
 
 from iris import metrics
@@ -187,8 +187,6 @@ def main():
     api_host = owaconfig.get('api_host', 'http://localhost:16649')
     iris_client = IrisClient(api_host, 0, owaconfig['iris_app'], owaconfig['iris_app_key'])
 
-    spawn(metrics.emit_forever)
-
     proxies = owaconfig.get('proxies')
 
     # only way to configure a proxy is to monkey-patch (http adapter) a monkey-patch (baseprotocol) :/
@@ -198,14 +196,6 @@ def main():
 
     creds = exchangelib.Credentials(**owaconfig['credentials'])
 
-    config = exchangelib.Configuration(credentials=creds, **owaconfig['config'])
-
-    account = exchangelib.Account(
-        config=config,
-        access_type=exchangelib.DELEGATE,
-        **owaconfig['account'])
-    logger.info('Receiving mail on behalf of %s', owaconfig['account'].get('primary_smtp_address'))
-
     try:
         nap_time = int(owaconfig.get('sleep_interval', 60))
     except ValueError:
@@ -213,9 +203,24 @@ def main():
 
     while True:
         start_time = time.time()
-        message_count = poll(account, iris_client)
+        message_count = 0
+
+        try:
+            config = exchangelib.Configuration(credentials=creds, **owaconfig['config'])
+            account = exchangelib.Account(
+                config=config,
+                access_type=exchangelib.DELEGATE,
+                **owaconfig['account'])
+        except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
+            logger.exception('Failed authenticating to OWA365')
+            metrics.incr('owa_api_failure_count')
+        else:
+            logger.info('Receiving mail on behalf of %s', owaconfig['account'].get('primary_smtp_address'))
+            message_count = poll(account, iris_client)
+
         now = time.time()
         run_time = now - start_time
         logger.info('Last run took %2.f seconds and processed %s messages. Waiting %s seconds until next poll..', run_time, message_count, nap_time)
         metrics.set('uptime', now - boot_time)
+        metrics.emit()
         sleep(nap_time)
