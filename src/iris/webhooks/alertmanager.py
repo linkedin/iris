@@ -13,9 +13,6 @@ logger = logging.getLogger(__name__)
 class alertmanager(object):
     allow_read_no_auth = False
 
-    def on_get(self, req, resp):
-        raise HTTPNotFound()
-
     def validate_post(self, body):
         if not all(k in body for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
