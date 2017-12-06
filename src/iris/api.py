@@ -35,6 +35,7 @@ from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
 
+from iris.custom_import import import_custom_module
 
 from .constants import (
     XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
@@ -684,7 +685,12 @@ class AuthMiddleware(object):
 
         # Proceed with authenticating this route as a third party application
         try:
-            app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+            # Ignore HMAC requirements for custom webhooks
+            if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+                app = req.get_param('application', required=True)
+            else:
+                app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+
             if app not in cache.applications:
                 logger.warn('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
@@ -698,6 +704,23 @@ class AuthMiddleware(object):
         method = req.method
 
         if resource.allow_read_no_auth and method == 'GET':
+            return
+
+        # Ignore HMAC requirements for custom webhooks
+        if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+            app_name = req.get_param('application', required=True)
+            app = cache.applications.get(app_name)
+            if not app:
+                raise HTTPUnauthorized('Authentication failure',
+                                       'Application not found', [])
+
+            req.context['app'] = app
+
+            # determine if we're correctly using an application key
+            api_key = req.get_param('key', required=True)
+            if not equals(api_key, str(app['key'])):
+                logger.warn('Application key invalid')
+                raise HTTPUnauthorized('Authentication failure', '', [])
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
@@ -3918,7 +3941,7 @@ def json_error_serializer(req, resp, exception):
     resp.content_type = 'application/json'
 
 
-def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr, supported_timezones):
+def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_sender_addr, supported_timezones, config):
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
@@ -3983,7 +4006,17 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/timezones', SupportedTimezones(supported_timezones))
 
     api.add_route('/healthcheck', Healthcheck(healthcheck_path))
+
+    init_webhooks(config, api)
+
     return api
+
+
+def init_webhooks(config, api):
+    webhooks = config.get('webhooks', [])
+    for webhook in webhooks:
+        webhook_class = import_custom_module('iris.webhooks', webhook)
+        api.add_route('/v0/webhooks/' + webhook, webhook_class())
 
 
 def get_api(config):
@@ -4006,7 +4039,7 @@ def get_api(config):
 
     # all notifications go through master sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, supported_timezones)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, supported_timezones, config)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)
