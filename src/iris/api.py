@@ -688,8 +688,6 @@ class AuthMiddleware(object):
             # Ignore HMAC requirements for custom webhooks
             if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
                 app = req.get_param('application', required=True)
-                if not app:
-                    raise HTTPBadRequest('Missing application keyvalue in query string')
             else:
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
 
@@ -712,18 +710,11 @@ class AuthMiddleware(object):
         if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
             app_name = req.get_param('application', required=True)
             app = cache.applications.get(app_name)
-            if not app:
-                logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
-                raise HTTPUnauthorized('Authentication failure', '', [])
-
             req.context['app'] = app
 
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
-            if not api_key:
-                logger.warn('Did not provide application key for "%s"', app_name)
-                raise HTTPUnauthorized('Authentication failure', '', [])
-            if not api_key == str(app['key']):
+            if not equals(api_key, str(app['key'])):
                 logger.warn('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
