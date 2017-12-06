@@ -57,6 +57,23 @@ class iris_smtp(object):
 
         start = time.time()
         m = MIMEMultipart('alternative')
+
+        priority = message.get('priority')
+        if priority:
+            m['X-IRIS-PRIORITY'] = priority
+
+        application = message.get('application')
+        if application:
+            m['X-IRIS-APPLICATION'] = application
+
+        plan = message.get('plan')
+        if plan:
+            m['X-IRIS-PLAN'] = plan
+
+        incident_id = message.get('incident_id')
+        if incident_id:
+            m['X-IRIS-INCIDENT-ID'] = str(incident_id)
+
         m['from'] = from_address
         m['to'] = message['destination']
         if message.get('noreply'):
