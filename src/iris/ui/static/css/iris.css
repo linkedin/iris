@@ -154,7 +154,7 @@ header[data-page="error"] {
 .floating-module .module {
   position: relative;
   width: 250px;
-  height: 300px;
+  min-height: 300px;
   top: 45%;
   margin: auto;
   margin-top: -200px;
