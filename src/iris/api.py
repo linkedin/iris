@@ -710,6 +710,10 @@ class AuthMiddleware(object):
         if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
             app_name = req.get_param('application', required=True)
             app = cache.applications.get(app_name)
+            if not app:
+                raise HTTPUnauthorized('Authentication failure',
+                                       'Application not found', [])
+
             req.context['app'] = app
 
             # determine if we're correctly using an application key
