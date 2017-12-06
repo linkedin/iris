@@ -709,10 +709,8 @@ class AuthMiddleware(object):
             return
 
         # Ignore HMAC requirements for custom webhooks
-        if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhook':
-            qs = parse_qs(req.env['QUERY_STRING'])
-
-            app_name = qs['application'][0]
+        if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+            app_name = req.get_param('application', required=True)
             app = cache.applications.get(app_name)
             if not app:
                 logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
