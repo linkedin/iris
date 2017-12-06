@@ -17,9 +17,8 @@ class alertmanager(object):
         if not all(k in body for k in("version", "status", "alerts")):
             raise HTTPBadRequest('missing version, status and/or alert attributes')
 
-        if not 'iris_plan' in body["groupLabels"]:
+        if 'iris_plan' not in body["groupLabels"]:
             raise HTTPBadRequest('missing iris_plan in group labels')
-
 
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
@@ -28,7 +27,6 @@ class alertmanager(object):
             raise HTTPBadRequest('Context too long')
 
         return context_json_str
-
 
     def on_post(self, req, resp):
         '''
