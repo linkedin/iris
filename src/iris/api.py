@@ -686,10 +686,8 @@ class AuthMiddleware(object):
         # Proceed with authenticating this route as a third party application
         try:
             # Ignore HMAC requirements for custom webhooks
-            if len(req.env['PATH_INFO'].split("/")) > 2 and req.env['PATH_INFO'].split("/")[2] == 'webhooks':
-                qs = parse_qs(req.env['QUERY_STRING'])
-
-                app = qs['application'][0]
+            if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+                app = req.get_param('application', required=True)
                 if not app:
                     raise HTTPBadRequest('Missing application keyvalue in query string')
             else:
@@ -723,7 +721,7 @@ class AuthMiddleware(object):
             req.context['app'] = app
 
             # determine if we're correctly using an application key
-            api_key = qs['key'][0]
+            api_key = req.get_param('key', required=True)
             if not api_key:
                 logger.warn('Did not provide application key for "%s"', app_name)
                 raise HTTPUnauthorized('Authentication failure', '', [])
