@@ -4,13 +4,13 @@
 import logging
 import requests
 import time
-from iris.constants import IM_SUPPORT
+from iris.constants import HIPCHAT_SUPPORT
 
 logger = logging.getLogger(__name__)
 
 
 class iris_hipchat(object):
-    supports = frozenset(['hipchat'])
+    supports = frozenset([HIPCHAT_SUPPORT])
 
     def __init__(self, config):
         self.config = config
@@ -49,7 +49,7 @@ class iris_hipchat(object):
         start = time.time()
         payload = self.get_message_payload(message)
         if self.debug:
-            logger.info('debug: %s', self.message_dict)
+            logger.info('debug: %s', payload)
         else:
             try:
                 response = requests.post(self.notification_url,
