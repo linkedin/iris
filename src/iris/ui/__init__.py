@@ -78,6 +78,22 @@ def login_url(req):
         return '/login/'
 
 
+def flash_message(req, message, message_type):
+    session = req.env['beaker.session']
+    session['flash_message'] = {'type': message_type, 'message': message}
+    session.save()
+
+
+def get_flash(req):
+    session = req.env['beaker.session']
+    message = session.pop('flash_message', None)
+    if message:
+        session.save()
+        return message
+    else:
+        return None
+
+
 # In many cases, these routes need window.appData populated with various bits of data which
 # are only retrievable by going through the API itself. Forge a request locally and keep the
 # beaker cookies so the current user can be authenticated. This will go away once each page
@@ -239,12 +255,15 @@ class Login():
     allow_read_no_auth = False
     frontend_route = True
 
-    def __init__(self, auth_manager):
+    def __init__(self, auth_manager, debug):
         self.auth_manager = auth_manager
+        self.debug = debug
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('login.html').render(request=req, path='login')
+        resp.body = jinja2_env.get_template('login.html').render(request=req,
+                                                                 path='login',
+                                                                 last_flash=get_flash(req))
 
     def on_post(self, req, resp):
         form_body = uri.parse_query_string(req.context['body'])
@@ -255,11 +274,20 @@ class Login():
         except KeyError:
             raise HTTPFound('/login')
 
+        if not auth.valid_username(username):
+            logger.warn('Tried to login with invalid username %s', username)
+            if self.debug:
+                flash_message(req, 'Invalid username', 'danger')
+            else:
+                flash_message(req, 'Invalid credentials', 'danger')
+            raise HTTPFound('/login')
+
         if self.auth_manager.authenticate(username, password):
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
             logger.warn('Failed login for %s', username)
+            flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
         url = req.get_param('next')
@@ -369,6 +397,8 @@ def init(config, app):
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
 
+    debug = config['server'].get('disable_auth', False) is True
+
     app.add_route('/static/bundles/{filename}', StaticResource('/static/bundles'))
     app.add_route('/static/images/{filename}', StaticResource('/static/images'))
     app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
@@ -384,7 +414,7 @@ def init(config, app):
     app.add_route('/templates/{template}', Template())
     app.add_route('/applications/', Applications())
     app.add_route('/applications/{application}', Application())
-    app.add_route('/login/', Login(auth_manager))
+    app.add_route('/login/', Login(auth_manager, debug))
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
