@@ -102,7 +102,6 @@ role_lookups:
 
 #oncall-api: https://oncall.dummy.com  # oncall url
 
-## TODO
 applications:
  - dummy_app
 
@@ -153,7 +152,9 @@ metrics: dummy # output metrics to logs
 #    port: 8086
 #    database: iris
 
-enable_gmail_oneclick: True
+## Claim incidents by clicking the link in gmail.
+## See https://developers.google.com/gmail/markup/reference/one-click-action
+enable_gmail_oneclick: False
 gmail_one_click_url_key: 'foo'
 gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/relay'
 
@@ -195,7 +196,10 @@ sync_script_nap_time: 3600 # wait time before syncing again
 #  user_add_pause_interval: 500
 #  user_add_pause_duration: 1
 
-## Optionally, you can run iris-owa-sync to sync mails from OWA365:
++#####################
++### Iris-owa-sync
++#####################
+## To sync mails from OWA365:
 #owa:
 #  credentials:
 #    username: 'foouser@example.com'
