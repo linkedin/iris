@@ -107,6 +107,12 @@ applications:
 
 ## Vendors provides a way to add support for new notification mechanisms
 vendors: []
+#- type: iris_smtp
+#  name: email
+#  smtp_server: 'smtp1.example.com'
+#  smtp_gateway: 'smtp2.example.com'
+#  from: 'foouser@example.com'
+
 #- type: iris_slack
 #  name: slack
 #  auth_token: ''
