@@ -3806,7 +3806,7 @@ class ApplicationStats(object):
             'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_incidents_last_month': 'SELECT COUNT(*) FROM `incident` WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY) AND `created` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
-            'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
+            'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` USE INDEX (ix_message_sent) WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
             'pct_incidents_claimed_last_month': '''SELECT ROUND(COUNT(`owner_id`) / COUNT(*) * 100, 2)
                                                    FROM `incident`
                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
@@ -3910,20 +3910,25 @@ class ApplicationStats(object):
             stats['pct_%s_fail_last_month' % mode] = fail_pct
             stats['pct_%s_other_last_month' % mode] = other_pct
 
-        for mode in cache.modes:
-            cursor.execute('''SELECT COUNT(*) FROM `message`
-                              WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
-                              AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
-                              AND `application_id` = %(application_id)s
-                              AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
-                           {'application_id': app['id'], 'mode': mode})
-            num_sent = cursor.fetchone()
-            if num_sent is not None:
-                num_sent = num_sent[0]
-            stats['total_%s_sent_last_month' % mode] = num_sent
-
+        # Get counts of messages sent per mode
+        cursor.execute('''SELECT `mode`.`name`, `msg_count` FROM
+                            (SELECT `mode_id`, COUNT(*) as `msg_count` FROM `message`
+                            USE INDEX (ix_message_sent)
+                            WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
+                            AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
+                            AND `application_id` = %(application_id)s
+                            GROUP BY `mode_id`) `counts`
+                          JOIN `mode` ON `mode`.`id` = `counts`.`mode_id`''',
+                       {'application_id': app['id']})
+        for row in cursor:
+            stats['total_%s_sent_last_month' % row[0]] = row[1]
         cursor.close()
         connection.close()
+        # Zero out modes that don't show up in the count
+        for mode in cache.modes:
+            count_stat = 'total_%s_sent_last_month' % mode
+            if count_stat not in stats:
+                stats[count_stat] = 0
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(stats, sort_keys=True)
