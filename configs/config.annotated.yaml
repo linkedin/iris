@@ -112,6 +112,9 @@ vendors: []
 #  smtp_server: 'smtp1.example.com'
 #  smtp_gateway: 'smtp2.example.com'
 #  from: 'foouser@example.com'
+## If True, make a pool of persistent connections per each MX record for the given smtp_gateway
+##  autoscale: False
+##  tasks_per_mx: 4
 
 #- type: iris_slack
 #  name: slack
