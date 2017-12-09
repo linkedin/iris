@@ -1478,16 +1478,6 @@ def init_sender(config):
                                   slaves=config['sender'].get('slaves', []))
 
 
-def reset_master_only_metrics():
-    metrics.set('new_incidents_cnt', 0)
-    metrics.set('notifications', 0)
-    metrics.set('deactivation', 0)
-    metrics.set('new_msg_count', 0)
-    metrics.set('poll', 0)
-    metrics.set('queue', 0)
-    metrics.set('aggregations', 0)
-
-
 def main():
     global config
     global shutdown_started
@@ -1571,9 +1561,6 @@ def main():
             if bool(prune_audit_logs_task):
                 logger.info('I am not master anymore so stopping the audit logs worker')
                 prune_audit_logs_task.kill()
-            # If we were counting on the metrics which were updated only in master,
-            # we should reset it
-            reset_master_only_metrics()
 
         # check status for all background greenlets and respawn if necessary
         if not bool(send_task):
