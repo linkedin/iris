@@ -13,17 +13,20 @@ logger = logging.getLogger(__name__)
 
 Session = None
 dict_cursor = None
+ss_dict_cursor = None
 engine = None
 
 
 def init(config):
     global engine
     global dict_cursor
+    global ss_dict_cursor
     global Session
 
     engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
                            **config['db']['kwargs'])
     dict_cursor = engine.dialect.dbapi.cursors.DictCursor
+    ss_dict_cursor = engine.dialect.dbapi.cursors.SSDictCursor
     Session = sessionmaker(bind=engine)
 
 

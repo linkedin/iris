@@ -1065,7 +1065,7 @@ class Plans(object):
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
@@ -1320,7 +1320,7 @@ class Incidents(object):
         if query_limit is not None:
             query += ' ORDER BY `incident`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
 
         if 'context' in fields:
@@ -1687,7 +1687,7 @@ class Messages(object):
 
         if query_limit is not None:
             query += ' ORDER BY `message`.`created` DESC LIMIT %s' % query_limit
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
         resp.body = ujson.dumps(cursor)
         connection.close()
@@ -1954,7 +1954,7 @@ class Templates(object):
         if query_limit is not None:
             query += ' ORDER BY `template`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
