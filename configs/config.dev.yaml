@@ -46,7 +46,7 @@ healthcheck_path: /tmp/status
 ## Refer to their class name in this array.
 ## The webhook will be available at /v0/webhooks/$name and requires being called with
 ## ?application=xxx&key=xxx
-#  webhooks: []
+#webhooks: []
 
 #####################
 ### Iris-sender
@@ -84,11 +84,11 @@ sender:
   ## slaves to be cycled through
   is_master: True
 
-#  slaves:
-#    - host: 127.0.0.1
-#      port: 2322
-#    - host: 127.0.0.1
-#      port: 2323
+#slaves:
+#  - host: 127.0.0.1
+#    port: 2322
+#  - host: 127.0.0.1
+#    port: 2323
 
 sender_workers: 1000
 
@@ -97,17 +97,25 @@ sender_workers: 1000
 role_lookups:
   - user # support for 'role' being username
   - mailing_list # mailing list config; see bottom of file
-  # - oncall # oncall service integration
+  #- oncall # oncall service integration
   - dummy # dummy role lookup used for testing purposes. Disable this in production.
 
-# oncall-api: https://oncall.dummy.com  # oncall url
+#oncall-api: https://oncall.dummy.com  # oncall url
 
-## TODO
 applications:
  - dummy_app
 
 ## Vendors provides a way to add support for new notification mechanisms
 vendors: []
+#- type: iris_smtp
+#  name: email
+#  smtp_server: 'smtp1.example.com'
+#  smtp_gateway: 'smtp2.example.com'
+#  from: 'foouser@example.com'
+## If True, make a pool of persistent connections per each MX record for the given smtp_gateway
+##  autoscale: False
+##  tasks_per_mx: 4
+
 #- type: iris_slack
 #  name: slack
 #  auth_token: ''
@@ -119,22 +127,22 @@ vendors: []
 #    color: 'danger'
 #    pretext: '<!here> _Iris_ _Alert!_'
 
-#  - type: iris_twilio
-#    name: twilio_1
-#    account_sid: ''
-#    auth_token: ''
-#    twilio_number: ''
-#    relay_base_url: ''
+#- type: iris_twilio
+#  name: twilio_1
+#  account_sid: ''
+#  auth_token: ''
+#  twilio_number: ''
+#  relay_base_url: ''
 
 ## Hipchat support requires adding a new mode called "hipchat", in iris' mode table
 ## Also, uncomment the hipchat workers to the sender['workers_per_mode'] hash above
 ## Messages will be sent to $room_id with $username getting a mention.
-#  - type: iris_hipchat
-#    name: hipchat
-#    auth_token: 'mytoken'
-#    debug: False
-#    base_url: 'https://api.hipchat.com'
-#    room_id: 1234567
+#- type: iris_hipchat
+#  name: hipchat
+#  auth_token: 'mytoken'
+#  debug: False
+#  base_url: 'https://api.hipchat.com'
+#  room_id: 1234567
 
 ## Metrics
 metrics: dummy # output metrics to logs
@@ -153,17 +161,19 @@ metrics: dummy # output metrics to logs
 #    port: 8086
 #    database: iris
 
-enable_gmail_oneclick: True
+## Claim incidents by clicking the link in gmail.
+## See https://developers.google.com/gmail/markup/reference/one-click-action
+enable_gmail_oneclick: False
 gmail_one_click_url_key: 'foo'
 gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/relay'
 
 #####################
 ### Iris-sync-targets
 #####################
-##
+sync_script_nap_time: 3600 # wait time before syncing again
 ## use this for LDAP settings for sync script lookup
 # init_config_hook: iris_internal.api.init_config
-sync_script_nap_time: 3600 # wait time before syncing again
+
 ## always create these users
 # sync_script: # always create these users
 #   preset_users:
@@ -195,7 +205,10 @@ sync_script_nap_time: 3600 # wait time before syncing again
 #  user_add_pause_interval: 500
 #  user_add_pause_duration: 1
 
-## Optionally, you can run iris-owa-sync to sync mails from OWA365:
+#####################
+### Iris-owa-sync
+#####################
+## To sync mails from OWA365:
 #owa:
 #  credentials:
 #    username: 'foouser@example.com'
