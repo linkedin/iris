@@ -219,13 +219,17 @@ class Plans():
                 tracking_template = plan['tracking_template']
                 if plan['tracking_type'] == 'email':
                     for application, application_templates in tracking_template.iteritems():
-                        tracking_template[application] = {
-                            'email_subject': self.template_env.from_string(application_templates['email_subject']),
-                            'email_text': self.template_env.from_string(application_templates['email_text']),
-                        }
-                        html_template = application_templates.get('email_html')
-                        if html_template:
-                            tracking_template[application]['email_html'] = self.template_env.from_string(html_template)
+                        try:
+                            tracking_template[application] = {
+                                'email_subject': self.template_env.from_string(application_templates['email_subject']),
+                                'email_text': self.template_env.from_string(application_templates['email_text']),
+                            }
+                            html_template = application_templates.get('email_html')
+                            if html_template:
+                                tracking_template[application]['email_html'] = self.template_env.from_string(html_template)
+                        except jinja2.exceptions.TemplateSyntaxError:
+                            logger.exception('[-] error parsing Plan template for %s: %s', key, application)
+                            continue
                     plan['tracking_template'] = tracking_template
                 else:
                     # not supported type, set to None
