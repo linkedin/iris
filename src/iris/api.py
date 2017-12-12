@@ -579,12 +579,30 @@ def is_valid_tracking_settings(t, k, tpl):
     if t == 'email':
         if '@' not in k:
             return False, 'Invalid email address'
+        environment = SandboxedEnvironment()
         for app in tpl:
             if not tpl[app]:
                 return False, 'No key for %s template' % app
             missed_keys = set(('email_subject', 'email_text')) - set(tpl[app])
             if missed_keys:
                 return False, 'Missing keys for %s template: %s' % (app, missed_keys)
+
+            try:
+                environment.from_string(tpl[app]['email_subject'])
+            except Exception as e:
+                return False, 'Invalid jinja syntax in subject: %s' % e
+
+            try:
+                environment.from_string(tpl[app]['email_text'])
+            except Exception as e:
+                return False, 'Invalid jinja syntax in body: %s' % e
+
+            email_html = tpl[app].get('email_html')
+            if email_html is not None:
+                try:
+                    environment.from_string(email_html)
+                except Exception as e:
+                    return False, 'Invalid jinja syntax in email html: %s' % e
     else:
         return False, 'Unknown tracking type: %s' % t
     return True, None
