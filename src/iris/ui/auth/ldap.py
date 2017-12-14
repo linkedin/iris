@@ -8,6 +8,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
 class Authenticator:
     def __init__(self, config):
         root = os.path.abspath('./')
