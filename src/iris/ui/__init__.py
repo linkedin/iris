@@ -428,7 +428,7 @@ def init(config, app):
         'session.key': 'iris-auth',
         'session.encrypt_key': config['user_session']['encrypt_key'],
         'session.validate_key': config['user_session']['sign_key'],
-        'session.secure': not config['server'].get('disable_auth', False),
+        'session.secure': not (config['server'].get('disable_auth', False)) or config.get('allow_http', False)),
         'session.httponly': True
     }
     app = SessionMiddleware(app, session_opts)
