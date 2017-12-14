@@ -17,7 +17,7 @@ class Authenticator:
             return
         self.authenticate = self.ldap_auth
 
-        if 'ldap_cert_path' in config:
+        if 'ldap_cert_path' in config['auth']:
             self.cert_path = os.path.join(root, config['auth']['ldap_cert_path'])
             if not os.access(self.cert_path, os.R_OK):
                 logger.error("Failed to read ldap_cert_path certificate")
