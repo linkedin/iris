@@ -10,16 +10,21 @@ class Authenticator:
     def __init__(self, config):
         root = os.path.abspath('./')
         self.ldap_url = config['auth']['ldap_url']
-        self.cert_path = os.path.join(root, config['auth']['ldap_cert_path'])
+        self.start_tls = config['auth']['start_tls']
+        if not self.start_tls:
+            self.cert_path = os.path.join(root, config['auth']['ldap_cert_path'])
         self.user_suffix = config['auth']['ldap_user_suffix']
         self.authenticate = self.ldap_auth
         if config.get('debug'):
             self.authenticate = self.debug_auth
 
     def ldap_auth(self, username, password):
-        ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, self.cert_path)
+        if not self.start_tls:
+            ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, self.cert_path)
         connection = ldap.initialize(self.ldap_url)
         connection.set_option(ldap.OPT_REFERRALS, 0)
+        if self.start_tls:
+            connection.start_tls_s()
 
         try:
             if password:
