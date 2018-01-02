@@ -57,7 +57,7 @@ setuptools.setup(
             'pytest==3.0.5',
             'pytest-mock==1.5.0',
             'pytest-cov',
-            'flake8',
+            'flake8==3.5.0',
             'tox',
             'requests-mock==1.1.0',
         ],

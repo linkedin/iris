@@ -145,7 +145,7 @@ class iris_smtp(object):
 
             try:
                 conn.quit()
-            except:
+            except Exception:
                 pass
 
             # If we can't send it, try reconnecting and then sending it one more time before
@@ -180,7 +180,7 @@ class iris_smtp(object):
             logger.info('Trying to quit smtp connection to %s', self.last_conn_server)
             try:
                 self.last_conn.quit()
-            except:
+            except Exception:
                 pass
 
     @classmethod
