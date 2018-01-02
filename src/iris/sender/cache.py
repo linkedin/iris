@@ -447,7 +447,7 @@ def init(api_host, config):
             re = iris_client.get('target_roles')
             if re.status_code == 200:
                 break
-        except:
+        except Exception:
             pass
         api_chk_cnt += 1
         logger.warning(

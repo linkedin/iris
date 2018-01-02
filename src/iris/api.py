@@ -1850,7 +1850,7 @@ class Notifications(object):
             s = socket.create_connection(sender_addr)
 
         # Then try slaves
-        except:
+        except Exception:
             if self.coordinator:
                 logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
                 for slave_address in self.coordinator.get_current_slaves():
@@ -1858,7 +1858,7 @@ class Notifications(object):
                         logger.info('Trying slave %s..', slave_address)
                         s = socket.create_connection(slave_address)
                         break
-                    except:
+                    except Exception:
                         logger.exception('Failed reaching slave %s', slave_address)
 
         # If none of that works, bail
@@ -3646,14 +3646,14 @@ class Reprioritization(object):
         try:
             cursor.execute('SELECT `id` FROM `mode` WHERE `name` = %s', params['src_mode'])
             src_mode_id = cursor.fetchone()['id']
-        except:
+        except Exception:
             msg = 'Invalid source mode.'
             logger.exception(msg)
             raise HTTPBadRequest(msg, msg)
         try:
             cursor.execute('SELECT `id` FROM `mode` WHERE `name` = %s', params['dst_mode'])
             dst_mode_id = cursor.fetchone()['id']
-        except:
+        except Exception:
             msg = 'Invalid destination mode.'
             logger.exception(msg)
             raise HTTPBadRequest(msg, msg)
@@ -3738,7 +3738,7 @@ class Healthcheck(object):
         try:
             with open(self.healthcheck_path) as f:
                 health = f.readline().strip()
-        except:
+        except Exception:
             raise HTTPNotFound()
         resp.status = HTTP_200
         resp.content_type = 'text/plain'

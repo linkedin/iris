@@ -19,7 +19,7 @@ def get_role_lookups(config):
             imported_modules.append(
                 import_custom_module('iris.role_lookup', m)(config))
             logger.info('Loaded lookup modules: %s', m)
-        except:
+        except Exception:
             logger.exception('Failed to load role lookup module: %s', m)
 
     return imported_modules
