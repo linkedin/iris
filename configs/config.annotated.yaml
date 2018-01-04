@@ -1,0 +1,229 @@
+#####################
+### Iris-api settings
+#####################
+server:
+  host: 0.0.0.0
+  port: 16649
+  disable_auth: True # allow logins by existing users, but without checking credentials
+
+db: &db
+  conn:
+    kwargs:
+      scheme: mysql+pymysql
+      user: root
+      password: ""
+      host: 127.0.0.1
+      database: iris
+      charset: utf8
+    str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+  query_limit: 500
+  kwargs:
+    pool_recycle: 3600
+    echo: False
+    pool_size: 100
+    max_overflow: 100
+    pool_timeout: 60
+
+## Change these to random long values when you run this in production
+user_session:
+  encrypt_key: 'abc'
+  sign_key: '123'
+
+supported_timezones:
+  - 'US/Pacific'
+  - 'US/Eastern'
+  - 'US/Central'
+  - 'US/Mountain'
+  - 'US/Alaska'
+  - 'US/Hawaii'
+  - 'Asia/Kolkata'
+  - 'Asia/Shanghai'
+  - 'UTC'
+
+healthcheck_path: /tmp/status
+
+## Custom webhooks can be created and put in src/iris/webhooks.
+## Refer to their class name in this array.
+## The webhook will be available at /v0/webhooks/$name and requires being called with
+## ?application=xxx&key=xxx
+#webhooks: []
+
+#####################
+### Iris-sender
+#####################
+sender:
+  debug: True # Set to True, sender will not actually send messages
+  process_title: iris-sender
+  host: 127.0.0.1
+  port: 2321
+
+  ## Number of gevent workers per mode we send
+  workers_per_mode:
+    email: 500
+    #hipchat: 10
+
+  ## Default sender to reach out to if we can't determine one programmatically
+  master_sender:
+    host: 127.0.0.1
+    port: 2321
+
+  api_host: http://localhost:16649
+
+  ## App used for sending notification messages + incidents
+  sender_app: iris
+  ## RPC access log
+  access_log:
+    maxBytes: 10485760
+    filename: './logs/sender_rpc.access.log'
+
+  ## Optionally, use zookeeper for sender high availability.
+  #zookeeper_cluster: localhost:2181
+
+  ## If you're not using zookeeper, the following determines
+  ## whether this sender is a master and you hard code in
+  ## slaves to be cycled through
+  is_master: True
+
+#slaves:
+#  - host: 127.0.0.1
+#    port: 2322
+#  - host: 127.0.0.1
+#    port: 2323
+
+sender_workers: 1000
+
+## Enabled modules for resolving complex user roles to individual usernames, processed
+## in the order listed here.
+role_lookups:
+  - user # support for 'role' being username
+  - mailing_list # mailing list config; see bottom of file
+  #- oncall # oncall service integration
+  - dummy # dummy role lookup used for testing purposes. Disable this in production.
+
+#oncall-api: https://oncall.dummy.com  # oncall url
+
+applications:
+ - dummy_app
+
+## Vendors provides a way to add support for new notification mechanisms
+vendors: []
+#- type: iris_smtp
+#  name: email
+#  smtp_server: 'smtp1.example.com'
+#  smtp_gateway: 'smtp2.example.com'
+#  from: 'foouser@example.com'
+## If True, make a pool of persistent connections per each MX record for the given smtp_gateway
+##  autoscale: False
+##  tasks_per_mx: 4
+
+#- type: iris_slack
+#  name: slack
+#  auth_token: ''
+#  base_url: 'https://slack.com/api/chat.postMessage'
+#  iris_incident_url: ''
+#  proxy: *proxy_shared
+#  message_attachments:
+#    fallback: 'Iris Alert Fired!'
+#    color: 'danger'
+#    pretext: '<!here> _Iris_ _Alert!_'
+
+#- type: iris_twilio
+#  name: twilio_1
+#  account_sid: ''
+#  auth_token: ''
+#  twilio_number: ''
+#  relay_base_url: ''
+
+## Hipchat support requires adding a new mode called "hipchat", in iris' mode table
+## Also, uncomment the hipchat workers to the sender['workers_per_mode'] hash above
+## Messages will be sent to $room_id with $username getting a mention.
+#- type: iris_hipchat
+#  name: hipchat
+#  auth_token: 'mytoken'
+#  debug: False
+#  base_url: 'https://api.hipchat.com'
+#  room_id: 1234567
+
+## Metrics
+metrics: dummy # output metrics to logs
+#metrics: prometheus
+#prometheus:
+#  iris-sync-targets:
+#    server_port: 8001
+#  iris-sender:
+#    server_port: 8002
+#
+#
+#metrics: influx
+#influxdb:
+#  connect:
+#    host: localhost
+#    port: 8086
+#    database: iris
+
+## Claim incidents by clicking the link in gmail.
+## See https://developers.google.com/gmail/markup/reference/one-click-action
+enable_gmail_oneclick: False
+gmail_one_click_url_key: 'foo'
+gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/relay'
+
+#####################
+### Iris-sync-targets
+#####################
+sync_script_nap_time: 3600 # wait time before syncing again
+## use this for LDAP settings for sync script lookup
+# init_config_hook: iris_internal.api.init_config
+
+## always create these users
+# sync_script: # always create these users
+#   preset_users:
+#     - name: 'dummy'
+#       sms: '0123456789'
+#       call: '0123456789'
+## Optionally, import ldap mailing lists and have the ability to target them in messages
+#ldap_lists:
+#  connection:
+#    url: 'ldaps://your ldap url'
+#    bind_args: ['your bind username', 'your bind password']
+#  search_strings:
+#    get_all_lists_filter: '(&(objectClass=group)(groupCN=*)(groupName=*))'
+#    get_all_sub_lists_filter: '(&(objectClass=group)(partOf=%s)(groupCN=*)(groupName=*))'
+#    list_search_string: 'OU=groups,OU=company,DC=com'
+#    user_search_string: 'OU=users,OU=company,DC=com'
+#    user_membership_filter: '(&(objectClass=user)(userName=*)(partOf=%s))'
+#    user_account_name_field: 'userName'
+#    list_cn_field: 'groupCN'
+#    list_name_field: 'groupName'
+#
+#  # Max depth for recursing nested ldap lists.
+#  max_depth: 3
+#
+#  # If a list result returns at least this many results, don't support unrolling at runtime.
+#  max_unrolled_users: 100
+#
+#  # Every $n users, stop inserting into mysql to avoid crashing it. Comment these out to disable.
+#  user_add_pause_interval: 500
+#  user_add_pause_duration: 1
+
++#####################
++### Iris-owa-sync
++#####################
+## To sync mails from OWA365:
+#owa:
+#  credentials:
+#    username: 'foouser@example.com'
+#    password: ''
+#  account:
+#    autodiscover: false  # needs to be False for OWA365
+#    primary_smtp_address: foouser@example.com
+#  config:
+#    server: outlook.office365.com  # need to hardcode this for OWA365
+### proxies are optional but you can configure them here
+##  proxies:
+##    https: http://yourproxy:yourport
+##    http: http://yourproxy:yourport
+#  # need a valid iris application for for owa script to connect to api to relay emails
+#  iris_app: ''
+#  iris_app_key: ''
+#  api_host: http://localhost:16649
+#  sleep_interval: 60
