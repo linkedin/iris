@@ -3899,7 +3899,7 @@ class ApplicationStats(object):
 
         start = time.time()
         cursor.execute('''SELECT `mode`.`name`, COALESCE(`generic_message_sent_status`.`status`, `twilio_delivery_status`.`status`) as thisStatus,
-                                  COUNT(*) FROM `message`
+                                  COUNT(*) FROM `message` USE INDEX FOR JOIN (ix_message_created)
                           LEFT JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
                           LEFT JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
                           JOIN `mode` ON `mode`.`id` = `message`.`mode_id`
