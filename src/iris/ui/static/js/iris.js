@@ -121,6 +121,7 @@ iris = {
   plan: {
     data: {
       url: '/v0/plans/',
+      modesUrl: '/v0/modes',
       $page: $('.plan-details'),
       pageTemplateSource: $('#plan-module-template').html(),
       notificationTemplateSource: $('#plan-notification-template').html(),
@@ -170,6 +171,7 @@ iris = {
       },
       blankTrackingTemplateModel: {
         applications: window.appData.applications,
+        modes: null,
         viewMode: false,
         tracking_template: {
           application: {
@@ -198,6 +200,7 @@ iris = {
       Handlebars.registerPartial('plan-notification', $('#plan-notification-template').html());
       Handlebars.registerPartial('plan-tracking-notification', this.data.trackingTemplateSource);
       Handlebars.registerPartial('variables', this.data.variablesTemplateSource);
+      this.getModes();
       this.getPlan(path).done(function(){
         self.events();
         iris.versionTour.init();
@@ -228,6 +231,12 @@ iris = {
       data.$page.on('change', data.testPlanInputs, this.updateTestPlanValues);
       data.$page.on('change', data.toggleDynamic, this.toggleDynamicTargets);
       window.onbeforeunload = iris.unloadDialog.bind(this);
+    },
+    getModes: function(){
+      var self = this;
+      $.getJSON(this.data.modesUrl).done(function(response){
+        self.data.blankTrackingTemplateModel.modes = response;
+      });
     },
     getPlan: function(plan){
       var self = this,
@@ -281,6 +290,7 @@ iris = {
             response.dynamic = max_idx !== -1;
             response.target_roles = window.appData.target_roles;
             response.target_role_type =  window.appData.target_roles[0].type;
+            response.modes =  self.data.blankTrackingTemplateModel.modes;
             self.data.$page.html(template(response));
             self.loadVersionSelect();
             iris.changeTitle('Plan ' + response.name);

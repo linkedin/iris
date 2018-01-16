@@ -188,7 +188,9 @@
           <span class="item-content" title="{{ tracking_type }}">
             <label data-toggle="tooltip" title="Media type for the tracking message" class="required">Type:</label>
             <select id="tracking-type" class="form-control border-bottom" value="{{tracking_type}}">
-              <option value="email">email</option>
+              {{#each modes}}
+              <option value="{{this}}">{{this}}</option>
+              {{/each}}
             </select>
           </span>
           <span class="item-content" title="{{ tracking_key }}">

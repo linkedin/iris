@@ -418,36 +418,38 @@ def escalate():
                 'plan_id': plan_id,
                 'application': application,
             }
-            if tracking_type == 'email':
-                tracking_message = {
-                    'noreply': True,
-                    'destination': tracking_key,
-                    'mode': tracking_type
-                }
+            tracking_message = {
+                'noreply': True,
+                'destination': tracking_key,
+                'mode': tracking_type
+            }
 
+            try:
+                subject = app_tracking_template['email_subject'].render(**context)
+            except Exception as e:
+                subject = 'plan %s - tracking notification subject failed to render: %s' % (plan['name'], str(e))
+                logger.exception(subject)
+            tracking_message['email_subject'] = subject
+
+            try:
+                body = app_tracking_template['email_text'].render(**context)
+            except Exception as e:
+                body = 'plan %s - tracking notification body failed to render: %s' % (plan['name'], str(e))
+                logger.exception(body)
+
+            tracking_message['email_text'] = body
+
+            email_html_tpl = app_tracking_template.get('email_html')
+            if email_html_tpl:
                 try:
-                    subject = app_tracking_template['email_subject'].render(**context)
+                    html_body = email_html_tpl.render(**context)
                 except Exception as e:
-                    subject = 'plan %s - tracking notification subject failed to render: %s' % (plan['name'], str(e))
-                    logger.exception(subject)
-                tracking_message['email_subject'] = subject
+                    html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], str(e))
+                    logger.exception(html_body)
+                tracking_message['email_html'] = html_body
 
-                try:
-                    body = app_tracking_template['email_text'].render(**context)
-                except Exception as e:
-                    body = 'plan %s - tracking notification body failed to render: %s' % (plan['name'], str(e))
-                    logger.exception(body)
-                tracking_message['email_text'] = body
+            message_send_enqueue(tracking_message)
 
-                email_html_tpl = app_tracking_template.get('email_html')
-                if email_html_tpl:
-                    try:
-                        html_body = email_html_tpl.render(**context)
-                    except Exception as e:
-                        html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], str(e))
-                        logger.exception(html_body)
-                    tracking_message['email_html'] = html_body
-                message_send_enqueue(tracking_message)
     cursor.close()
 
     new_incidents_count = len(escalations)
