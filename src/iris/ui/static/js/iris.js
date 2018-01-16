@@ -2464,7 +2464,9 @@ iris = {
       } else {
         qs = {
           'active': 'active',
-          'target': appData.user
+          'target': appData.user,
+          // Default incident start time to now() - 1 day
+          'incidentStart': moment(Date.now() - 86400000).format('MM/DD/YYYY h:mm A')
         };
       }
       var params = {};
@@ -2489,6 +2491,7 @@ iris = {
               $this.prop('checked', false);
             }
             break;
+          case 'filter-incidentStart':
           case 'filter-start':
           case 'filter-end':
             $this.val(qs_value);
