@@ -406,6 +406,7 @@ table.dataTable thead .sorting_asc {
 .module.plan-steps {
   padding: 0;
   list-style-type: none;
+  counter-reset: step-counter -1;
 }
 
 #add-step,
