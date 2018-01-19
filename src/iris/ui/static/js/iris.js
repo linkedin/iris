@@ -233,6 +233,7 @@ iris = {
       data.$page.on('click', data.addTrackingTemplateBtn, this.updateNotificationFields.bind(this));
       $(data.createPlanBtn).on('click', this.createPlan.bind(this));
       data.$page.on('click', data.clonePlanBtn, this.clonePlan.bind(this));
+      data.$page.on('click', data.clonePlanBtn, this.updateNotificationFields.bind(this));
       $(data.testPlanBtn).on('click', this.testPlan.bind(this));
       $(data.deletePlanBtn).on('click', this.deletePlan.bind(this));
       data.$page.on('click', data.showTestPlanModalBtn, this.testPlanModal.bind(this));
@@ -623,7 +624,7 @@ iris = {
             model.isValid = false;
           }
 
-          $this.find('.template-notification').each(function(){
+          $this.find('.template-notification:visible').each(function(){
             var $notification = $(this),
                 type = $notification.attr('data-mode'),
                 content = $notification.find('.notification-body').val();
@@ -694,15 +695,19 @@ iris = {
       var $type = $(this.data.trackingType).find(":selected").text();
 
       if ($type === 'email') {
-          $(".template-notification[data-mode='email_subject']").show();
-          $(".template-notification[data-mode='email_text']").show();
-          $(".template-notification[data-mode='email_html']").show();
-          $(".template-notification[data-mode='body']").hide();
+        $(".template-notification[data-mode='email_subject']").show();
+        $(".template-notification[data-mode='email_text']").show();
+        $(".template-notification[data-mode='email_html']").show();
+        $(".template-notification[data-mode='body']").hide();
+        $(".template-notification[data-mode='body']").val("");
       } else {
-          $(".template-notification[data-mode='email_subject']").hide();
-          $(".template-notification[data-mode='email_text']").hide();
-          $(".template-notification[data-mode='email_html']").hide();
-          $(".template-notification[data-mode='body']").show();
+        $(".template-notification[data-mode='email_subject']").hide();
+        $(".template-notification[data-mode='email_subject']").val("");
+        $(".template-notification[data-mode='email_text']").hide();
+        $(".template-notification[data-mode='email_text']").val("");
+        $(".template-notification[data-mode='email_html']").hide();
+        $(".template-notification[data-mode='email_html']").val("");
+        $(".template-notification[data-mode='body']").show();
       };
     },
     drag: {

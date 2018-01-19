@@ -245,7 +245,7 @@
         {{>variables}}
         {{#if @root.viewMode}}
         <!--// view-only template-->
-        {{#isEqual ../tracking_type email}}
+        {{#isEqual ../tracking_type 'email'}}
         <div class="template-notification" data-view="true" data-mode="email_subject">
           <div class="notification-header">Subject</div>
           <p class="notification-body">{{breakLines email_subject}}</p>
@@ -259,7 +259,7 @@
           <pre class="notification-body">{{breakLines email_html}}</pre>
         </div>
         {{/isEqual}}
-        {{^isEqual tracking_type email}}
+        {{^isEqual ../tracking_type 'email'}}
         <div class="template-notification" data-view="true" data-mode="body">
           <div class="notification-header">Text</div>
           <pre class="notification-body">{{breakLines body}}</pre>
