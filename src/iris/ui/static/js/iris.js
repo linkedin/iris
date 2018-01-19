@@ -202,17 +202,13 @@ iris = {
       Handlebars.registerPartial('plan-notification', $('#plan-notification-template').html());
       Handlebars.registerPartial('plan-tracking-notification', this.data.trackingTemplateSource);
       Handlebars.registerPartial('variables', this.data.variablesTemplateSource);
-      this.getModes().done(
-        function(){
-          self.getPlan(path).done(
-            function(){
-              self.events();
-              iris.versionTour.init();
-              iris.typeahead.init();
-            }
-          )
-        }
-      );
+      this.getModes().done(function(){
+        self.getPlan(path).done(function(){
+          self.events();
+          iris.versionTour.init();
+          iris.typeahead.init();
+        })
+      });
       this.drag.init();
     },
     getModes: function(){
@@ -435,8 +431,8 @@ iris = {
       });
     },
     loadVersion: function(e){
-      var versionId = $(e.target).find('option:selected').attr('data-id');
-      var self = this;
+      var versionId = $(e.target).find('option:selected').attr('data-id'),
+          self = this;
       this.getModes().done(function(){
         self.getPlan(versionId);
       });
@@ -632,11 +628,9 @@ iris = {
             if (content) {
               template[type] = content;
             } else if ($notification.attr('data-required')) {
-              if ($notification.is(":visible")) {
-                $notification.find('input, textarea').addClass('invalid-input');
-                missingFields.push(type);
-                model.isValid = false;
-              }
+              $notification.find('input, textarea').addClass('invalid-input');
+              missingFields.push(type);
+              model.isValid = false;
             }
           });
 
@@ -698,15 +692,11 @@ iris = {
         $(".template-notification[data-mode='email_subject']").show();
         $(".template-notification[data-mode='email_text']").show();
         $(".template-notification[data-mode='email_html']").show();
-        $(".template-notification[data-mode='body']").hide();
-        $(".template-notification[data-mode='body']").val("");
+        $(".template-notification[data-mode='body']").hide().val("");
       } else {
-        $(".template-notification[data-mode='email_subject']").hide();
-        $(".template-notification[data-mode='email_subject']").val("");
-        $(".template-notification[data-mode='email_text']").hide();
-        $(".template-notification[data-mode='email_text']").val("");
-        $(".template-notification[data-mode='email_html']").hide();
-        $(".template-notification[data-mode='email_html']").val("");
+        $(".template-notification[data-mode='email_subject']").hide().val("");
+        $(".template-notification[data-mode='email_text']").hide().val("");
+        $(".template-notification[data-mode='email_html']").hide().val("");
         $(".template-notification[data-mode='body']").show();
       };
     },
