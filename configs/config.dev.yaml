@@ -191,7 +191,7 @@ sync_script_nap_time: 3600 # wait time before syncing again
 #    list_search_string: 'OU=groups,OU=company,DC=com'
 #    user_search_string: 'OU=users,OU=company,DC=com'
 #    user_membership_filter: '(&(objectClass=user)(userName=*)(partOf=%s))'
-#    user_account_name_field: 'userName'
+#    user_mail_field: 'userName'
 #    list_cn_field: 'groupCN'
 #    list_name_field: 'groupName'
 #
