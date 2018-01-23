@@ -45,7 +45,7 @@ def test_configure(mocker):
         },
         'sender': {
             'debug': True,
-            'mock_gwatch_renewer': True,
+            'mock_gwatch_renewer_task': True,
         },
         'oncall': 'http://localhost:8002',
         'role_lookup': 'dummy',
