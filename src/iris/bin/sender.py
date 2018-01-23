@@ -1449,7 +1449,7 @@ def init_sender(config):
         should_skip_send = True
     else:
         should_skip_send = False
-    should_mock_gwatch_renewer = should_mock_gwatch_renewer or config.get('skipgmailwatch', False)
+    should_mock_gwatch_renewer = should_mock_gwatch_renewer or config['sender'].get('mock_gwatch_renewer', False)
     should_skip_send = should_skip_send or config.get('skipsend', False)
 
     if should_skip_send:
@@ -1504,7 +1504,7 @@ def main():
 
     maintain_workers(config)
 
-    gwatch_renewer_task = None
+    gwatch_renewer_task = config['sender'].get('disable_gwatch_renewer_task', False)
     prune_audit_logs_task = None
 
     interval = 60
