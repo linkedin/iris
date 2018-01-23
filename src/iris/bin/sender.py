@@ -268,7 +268,8 @@ default_sender_metrics = {
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
     'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0, 'notifications': 0, 'deactivation': 0,
-    'new_msg_count': 0, 'poll': 0, 'queue': 0, 'aggregations': 0
+    'new_msg_count': 0, 'poll': 0, 'queue': 0, 'aggregations': 0, 'hipchat_cnt': 0,'hipchat_fail': 0,
+    'hipchat_total': 0, 'hipchat_sent': 0, 'hipchat_max': 0, 'hipchat_min': 0
 }
 
 # TODO: make this configurable

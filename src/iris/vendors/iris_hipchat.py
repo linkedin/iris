@@ -28,15 +28,13 @@ class iris_hipchat(object):
         self.debug = self.config.get('debug')
         self.endpoint_url = self.config.get('base_url')
 
-        self.params = {'auth_token': self.token}
-        self.notification_url = '{0}/v2/room/{1}/notification'.format(self.endpoint_url, self.room_id)
         self.headers = {
             'Content-type': 'application/json',
         }
 
-    def get_message_payload(self, message):
+    def get_message_payload(self, message, mention):
         """Send notification to specified HipChat room"""
-        clean_message = "@{0} {1}".format(message['destination'], message['body'])
+        clean_message = "{0} {1}".format(mention, message['body'])
         message_dict = {
             'message': clean_message,
             'color': 'red',
@@ -45,16 +43,58 @@ class iris_hipchat(object):
         }
         return message_dict
 
+    def parse_destination(self, destination):
+        """Determine room_id, token and user to mention
+           We accept 3 formats:
+             - Just a mention (@testuser)
+             - Room_id and Token (12341:a20asdfgjahdASDfaskw)
+             - Room_id, Token and mention (12341:a20asdfgjahdASDfaskw;@testuser)
+        """
+        room_id = self.room_id
+        token = self.token
+        mention = ""
+
+        if destination.startswith("@"):
+            mention = destination
+        elif ";" in destination:
+            dparts = destination.split(";")
+            if len(dparts) == 3:
+                try:
+                    int(dparts[0])
+                    room_id = dparts[0]
+                except ValueError:
+                    pass
+                token = dparts[1]
+                mention = dparts[2]
+            elif len(dparts) == 2:
+                try:
+                    int(dparts[0])
+                    room_id = dparts[0]
+                except ValueError:
+                    pass
+                token = dparts[1]
+            else:
+                logger.error("Invalid destination: %s", destination)
+        else:
+                logger.error("Invalid destination: %s", destination)
+
+        return room_id, token, mention
+
     def send_message(self, message):
         start = time.time()
-        payload = self.get_message_payload(message)
+        room_id, token, mention = self.parse_destination(message['destination'])
+
+        payload = self.get_message_payload(message, mention)
+        notification_url = '{0}/v2/room/{1}/notification'.format(self.endpoint_url, room_id)
+        params = {'auth_token': token}
+
         if self.debug:
             logger.info('debug: %s', payload)
         else:
             try:
-                response = requests.post(self.notification_url,
+                response = requests.post(notification_url,
                                          headers=self.headers,
-                                         params=self.params,
+                                         params=params,
                                          json=payload,
                                          proxies=self.proxy)
                 if response.status_code == 200 or response.status_code == 204:
