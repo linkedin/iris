@@ -6,6 +6,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class IrisRoleLookupException(Exception):
+    pass
+
+
 def get_role_lookups(config):
     modules = config.get('role_lookups', [])
 
