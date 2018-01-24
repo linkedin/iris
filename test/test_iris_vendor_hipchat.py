@@ -19,6 +19,7 @@ def test_message_construction_for_incident():
     msg_payload = hipchat_vendor.get_message_payload(fake_msg, "@user1")
     assert msg_payload['message'] == '@user1 %s' % fake_msg['body']
 
+
 def test_destination_parsing_for_incident():
     hipchat_vendor = iris_hipchat({
         'auth_token': 'abc',
@@ -43,6 +44,7 @@ def test_destination_parsing_for_incident():
     assert room_id == '1234'
     assert token == 'testtoken'
     assert mention == ''
+
 
 def test_destination_parsing_defaults_for_incident():
     hipchat_vendor = iris_hipchat({
