@@ -60,10 +60,9 @@ class iris_hipchat(object):
             dparts = destination.split(";")
             if len(dparts) == 3:
                 try:
-                    int(dparts[0])
-                    room_id = dparts[0]
+                    room_id = int(dparts[0])
                 except ValueError:
-                    pass
+                    logger.error("Invalid destination: %s. Using default room_id", destination)
                 token = dparts[1]
                 mention = dparts[2]
             elif len(dparts) == 2:
@@ -71,7 +70,6 @@ class iris_hipchat(object):
                     room_id = int(dparts[0])
                 except ValueError:
                     logger.error("Invalid destination: %s. Using default room_id", destination)
-                    pass
                 token = dparts[1]
             else:
                 logger.error("Invalid destination: %s. Contains %s fields.", destination, len(dparts))
