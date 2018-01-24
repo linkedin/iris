@@ -74,7 +74,7 @@ class iris_hipchat(object):
             else:
                 logger.error("Invalid destination: %s. Contains %s fields.", destination, len(dparts))
         else:
-                logger.error("Invalid destination: %s. Neither @user or ; separated value.", destination)
+            logger.error("Invalid destination: %s. Neither @user or ; separated value.", destination)
 
         return room_id, token, mention
 
