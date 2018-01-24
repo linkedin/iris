@@ -1529,7 +1529,7 @@ def main():
         # If we're currently a master, ensure our master-greenlets are running
         # and we're doing the master duties
         if coordinator.am_i_master():
-            if not bool(gwatch_renewer_task) and not disable_gwatch_renewer:
+            if not disable_gwatch_renewer and not bool(gwatch_renewer_task):
                 if should_mock_gwatch_renewer:
                     gwatch_renewer_task = spawn(mock_gwatch_renewer)
                 else:
