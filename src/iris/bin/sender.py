@@ -29,6 +29,7 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
+from iris.role_lookup import IrisRoleLookupException
 from pymysql import DataError, IntegrityError, InternalError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
@@ -288,7 +289,14 @@ def create_messages(incident_id, plan_notification_id):
         target = cache.targets[plan_notification['target_id']]['name']
 
     # find role/priority from plan_notification_id
-    names = cache.targets_for_role(role, target)
+    try:
+        names = cache.targets_for_role(role, target)
+    except IrisRoleLookupException as e:
+        names = None
+        lookup_fail_reason = str(e)
+    else:
+        lookup_fail_reason = None
+
     priority_id = plan_notification['priority_id']
     redirect_to_plan_owner = False
     body = ''
@@ -324,7 +332,8 @@ def create_messages(incident_id, plan_notification_id):
                      incident_id, plan_notification_id, role, target, names, name, priority_id)
 
         body = ('You are receiving this as you created this plan and we can\'t resolve'
-                ' %s of %s at this time.\n\n') % (role, target)
+                ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
+
         names = [name]
         redirect_to_plan_owner = True
 
@@ -347,7 +356,7 @@ def create_messages(incident_id, plan_notification_id):
                     auditlog.TARGET_CHANGE,
                     role + '|' + target,
                     name,
-                    'Changing target to plan owner as we failed resolving original target')
+                    lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
 
         else:
             metrics.incr('target_not_found')

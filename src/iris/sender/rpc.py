@@ -10,6 +10,7 @@ import msgpack
 from ..utils import msgpack_unpack_msg_from_socket, sanitize_unicode_dict
 from . import cache
 from iris import metrics
+from iris.role_lookup import IrisRoleLookupException
 
 import logging
 logger = logging.getLogger(__name__)
@@ -89,7 +90,10 @@ def handle_api_notification_request(socket, address, req):
                     target, notification['application'])
         return
 
-    expanded_targets = cache.targets_for_role(role, target)
+    try:
+        expanded_targets = cache.targets_for_role(role, target)
+    except IrisRoleLookupException:
+        expanded_targets = None
     if not expanded_targets:
         reject_api_request(socket, address, 'INVALID role:target')
         logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
