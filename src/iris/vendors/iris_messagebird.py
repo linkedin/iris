@@ -57,14 +57,13 @@ class iris_messagebird(object):
             try:
                 response = requests.post(self.endpoint_url,
                                          headers=self.headers,
-                                         data=json.dumps(payload),
+                                         json=payload,
                                          proxies=self.proxy)
                 if response.status_code == 201:
                     return time.time() - start
                 else:
-                    logger.error('Failed to send message to messagebird: %d',
-                                 response.status_code)
-                    logger.error("Response: %s", response.content)
+                    logger.error('Failed to send message to messagebird: %d. Response: %s',
+                                 response.status_code, response.content)
             except Exception as err:
                 logger.exception('messagebird post request failed: %s', err)
 
