@@ -1504,7 +1504,8 @@ def main():
 
     maintain_workers(config)
 
-    gwatch_renewer_task = config['sender'].get('disable_gwatch_renewer_task', False)
+    disable_gwatch_renewer = config['sender'].get('disable_gwatch_renewer_task', False)
+    gwatch_renewer_task = None
     prune_audit_logs_task = None
 
     interval = 60
@@ -1528,7 +1529,7 @@ def main():
         # If we're currently a master, ensure our master-greenlets are running
         # and we're doing the master duties
         if coordinator.am_i_master():
-            if not bool(gwatch_renewer_task):
+            if not bool(gwatch_renewer_task) and not disable_gwatch_renewer:
                 if should_mock_gwatch_renewer:
                     gwatch_renewer_task = spawn(mock_gwatch_renewer)
                 else:
