@@ -516,15 +516,7 @@ def aggregate(now):
             cursor.close()
             connection.close()
 
-            inactive_message_ids = aggregated_message_ids - active_message_ids
             l = len(active_message_ids)
-            logger.info('[x] dropped %s messages from claimed incidents, %s remain for %r',
-                        len(inactive_message_ids), l, key)
-
-            # remove inactive message from the queue
-            for message_id in inactive_message_ids:
-                del messages[message_id]
-
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
                 logger.info('aggregate - %(message_id)s pushing to send queue', m)
@@ -544,6 +536,19 @@ def aggregate(now):
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now
+    # remove inactive message from the queue
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT `id` FROM `message` WHERE active=1')
+    active_message_ids = {r[0] for r in cursor}
+    cursor.close()
+    connection.close()
+    inactive = 0
+    for message_id in messages:
+        if message_id not in active_message_ids:
+            del messages[message_id]
+            inactive += 1
+    logger.info('[-] removed %s inactive messages from queue, %s remaining', inactive, len(messages))
     metrics.set('aggregations', time.time() - start_aggregations)
     logger.info('[*] aggregate task finished - queued: %s', len(messages))
 
