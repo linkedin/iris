@@ -4,7 +4,6 @@
 import logging
 import requests
 import time
-import json
 from iris.constants import SMS_SUPPORT
 
 logger = logging.getLogger(__name__)
