@@ -82,9 +82,6 @@ sender:
   # Disable the gmail based iris-sender watchdog process
   disable_gwatch_renewer_task: True
 
-  # Enable this and the above setting, to mock gwatch_renewer
-  #mock_gwatch_renewer_task: False
-
   ## If you're not using zookeeper, the following determines
   ## whether this sender is a master and you hard code in
   ## slaves to be cycled through
