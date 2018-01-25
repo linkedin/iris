@@ -130,7 +130,7 @@ CREATE TABLE `message_changelog` (
   PRIMARY KEY (`id`),
   KEY `ix_message_changelog_message_id` (`message_id`),
   KEY `ix_message_changelog_date` (`date`),
-  CONSTRAINT `message_changelog_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`)
+  CONSTRAINT `message_changelog_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 --
@@ -243,7 +243,7 @@ CREATE TABLE `dynamic_plan_map` (
   KEY `ix_dynamic_plan_map_incident_id` (`incident_id`),
   CONSTRAINT `dynamic_plan_map_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`),
   CONSTRAINT `dynamic_plan_map_ibfk_2` FOREIGN KEY (`role_id`) REFERENCES `target_role` (`id`),
-  CONSTRAINT `dynamic_plan_map_ibfk_3` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`)
+  CONSTRAINT `dynamic_plan_map_ibfk_3` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
