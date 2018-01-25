@@ -69,6 +69,7 @@ setuptools.setup(
             'iris-sender = iris.bin.sender:main',
             'iris-owa-sync = iris.bin.owasync:main',
             'iris-sync-targets = iris.bin.sync_targets:main',
+            'iris-process-retention = iris.bin.retention:main',
             'iris_ctl = iris.bin.iris_ctl:main',
             'build_assets = iris.bin.ui_build_assets:main',
         ]
