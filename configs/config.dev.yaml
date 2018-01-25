@@ -80,7 +80,7 @@ sender:
   #zookeeper_cluster: localhost:2181
 
   # Disable the gmail based iris-sender watchdog process
-  disable_gwatch_renewer_task: True
+  disable_gwatch_renewer: True
 
   ## If you're not using zookeeper, the following determines
   ## whether this sender is a master and you hard code in

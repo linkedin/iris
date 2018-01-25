@@ -1504,7 +1504,7 @@ def main():
 
     maintain_workers(config)
 
-    disable_gwatch_renewer = config['sender'].get('disable_gwatch_renewer_task', False)
+    disable_gwatch_renewer = config['sender'].get('disable_gwatch_renewer', False)
     gwatch_renewer_task = None
     prune_audit_logs_task = None
 
