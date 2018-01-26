@@ -9,6 +9,9 @@ sender:
 owa-sync:
 	iris-owa-sync configs/config.dev.yaml
 
+targets:
+	iris-sync-targets configs/config.dev.yaml
+
 test:
 	make unit
 	make e2e
