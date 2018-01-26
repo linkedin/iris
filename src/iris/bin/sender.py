@@ -879,9 +879,11 @@ def mark_message_as_sent(message):
     if 'aggregated_ids' in message:
         sql = SENT_MESSAGE_BATCH_SQL % connection.escape(message['aggregated_ids'])
         params.append(message['batch_id'])
+        message_ids = message['aggregated_ids']
     else:
         sql = SENT_MESSAGE_SQL
         params.append(message['message_id'])
+        message_ids = [message['message_id']]
 
     cursor = connection.cursor()
     if not message['subject']:
@@ -902,6 +904,10 @@ def mark_message_as_sent(message):
         except Exception:
             logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
             sleep(.2)
+
+    # Clean messages cache
+    for message_id in message_ids:
+        messages.pop(message_id, None)
 
     # Update subject and body separately, as they may fail and we don't necessarily care if they do
     if len(message['subject']) > 255:
