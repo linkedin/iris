@@ -42,6 +42,9 @@ supported_timezones:
 
 healthcheck_path: /tmp/status
 
+allowed_origins:
+  - http://localhost:8080
+
 ## Custom webhooks can be created and put in src/iris/webhooks.
 ## Refer to their class name in this array.
 ## The webhook will be available at /v0/webhooks/$name and requires being called with
@@ -100,7 +103,7 @@ role_lookups:
   #- oncall # oncall service integration
   - dummy # dummy role lookup used for testing purposes. Disable this in production.
 
-#oncall-api: https://oncall.dummy.com  # oncall url
+oncall-api: http://localhost:8080  # oncall url
 
 applications:
  - dummy_app
