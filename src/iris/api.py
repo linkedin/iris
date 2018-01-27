@@ -604,7 +604,8 @@ def is_valid_tracking_settings(t, k, tpl):
                 except Exception as e:
                     return False, 'Invalid jinja syntax in email html: %s' % e
     else:
-        return False, 'Unknown tracking type: %s' % t
+        if t not in cache.modes:
+            return False, 'Unknown tracking type: %s' % t
     return True, None
 
 

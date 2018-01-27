@@ -188,7 +188,9 @@
           <span class="item-content" title="{{ tracking_type }}">
             <label data-toggle="tooltip" title="Media type for the tracking message" class="required">Type:</label>
             <select id="tracking-type" class="form-control border-bottom" value="{{tracking_type}}">
-              <option value="email">email</option>
+              {{#each modes}}
+              <option value="{{this}}" {{isSelected this ../tracking_type}}>{{this}}</option>
+              {{/each}}
             </select>
           </span>
           <span class="item-content" title="{{ tracking_key }}">
@@ -243,6 +245,7 @@
         {{>variables}}
         {{#if @root.viewMode}}
         <!--// view-only template-->
+        {{#isEqual ../tracking_type 'email'}}
         <div class="template-notification" data-view="true" data-mode="email_subject">
           <div class="notification-header">Subject</div>
           <p class="notification-body">{{breakLines email_subject}}</p>
@@ -255,6 +258,13 @@
           <div class="notification-header">HTML</div>
           <pre class="notification-body">{{breakLines email_html}}</pre>
         </div>
+        {{/isEqual}}
+        {{^isEqual ../tracking_type 'email'}}
+        <div class="template-notification" data-view="true" data-mode="body">
+          <div class="notification-header">Text</div>
+          <pre class="notification-body">{{breakLines body}}</pre>
+        </div>
+        {{/isEqual}}
         {{else}}
         <!--// edit-mode template -->
         <div class="template-notification template-component" data-required="true" data-mode="email_subject">
@@ -268,6 +278,10 @@
         <div class="template-notification template-component" data-mode="email_html">
           <div class="notification-header">HTML</div>
           <textarea rows="10" class="form-control notification-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}.">{{breakLines email_html 'input'}}</textarea>
+        </div>
+        <div class="template-notification template-component" data-required="true" data-mode="body">
+          <div class="notification-header required">Text</div>
+          <textarea rows="10" class="form-control notification-body" placeholder="e.g. The following nodes are active: {% for node in nodes %}* \{{node}} {% endfor %}.">{{breakLines body 'input'}}</textarea>
         </div>
         <!--// TODO: support preview -->
         </div>

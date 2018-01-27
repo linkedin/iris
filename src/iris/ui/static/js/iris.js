@@ -121,6 +121,7 @@ iris = {
   plan: {
     data: {
       url: '/v0/plans/',
+      modesUrl: '/v0/modes',
       $page: $('.plan-details'),
       pageTemplateSource: $('#plan-module-template').html(),
       notificationTemplateSource: $('#plan-notification-template').html(),
@@ -156,6 +157,7 @@ iris = {
       ajaxResponse: null,
       submitModel: {},
       blankModel: {
+        modes: null,
         priorities: window.appData.priorities,
         target_roles: window.appData.target_roles,
         availableTemplates: [],
@@ -170,12 +172,14 @@ iris = {
       },
       blankTrackingTemplateModel: {
         applications: window.appData.applications,
+        modes: null,
         viewMode: false,
         tracking_template: {
           application: {
             email_subject: "",
             email_text: "",
-            email_html: ""
+            email_html: "",
+            body: ""
           }
         }
       }
@@ -198,12 +202,21 @@ iris = {
       Handlebars.registerPartial('plan-notification', $('#plan-notification-template').html());
       Handlebars.registerPartial('plan-tracking-notification', this.data.trackingTemplateSource);
       Handlebars.registerPartial('variables', this.data.variablesTemplateSource);
-      this.getPlan(path).done(function(){
-        self.events();
-        iris.versionTour.init();
-        iris.typeahead.init();
+      this.getModes().done(function(){
+        self.getPlan(path).done(function(){
+          self.events();
+          iris.versionTour.init();
+          iris.typeahead.init();
+        })
       });
       this.drag.init();
+    },
+    getModes: function(){
+      var self = this;
+      return $.getJSON(this.data.modesUrl, function(response){
+        self.data.blankTrackingTemplateModel.modes = response;
+        self.data.blankModel.modes = response;
+      });
     },
     events: function(){
       var data = this.data;
@@ -213,8 +226,10 @@ iris = {
       data.$page.on('click', data.removeTrackingTemplateBtn, this.removeTrackingTemplate);
       data.$page.on('click', data.addStepBtn, this.addStep.bind(this));
       data.$page.on('click', data.addTrackingTemplateBtn, this.addTrackingTemplate.bind(this));
+      data.$page.on('click', data.addTrackingTemplateBtn, this.updateNotificationFields.bind(this));
       $(data.createPlanBtn).on('click', this.createPlan.bind(this));
       data.$page.on('click', data.clonePlanBtn, this.clonePlan.bind(this));
+      data.$page.on('click', data.clonePlanBtn, this.updateNotificationFields.bind(this));
       $(data.testPlanBtn).on('click', this.testPlan.bind(this));
       $(data.deletePlanBtn).on('click', this.deletePlan.bind(this));
       data.$page.on('click', data.showTestPlanModalBtn, this.testPlanModal.bind(this));
@@ -224,6 +239,7 @@ iris = {
       data.$page.on('click', data.activatePlan, this.activatePlan.bind(this));
       data.$page.on('change', data.versionSelect, this.loadVersion.bind(this));
       data.$page.on('change', data.trackingType, this.updateTrackingPlaceholder.bind(this));
+      data.$page.on('change', data.trackingType, this.updateNotificationFields.bind(this));
       data.$page.on('change', data.appSelect, this.renderVariables.bind(this));
       data.$page.on('change', data.testPlanInputs, this.updateTestPlanValues);
       data.$page.on('change', data.toggleDynamic, this.toggleDynamicTargets);
@@ -281,6 +297,7 @@ iris = {
             response.dynamic = max_idx !== -1;
             response.target_roles = window.appData.target_roles;
             response.target_role_type =  window.appData.target_roles[0].type;
+            response.modes =  self.data.blankTrackingTemplateModel.modes;
             self.data.$page.html(template(response));
             self.loadVersionSelect();
             iris.changeTitle('Plan ' + response.name);
@@ -414,8 +431,11 @@ iris = {
       });
     },
     loadVersion: function(e){
-      var versionId = $(e.target).find('option:selected').attr('data-id');
-      this.getPlan(versionId);
+      var versionId = $(e.target).find('option:selected').attr('data-id'),
+          self = this;
+      this.getModes().done(function(){
+        self.getPlan(versionId);
+      });
       window.history.pushState(null, null, versionId); //update url bar for refreshes
     },
     activatePlan: function(e){
@@ -600,7 +620,7 @@ iris = {
             model.isValid = false;
           }
 
-          $this.find('.template-notification').each(function(){
+          $this.find('.template-notification:visible').each(function(){
             var $notification = $(this),
                 type = $notification.attr('data-mode'),
                 content = $notification.find('.notification-body').val();
@@ -664,6 +684,21 @@ iris = {
       } else {
         $key.attr('placeholder', 'example');
       }
+    },
+    updateNotificationFields: function(e){
+      var $type = $(this.data.trackingType).find(":selected").text();
+
+      if ($type === 'email') {
+        $(".template-notification[data-mode='email_subject']").show();
+        $(".template-notification[data-mode='email_text']").show();
+        $(".template-notification[data-mode='email_html']").show();
+        $(".template-notification[data-mode='body']").hide().val("");
+      } else {
+        $(".template-notification[data-mode='email_subject']").hide().val("");
+        $(".template-notification[data-mode='email_text']").hide().val("");
+        $(".template-notification[data-mode='email_html']").hide().val("");
+        $(".template-notification[data-mode='body']").show();
+      };
     },
     drag: {
       data: {

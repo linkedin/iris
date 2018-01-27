@@ -230,10 +230,16 @@ class Plans():
                         except jinja2.exceptions.TemplateSyntaxError:
                             logger.exception('[-] error parsing Plan template for %s: %s', key, application)
                             continue
-                    plan['tracking_template'] = tracking_template
                 else:
-                    # not supported type, set to None
-                    plan['tracking_template'] = None
+                    for application, application_templates in tracking_template.iteritems():
+                        try:
+                            tracking_template[application] = {
+                                'body': self.template_env.from_string(application_templates['body']),
+                            }
+                        except jinja2.exceptions.TemplateSyntaxError:
+                            logger.exception('[-] error parsing Plan template for %s: %s', key, application)
+                            continue
+                plan['tracking_template'] = tracking_template
 
             self.data[key] = plan
             return plan

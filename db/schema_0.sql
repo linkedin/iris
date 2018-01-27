@@ -168,7 +168,7 @@ CREATE TABLE `plan` (
   `aggregation_window` bigint(20) DEFAULT NULL,
   `aggregation_reset` bigint(20) DEFAULT NULL,
   `tracking_key` varchar(255) DEFAULT NULL,
-  `tracking_type` enum('email','jira') DEFAULT NULL,
+  `tracking_type` varchar(255) DEFAULT NULL,
   `tracking_template` text,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
