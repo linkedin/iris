@@ -45,12 +45,12 @@ def test_configure(mocker):
         },
         'sender': {
             'debug': True,
+            'skipgmailwatch': True,
         },
         'oncall': 'http://localhost:8002',
         'role_lookup': 'dummy',
         'metrics': 'dummy',
         'skipsend': True,
-        'skipgmailwatch': True,
     })
 
 
