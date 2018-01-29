@@ -4,18 +4,19 @@
 import logging
 import requests
 import time
-from iris.constants import SMS_SUPPORT
+from iris.constants import SMS_SUPPORT, CALL_SUPPORT
 
 logger = logging.getLogger(__name__)
 
 
 class iris_messagebird(object):
-    supports = frozenset([SMS_SUPPORT])
+    supports = frozenset([SMS_SUPPORT, CALL_SUPPORT])
 
     def __init__(self, config):
         self.config = config
         self.modes = {
-            'sms': self.send_message
+            SMS_SUPPORT: self.send_message,
+            CALL_SUPPORT: self.send_call,
         }
 
         self.debug = self.config.get('debug')
@@ -27,7 +28,9 @@ class iris_messagebird(object):
             self.proxy = {'http': 'http://%s:%s' % (host, port),
                           'https': 'https://%s:%s' % (host, port)}
 
-        self.endpoint_url = 'https://rest.messagebird.com/messages'
+        base_url = 'https://rest.messagebird.com'
+        self.endpoint_url_messages = base_url + '/messages'
+        self.endpoint_url_voicemessages = base_url + '/voicemessages'
 
         self.access_key = self.config.get('access_key')
         self.headers = {
@@ -42,8 +45,11 @@ class iris_messagebird(object):
         message_dict = {
             'body': message['body'],
             'originator': 'Iris',
-            'recipients': message['destination']
+            'recipients': message['destination'],
         }
+        if message['mode'] == 'call':
+            message_dict['repeat'] = 3
+
         return message_dict
 
     def send_message(self, message):
@@ -54,7 +60,7 @@ class iris_messagebird(object):
             logger.info('debug: %s', payload)
         else:
             try:
-                response = requests.post(self.endpoint_url,
+                response = requests.post(self.endpoint_url_messages,
                                          headers=self.headers,
                                          json=payload,
                                          proxies=self.proxy)
@@ -65,6 +71,26 @@ class iris_messagebird(object):
                                  response.status_code, response.content)
             except Exception as err:
                 logger.exception('messagebird post request failed: %s', err)
+
+    def send_call(self, message):
+        start = time.time()
+        payload = self.get_message_payload(message)
+
+        if self.debug:
+            logger.info('debug: %s', payload)
+        else:
+            try:
+                response = requests.post(self.endpoint_url_voicemessages,
+                                         headers=self.headers,
+                                         json=payload,
+                                         proxies=self.proxy)
+                if response.status_code == 201:
+                    return time.time() - start
+                else:
+                    logger.error('Failed to send voicemessage to messagebird: %d. Response: %s',
+                                 response.status_code, response.content)
+            except Exception as err:
+                logger.exception('messagebird voicemessage post request failed: %s', err)
 
     def send(self, message, customizations=None):
         return self.modes[message['mode']](message)

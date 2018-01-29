@@ -15,8 +15,14 @@ def test_message_construction_for_incident():
         'message_id': 456,
         'destination': '0612342341'
     }
+    fake_msg['mode'] = 'call'
     msg_payload = messagebird_vendor.get_message_payload(fake_msg)
 
     assert msg_payload['originator'] == 'Iris'
     assert msg_payload['recipients'] == '%s' % fake_msg['destination']
     assert msg_payload['body'] == '%s' % fake_msg['body']
+    assert 'repeat' in msg_payload
+
+    fake_msg['mode'] = 'sms'
+    msg_payload = messagebird_vendor.get_message_payload(fake_msg)
+    assert 'repeat' not in msg_payload
