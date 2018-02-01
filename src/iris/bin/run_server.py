@@ -68,7 +68,8 @@ def main():
         'bind': '%s:%s' % (server['host'], server['port']),
         'worker_class': 'gevent',
         'accesslog': '-',
-        'workers': multiprocessing.cpu_count()
+        'workers': multiprocessing.cpu_count(),
+        'timeout': 600
     }
 
     gunicorn_server = StandaloneApplication(options, skip_build_assets)

@@ -10,11 +10,12 @@ from sqlalchemy.exc import IntegrityError
 import time
 import urllib
 import logging
+from .fcm import FCMNotifier
 
 logger = logging.getLogger(__name__)
 
 
-class iris_twilio(object):
+class iris_twilio(FCMNotifier):
     supports = frozenset([SMS_SUPPORT, CALL_SUPPORT])
 
     def __init__(self, config):
@@ -27,6 +28,7 @@ class iris_twilio(object):
             SMS_SUPPORT: self.send_sms,
             CALL_SUPPORT: self.send_call,
         }
+        super(iris_twilio, self).__init__(config)
 
     def get_twilio_client(self):
         return TwilioRestClient(self.config['account_sid'],
@@ -140,4 +142,5 @@ class iris_twilio(object):
         return send_time
 
     def send(self, message, customizations=None):
+        self.send_push(message)
         return self.modes[message['mode']](message)

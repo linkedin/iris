@@ -167,3 +167,9 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 #  iris_app_key: ''
 #  api_host: http://localhost:16649
 #  sleep_interval: 60
+#
+#iris-mobile:
+#  activated: False
+#  devices_allowed_apps: 
+#    - iris-relay
+

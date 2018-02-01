@@ -6,11 +6,12 @@ import logging
 import requests
 import time
 from iris.constants import SLACK_SUPPORT
+from .fcm import FCMNotifier
 
 logger = logging.getLogger(__name__)
 
 
-class iris_slack(object):
+class iris_slack(FCMNotifier):
     supports = frozenset([SLACK_SUPPORT])
 
     def __init__(self, config):
@@ -27,6 +28,7 @@ class iris_slack(object):
             self.proxy = {'http': 'http://%s:%s' % (host, port),
                           'https': 'https://%s:%s' % (host, port)}
         self.message_attachments = self.config.get('message_attachments', {})
+        super(iris_slack, self).__init__(config)
 
     def construct_attachments(self, message):
         # TODO: Verify title, title_link and text.
@@ -84,6 +86,7 @@ class iris_slack(object):
 
     def send_message(self, message):
         start = time.time()
+        self.send_push(message)
         payload = self.get_message_payload(message)
         try:
             response = requests.post(self.config['base_url'],
