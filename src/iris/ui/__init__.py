@@ -28,7 +28,8 @@ assets_env.register('jquery_libs', Bundle('js/jquery-2.1.4.min.js', 'js/jquery.d
                                           'js/handlebars.min.js', 'js/hopscotch.min.js',
                                           output='bundles/jquery.libs.js'))
 assets_env.register('bootstrap_libs', Bundle('js/bootstrap.min.js', 'js/typeahead.js',
-                                             'js/bootstrap-datetimepicker.js',
+                                             'js/bootstrap-datetimepicker.js', 'js/moment-timezone.js',
+                                             'js/moment-tz-data.js',
                                              output='bundles/bootstrap.libs.js'))
 assets_env.register('iris_js', Bundle('js/iris.js', filters='rjsmin', output='bundles/iris.js'))
 assets_env.register('css_libs', Bundle('css/bootstrap.min.css', 'css/bootstrap-datetimepicker.css',
@@ -75,6 +76,22 @@ def login_url(req):
         return '/login/?next=%s' % uri.encode_value(req.path)
     else:
         return '/login/'
+
+
+def flash_message(req, message, message_type):
+    session = req.env['beaker.session']
+    session['flash_message'] = {'type': message_type, 'message': message}
+    session.save()
+
+
+def get_flash(req):
+    session = req.env['beaker.session']
+    message = session.pop('flash_message', None)
+    if message:
+        session.save()
+        return message
+    else:
+        return None
 
 
 # In many cases, these routes need window.appData populated with various bits of data which
@@ -238,12 +255,15 @@ class Login():
     allow_read_no_auth = False
     frontend_route = True
 
-    def __init__(self, auth_manager):
+    def __init__(self, auth_manager, debug):
         self.auth_manager = auth_manager
+        self.debug = debug
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
-        resp.body = jinja2_env.get_template('login.html').render(request=req, path='login')
+        resp.body = jinja2_env.get_template('login.html').render(request=req,
+                                                                 path='login',
+                                                                 last_flash=get_flash(req))
 
     def on_post(self, req, resp):
         form_body = uri.parse_query_string(req.context['body'])
@@ -254,11 +274,20 @@ class Login():
         except KeyError:
             raise HTTPFound('/login')
 
+        if not auth.valid_username(username):
+            logger.warn('Tried to login with invalid username %s', username)
+            if self.debug:
+                flash_message(req, 'Invalid username', 'danger')
+            else:
+                flash_message(req, 'Invalid credentials', 'danger')
+            raise HTTPFound('/login')
+
         if self.auth_manager.authenticate(username, password):
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
             logger.warn('Failed login for %s', username)
+            flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
         url = req.get_param('next')
@@ -368,6 +397,8 @@ def init(config, app):
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
 
+    debug = config['server'].get('disable_auth', False) is True
+
     app.add_route('/static/bundles/{filename}', StaticResource('/static/bundles'))
     app.add_route('/static/images/{filename}', StaticResource('/static/images'))
     app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
@@ -383,7 +414,7 @@ def init(config, app):
     app.add_route('/templates/{template}', Template())
     app.add_route('/applications/', Applications())
     app.add_route('/applications/{application}', Application())
-    app.add_route('/login/', Login(auth_manager))
+    app.add_route('/login/', Login(auth_manager, debug))
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
@@ -397,7 +428,7 @@ def init(config, app):
         'session.key': 'iris-auth',
         'session.encrypt_key': config['user_session']['encrypt_key'],
         'session.validate_key': config['user_session']['sign_key'],
-        'session.secure': not config['server'].get('disable_auth', False),
+        'session.secure': not (config['server'].get('disable_auth', False) or config['server'].get('allow_http', False)),
         'session.httponly': True
     }
     app = SessionMiddleware(app, session_opts)

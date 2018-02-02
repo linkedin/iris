@@ -130,7 +130,7 @@ CREATE TABLE `message_changelog` (
   PRIMARY KEY (`id`),
   KEY `ix_message_changelog_message_id` (`message_id`),
   KEY `ix_message_changelog_date` (`date`),
-  CONSTRAINT `message_changelog_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`)
+  CONSTRAINT `message_changelog_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 --
@@ -168,7 +168,7 @@ CREATE TABLE `plan` (
   `aggregation_window` bigint(20) DEFAULT NULL,
   `aggregation_reset` bigint(20) DEFAULT NULL,
   `tracking_key` varchar(255) DEFAULT NULL,
-  `tracking_type` enum('email','jira') DEFAULT NULL,
+  `tracking_type` varchar(255) DEFAULT NULL,
   `tracking_template` text,
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
@@ -243,7 +243,7 @@ CREATE TABLE `dynamic_plan_map` (
   KEY `ix_dynamic_plan_map_incident_id` (`incident_id`),
   CONSTRAINT `dynamic_plan_map_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`),
   CONSTRAINT `dynamic_plan_map_ibfk_2` FOREIGN KEY (`role_id`) REFERENCES `target_role` (`id`),
-  CONSTRAINT `dynamic_plan_map_ibfk_3` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`)
+  CONSTRAINT `dynamic_plan_map_ibfk_3` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -572,7 +572,7 @@ CREATE TABLE `user_setting` (
   `user_id` bigint(20) NOT NULL,
   `name` varchar(255) NOT NULL,
   `value` varchar(255) NOT NULL,
-  PRIMARY KEY (`user_id`),
+  PRIMARY KEY (`user_id`, `name`),
   CONSTRAINT `user_setting_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -729,8 +729,9 @@ DROP TABLE IF EXISTS `device`;
 CREATE TABLE `device` (
   `registration_id` VARCHAR(255) NOT NULL,
   `user_id` BIGINT(20) NOT NULL,
+  `platform` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`registration_id`),
-  CONSTRAINT `device_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`)
+  CONSTRAINT `device_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 

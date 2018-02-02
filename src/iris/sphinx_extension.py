@@ -32,7 +32,7 @@ def get_routes(app):
                     if handler.__getattribute__('func_name') == 'method_not_allowed':
                         # method not defined for route
                         continue
-                except:
+                except Exception:
                     pass
                 yield method, curr_node.uri_template, handler
 

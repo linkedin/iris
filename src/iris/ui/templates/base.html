@@ -67,6 +67,7 @@
       window.appData = {};
       appData.user = {{ request.context['username']|tojson|safe }};
       appData.user_admin = {{ request.context['is_admin']|tojson|safe }};
+      appData.user_settings = {{ request.context['user_settings']|tojson|safe }};
       {% if modes %}
       appData.modes = {{ modes|tojson|safe }};
       {% else %}

@@ -11,6 +11,12 @@ determine a message recipient given a role:target pair. To use Oncall with Iris:
 
 #. In the "role_lookups" key, include "oncall" in the list and remove "dummy"
 
+#. Import targets from Oncall by running the following command:
+
+.. code-block:: bash
+
+    ./iris-sync-targets /home/iris/config/config.yaml
+
 Slack integration
 -----------------
 

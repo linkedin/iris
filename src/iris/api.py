@@ -18,12 +18,13 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
-from falcon import (before, HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 import falcon.uri
+import falcon
 
 from collections import defaultdict
 from streql import equals
@@ -37,6 +38,7 @@ from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
 
+from iris.custom_import import import_custom_module
 
 from .constants import (
     XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
@@ -519,6 +521,21 @@ check_username_admin_query = '''SELECT `user`.`admin`
                                 WHERE `target`.`name` = %s
                                 AND `target_type`.`name` = "user"'''
 
+get_username_settings_query = '''SELECT `user_setting`.`name`, `user_setting`.`value`
+                                 FROM `user_setting`
+                                 JOIN `target` ON `target`.`id` = `user_setting`.`user_id`
+                                 JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                 WHERE `target`.`name` = %s
+                                 AND `target_type`.`name` = "user"'''
+
+update_username_settings_query = '''INSERT INTO `user_setting` (`user_id`, `name`, `value`)
+                                    VALUES (
+                                      (SELECT `target`.`id` FROM `target` JOIN `target_type` ON `target_type`.`id` = `target`.`type_id`
+                                       WHERE `target`.`name` = %(username)s AND `target_type`.`name` = "user"),
+                                      %(name)s,
+                                      %(value)s)
+                                    ON DUPLICATE KEY UPDATE `value` = %(value)s'''
+
 check_application_ownership_query = '''SELECT 1
                                        FROM `application_owner`
                                        JOIN `target` on `target`.`id` = `application_owner`.`user_id`
@@ -565,14 +582,33 @@ def is_valid_tracking_settings(t, k, tpl):
     if t == 'email':
         if '@' not in k:
             return False, 'Invalid email address'
+        environment = SandboxedEnvironment()
         for app in tpl:
             if not tpl[app]:
                 return False, 'No key for %s template' % app
             missed_keys = set(('email_subject', 'email_text')) - set(tpl[app])
             if missed_keys:
                 return False, 'Missing keys for %s template: %s' % (app, missed_keys)
+
+            try:
+                environment.from_string(tpl[app]['email_subject'])
+            except Exception as e:
+                return False, 'Invalid jinja syntax in subject: %s' % e
+
+            try:
+                environment.from_string(tpl[app]['email_text'])
+            except Exception as e:
+                return False, 'Invalid jinja syntax in body: %s' % e
+
+            email_html = tpl[app].get('email_html')
+            if email_html is not None:
+                try:
+                    environment.from_string(email_html)
+                except Exception as e:
+                    return False, 'Invalid jinja syntax in email html: %s' % e
     else:
-        return False, 'Unknown tracking type: %s' % t
+        if t not in cache.modes:
+            return False, 'Unknown tracking type: %s' % t
     return True, None
 
 
@@ -671,7 +707,12 @@ class AuthMiddleware(object):
 
         # Proceed with authenticating this route as a third party application
         try:
-            app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+            # Ignore HMAC requirements for custom webhooks
+            if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+                app = req.get_param('application', required=True)
+            else:
+                app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
+
             if app not in cache.applications:
                 logger.warn('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
@@ -685,6 +726,23 @@ class AuthMiddleware(object):
         method = req.method
 
         if resource.allow_read_no_auth and method == 'GET':
+            return
+
+        # Ignore HMAC requirements for custom webhooks
+        if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
+            app_name = req.get_param('application', required=True)
+            app = cache.applications.get(app_name)
+            if not app:
+                raise HTTPUnauthorized('Authentication failure',
+                                       'Application not found', [])
+
+            req.context['app'] = app
+
+            # determine if we're correctly using an application key
+            api_key = req.get_param('key', required=True)
+            if not equals(api_key, str(app['key'])):
+                logger.warn('Application key invalid')
+                raise HTTPUnauthorized('Authentication failure', '', [])
             return
 
         # If we're authenticated using beaker, don't validate app as if this is an
@@ -768,6 +826,7 @@ class ACLMiddleware(object):
     def process_resource(self, req, resp, resource, params):
         self.process_frontend_routes(req, resource)
         self.process_admin_acl(req, resource, params)
+        self.load_user_settings(req)
 
     def process_frontend_routes(self, req, resource):
         if req.context['username']:
@@ -807,6 +866,21 @@ class ACLMiddleware(object):
             path_username = params.get('username')
             if not equals(path_username, req.context['username']):
                 raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
+
+    def load_user_settings(self, req):
+        req.context['user_settings'] = {}
+
+        if not req.context['username']:
+            return
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(get_username_settings_query, req.context['username'])
+        settings = dict(cursor)
+        cursor.close()
+        connection.close()
+
+        req.context['user_settings'] = settings
 
 
 class Plan(object):
@@ -1013,7 +1087,7 @@ class Plans(object):
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
@@ -1268,7 +1342,7 @@ class Incidents(object):
         if query_limit is not None:
             query += ' ORDER BY `incident`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
 
         if 'context' in fields:
@@ -1502,6 +1576,35 @@ class Incident(object):
         resp.body = payload
 
     def on_post(self, req, resp, incident_id):
+        '''
+        Claim incidents by incident id. Deactivates the incident and
+        any associated messages, preventing further escalation.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/incidents/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "owner": "jdoe"
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+               "incident_id": "123",
+               "owner": "jdoe",
+               "active": false
+           }
+
+        '''
         try:
             incident_id = int(incident_id)
         except ValueError:
@@ -1514,6 +1617,23 @@ class Incident(object):
         except KeyError:
             raise HTTPBadRequest('"owner" field required')
 
+        if owner is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid claim: no matching owner')
+                # claim_incident will close the session
         is_active = utils.claim_incident(incident_id, owner)[0]
         resp.status = HTTP_200
         resp.body = ujson.dumps({'incident_id': incident_id,
@@ -1635,7 +1755,7 @@ class Messages(object):
 
         if query_limit is not None:
             query += ' ORDER BY `message`.`created` DESC LIMIT %s' % query_limit
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
         resp.body = ujson.dumps(cursor)
         connection.close()
@@ -1780,7 +1900,7 @@ class Notifications(object):
             s = socket.create_connection(sender_addr)
 
         # Then try slaves
-        except:
+        except Exception:
             if self.coordinator:
                 logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
                 for slave_address in self.coordinator.get_current_slaves():
@@ -1788,7 +1908,7 @@ class Notifications(object):
                         logger.info('Trying slave %s..', slave_address)
                         s = socket.create_connection(slave_address)
                         break
-                    except:
+                    except Exception:
                         logger.exception('Failed reaching slave %s', slave_address)
 
         # If none of that works, bail
@@ -1902,7 +2022,7 @@ class Templates(object):
         if query_limit is not None:
             query += ' ORDER BY `template`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.dict_cursor)
+        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
@@ -3050,6 +3170,57 @@ class User(object):
         resp.body = ujson.dumps(user_data)
 
 
+class UserSettings(object):
+    allow_read_no_auth = False
+    enforce_user = True
+
+    def __init__(self, supported_timezones):
+        self.supported_timezones = supported_timezones
+
+    def on_get(self, req, resp, username):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(get_username_settings_query, req.context['username'])
+        settings = dict(cursor)
+        cursor.close()
+        connection.close()
+
+        resp.body = ujson.dumps(settings)
+
+    def on_put(self, req, resp, username):
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+
+        chosen_timezone = data.get('timezone')
+        if chosen_timezone and chosen_timezone in self.supported_timezones:
+            try:
+                cursor.execute(update_username_settings_query, {'name': 'timezone', 'value': chosen_timezone, 'username': req.context['username']})
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting timezone to %s for user %s', chosen_timezone, req.context['username'])
+
+        cursor.close()
+        connection.close()
+
+        resp.body = '[]'
+        resp.status = HTTP_204
+
+
+class SupportedTimezones(object):
+    allow_read_no_auth = True
+
+    def __init__(self, supported_timezones):
+        self.supported_timezones = supported_timezones
+
+    def on_get(self, req, resp):
+        resp.body = ujson.dumps(self.supported_timezones)
+
+
 class ResponseMixin(object):
     allow_read_no_auth = False
 
@@ -3525,14 +3696,14 @@ class Reprioritization(object):
         try:
             cursor.execute('SELECT `id` FROM `mode` WHERE `name` = %s', params['src_mode'])
             src_mode_id = cursor.fetchone()['id']
-        except:
+        except Exception:
             msg = 'Invalid source mode.'
             logger.exception(msg)
             raise HTTPBadRequest(msg, msg)
         try:
             cursor.execute('SELECT `id` FROM `mode` WHERE `name` = %s', params['dst_mode'])
             dst_mode_id = cursor.fetchone()['id']
-        except:
+        except Exception:
             msg = 'Invalid destination mode.'
             logger.exception(msg)
             raise HTTPBadRequest(msg, msg)
@@ -3617,7 +3788,7 @@ class Healthcheck(object):
         try:
             with open(self.healthcheck_path) as f:
                 health = f.readline().strip()
-        except:
+        except Exception:
             raise HTTPNotFound()
         resp.status = HTTP_200
         resp.content_type = 'text/plain'
@@ -3703,7 +3874,7 @@ class ApplicationStats(object):
             'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE() AND `application_id` = %(application_id)s',
             'total_incidents_last_month': 'SELECT COUNT(*) FROM `incident` WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY) AND `created` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
-            'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
+            'total_messages_sent_last_month': 'SELECT COUNT(*) FROM `message` USE INDEX (ix_message_sent) WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY) AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY) AND `application_id` = %(application_id)s',
             'pct_incidents_claimed_last_month': '''SELECT ROUND(COUNT(`owner_id`) / COUNT(*) * 100, 2)
                                                    FROM `incident`
                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
@@ -3778,7 +3949,7 @@ class ApplicationStats(object):
 
         start = time.time()
         cursor.execute('''SELECT `mode`.`name`, COALESCE(`generic_message_sent_status`.`status`, `twilio_delivery_status`.`status`) as thisStatus,
-                                  COUNT(*) FROM `message`
+                                  COUNT(*) FROM `message` USE INDEX FOR JOIN (ix_message_created)
                           LEFT JOIN `twilio_delivery_status` on `twilio_delivery_status`.`message_id` = `message`.`id`
                           LEFT JOIN `generic_message_sent_status` on `generic_message_sent_status`.`message_id` = `message`.`id`
                           JOIN `mode` ON `mode`.`id` = `message`.`mode_id`
@@ -3807,20 +3978,25 @@ class ApplicationStats(object):
             stats['pct_%s_fail_last_month' % mode] = fail_pct
             stats['pct_%s_other_last_month' % mode] = other_pct
 
-        for mode in cache.modes:
-            cursor.execute('''SELECT COUNT(*) FROM `message`
-                              WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
-                              AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
-                              AND `application_id` = %(application_id)s
-                              AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
-                           {'application_id': app['id'], 'mode': mode})
-            num_sent = cursor.fetchone()
-            if num_sent is not None:
-                num_sent = num_sent[0]
-            stats['total_%s_sent_last_month' % mode] = num_sent
-
+        # Get counts of messages sent per mode
+        cursor.execute('''SELECT `mode`.`name`, `msg_count` FROM
+                            (SELECT `mode_id`, COUNT(*) as `msg_count` FROM `message`
+                            USE INDEX (ix_message_sent)
+                            WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
+                            AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
+                            AND `application_id` = %(application_id)s
+                            GROUP BY `mode_id`) `counts`
+                          JOIN `mode` ON `mode`.`id` = `counts`.`mode_id`''',
+                       {'application_id': app['id']})
+        for row in cursor:
+            stats['total_%s_sent_last_month' % row[0]] = row[1]
         cursor.close()
         connection.close()
+        # Zero out modes that don't show up in the count
+        for mode in cache.modes:
+            count_stat = 'total_%s_sent_last_month' % mode
+            if count_stat not in stats:
+                stats[count_stat] = 0
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(stats, sort_keys=True)
@@ -3837,7 +4013,7 @@ class Devices(object):
     def __init__(self, config):
         self.allowed_apps = config.get('devices_allowed_apps', [])
 
-    @before(restrict_apps)
+    @falcon.before(restrict_apps)
     def on_post(self, req, resp):
         data = ujson.loads(req.context['body'])
         user = data.get('username')
@@ -3850,16 +4026,21 @@ class Devices(object):
         # Open database connection
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
-
-        cursor.execute('''INSERT IGNORE INTO device (registration_id, user_id, platform)
-                          VALUES (%s,
-                                  (SELECT `id` FROM `target` WHERE `name` = %s
-                                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
-                                  %s)''',
-                       (registration_id, user, platform))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        try:
+            cursor.execute('''INSERT IGNORE INTO device (registration_id, user_id, platform)
+                              VALUES (%s,
+                                      (SELECT `id` FROM `target` WHERE `name` = %s
+                                         AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')),
+                                      %s)''',
+                           (registration_id, user, platform))
+        except Exception:
+            logger.exception('Device registration failure for user %s', user)
+            raise HTTPBadRequest('Failed to register device')
+        else:
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
 
         resp.status = HTTP_201
 
@@ -3877,7 +4058,7 @@ def json_error_serializer(req, resp, exception):
 
 
 def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_app,
-                         zk_hosts, default_sender_addr, mobile_config):
+                         zk_hosts, default_sender_addr, supported_timezones, config):
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
@@ -3910,6 +4091,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/templates', Templates())
 
     api.add_route('/v0/users/{username}', User())
+    api.add_route('/v0/users/settings/{username}', UserSettings(supported_timezones))
     api.add_route('/v0/users/modes/{username}', UserModes())
     api.add_route('/v0/users/reprioritization/{username}', Reprioritization())
     api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
@@ -3936,13 +4118,26 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
+    mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
         api.add_route('/v0/devices', Devices(mobile_config))
 
     api.add_route('/v0/stats', Stats())
 
+    api.add_route('/v0/timezones', SupportedTimezones(supported_timezones))
+
     api.add_route('/healthcheck', Healthcheck(healthcheck_path))
+
+    init_webhooks(config, api)
+
     return api
+
+
+def init_webhooks(config, api):
+    webhooks = config.get('webhooks', [])
+    for webhook in webhooks:
+        webhook_class = import_custom_module('iris.webhooks', webhook)
+        api.add_route('/v0/webhooks/' + webhook, webhook_class())
 
 
 def get_api(config):
@@ -3953,7 +4148,6 @@ def get_api(config):
     healthcheck_path = config['healthcheck_path']
     allowed_origins = config.get('allowed_origins', [])
     iris_sender_app = config['sender'].get('sender_app')
-    mobile_config = config.get('iris-mobile', {})
 
     debug = False
     if config['server'].get('disable_auth'):
@@ -3962,11 +4156,11 @@ def get_api(config):
     default_master_sender = config['sender'].get('master_sender', config['sender'])
     default_master_sender_addr = (default_master_sender['host'], default_master_sender['port'])
     zk_hosts = config['sender'].get('zookeeper_cluster', False)
+    supported_timezones = config.get('supported_timezones', [])
 
     # all notifications go through master sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts,
-        default_master_sender_addr, mobile_config)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, supported_timezones, config)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)

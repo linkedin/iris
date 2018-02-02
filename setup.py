@@ -58,7 +58,7 @@ setuptools.setup(
             'pytest==3.0.5',
             'pytest-mock==1.5.0',
             'pytest-cov',
-            'flake8',
+            'flake8==3.5.0',
             'tox',
             'requests-mock==1.1.0',
         ],
@@ -70,6 +70,7 @@ setuptools.setup(
             'iris-sender = iris.bin.sender:main',
             'iris-owa-sync = iris.bin.owasync:main',
             'iris-sync-targets = iris.bin.sync_targets:main',
+            'iris-process-retention = iris.bin.retention:main',
             'iris_ctl = iris.bin.iris_ctl:main',
             'build_assets = iris.bin.ui_build_assets:main',
         ]

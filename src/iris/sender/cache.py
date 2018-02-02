@@ -219,17 +219,27 @@ class Plans():
                 tracking_template = plan['tracking_template']
                 if plan['tracking_type'] == 'email':
                     for application, application_templates in tracking_template.iteritems():
-                        tracking_template[application] = {
-                            'email_subject': self.template_env.from_string(application_templates['email_subject']),
-                            'email_text': self.template_env.from_string(application_templates['email_text']),
-                        }
-                        html_template = application_templates.get('email_html')
-                        if html_template:
-                            tracking_template[application]['email_html'] = self.template_env.from_string(html_template)
-                    plan['tracking_template'] = tracking_template
+                        try:
+                            tracking_template[application] = {
+                                'email_subject': self.template_env.from_string(application_templates['email_subject']),
+                                'email_text': self.template_env.from_string(application_templates['email_text']),
+                            }
+                            html_template = application_templates.get('email_html')
+                            if html_template:
+                                tracking_template[application]['email_html'] = self.template_env.from_string(html_template)
+                        except jinja2.exceptions.TemplateSyntaxError:
+                            logger.exception('[-] error parsing Plan template for %s: %s', key, application)
+                            continue
                 else:
-                    # not supported type, set to None
-                    plan['tracking_template'] = None
+                    for application, application_templates in tracking_template.iteritems():
+                        try:
+                            tracking_template[application] = {
+                                'body': self.template_env.from_string(application_templates['body']),
+                            }
+                        except jinja2.exceptions.TemplateSyntaxError:
+                            logger.exception('[-] error parsing Plan template for %s: %s', key, application)
+                            continue
+                plan['tracking_template'] = tracking_template
 
             self.data[key] = plan
             return plan
@@ -443,7 +453,7 @@ def init(api_host, config):
             re = iris_client.get('target_roles')
             if re.status_code == 200:
                 break
-        except:
+        except Exception:
             pass
         api_chk_cnt += 1
         logger.warning(

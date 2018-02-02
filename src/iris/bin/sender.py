@@ -29,6 +29,7 @@ from iris.sender.message import update_message_mode
 from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
+from iris.role_lookup import IrisRoleLookupException
 from pymysql import DataError, IntegrityError, InternalError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
@@ -245,6 +246,11 @@ autoscale_email_worker_tasks = defaultdict(list)
 # support the 2nd control+c force exiting sender without waiting for tasks to finish
 shutdown_started = False
 
+# Set of active message IDs currently being sent, to avoid re-sending messages that are currently
+# just blocked on a downstream such as smtp
+message_ids_being_sent = set()
+
+
 default_sender_metrics = {
     'email_cnt': 0, 'email_total': 0, 'email_fail': 0, 'email_sent': 0, 'email_max': 0,
     'email_min': 0, 'email_avg': 0, 'im_cnt': 0, 'im_total': 0, 'im_fail': 0, 'im_sent': 0,
@@ -261,7 +267,9 @@ default_sender_metrics = {
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
-    'message_retry_cnt': 0
+    'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0, 'notifications': 0, 'deactivation': 0,
+    'new_msg_count': 0, 'poll': 0, 'queue': 0, 'aggregations': 0, 'hipchat_cnt': 0, 'hipchat_fail': 0,
+    'hipchat_total': 0, 'hipchat_sent': 0, 'hipchat_max': 0, 'hipchat_min': 0
 }
 
 # TODO: make this configurable
@@ -282,7 +290,14 @@ def create_messages(incident_id, plan_notification_id):
         target = cache.targets[plan_notification['target_id']]['name']
 
     # find role/priority from plan_notification_id
-    names = cache.targets_for_role(role, target)
+    try:
+        names = cache.targets_for_role(role, target)
+    except IrisRoleLookupException as e:
+        names = None
+        lookup_fail_reason = str(e)
+    else:
+        lookup_fail_reason = None
+
     priority_id = plan_notification['priority_id']
     redirect_to_plan_owner = False
     body = ''
@@ -318,7 +333,8 @@ def create_messages(incident_id, plan_notification_id):
                      incident_id, plan_notification_id, role, target, names, name, priority_id)
 
         body = ('You are receiving this as you created this plan and we can\'t resolve'
-                ' %s of %s at this time.\n\n') % (role, target)
+                ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
+
         names = [name]
         redirect_to_plan_owner = True
 
@@ -341,7 +357,7 @@ def create_messages(incident_id, plan_notification_id):
                     auditlog.TARGET_CHANGE,
                     role + '|' + target,
                     name,
-                    'Changing target to plan owner as we failed resolving original target')
+                    lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
 
         else:
             metrics.incr('target_not_found')
@@ -422,14 +438,14 @@ def escalate():
                 try:
                     subject = app_tracking_template['email_subject'].render(**context)
                 except Exception as e:
-                    subject = 'plan %s - tracking notification subject failed to render: %s' % (plan['name'], str(e))
+                    subject = 'plan %s - tracking notification subject failed to render: %s' % (plan['name'], e)
                     logger.exception(subject)
                 tracking_message['email_subject'] = subject
 
                 try:
                     body = app_tracking_template['email_text'].render(**context)
                 except Exception as e:
-                    body = 'plan %s - tracking notification body failed to render: %s' % (plan['name'], str(e))
+                    body = 'plan %s - tracking notification body failed to render: %s' % (plan['name'], e)
                     logger.exception(body)
                 tracking_message['email_text'] = body
 
@@ -438,10 +454,23 @@ def escalate():
                     try:
                         html_body = email_html_tpl.render(**context)
                     except Exception as e:
-                        html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], str(e))
+                        html_body = 'plan %s - tracking notification html body failed to render: %s' % (plan['name'], e)
                         logger.exception(html_body)
                     tracking_message['email_html'] = html_body
-                message_send_enqueue(tracking_message)
+            else:
+                tracking_message = {
+                    'noreply': True,
+                    'destination': tracking_key,
+                    'mode': tracking_type
+                }
+                try:
+                    body = app_tracking_template['body'].render(**context)
+                except Exception as e:
+                    body = 'plan %s - tracking notification body failed to render: %s' % (plan['name'], e)
+                    logger.exception(body)
+                tracking_message['body'] = body
+
+            message_send_enqueue(tracking_message)
     cursor.close()
 
     new_incidents_count = len(escalations)
@@ -863,9 +892,11 @@ def mark_message_as_sent(message):
     if 'aggregated_ids' in message:
         sql = SENT_MESSAGE_BATCH_SQL % connection.escape(message['aggregated_ids'])
         params.append(message['batch_id'])
+        message_ids = message['aggregated_ids']
     else:
         sql = SENT_MESSAGE_SQL
         params.append(message['message_id'])
+        message_ids = [message['message_id']]
 
     cursor = connection.cursor()
     if not message['subject']:
@@ -886,6 +917,10 @@ def mark_message_as_sent(message):
         except Exception:
             logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
             sleep(.2)
+
+    # Clean messages cache
+    for message_id in message_ids:
+        messages.pop(message_id, None)
 
     # Update subject and body separately, as they may fail and we don't necessarily care if they do
     if len(message['subject']) > 255:
@@ -1112,6 +1147,11 @@ def fetch_and_send_message(send_queue, vendor_manager):
                 add_mode_stat(message['mode'], None)
                 logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
                 sent_locally = True
+
+    # Take it out of our list of active queued messages if it's there
+    if message['message_id']:
+        message_ids_being_sent.discard(message['message_id'])
+
     if success:
         metrics.incr('message_send_cnt')
         if message['message_id'] and sent_locally:
@@ -1383,6 +1423,13 @@ def sender_shutdown():
 
 
 def message_send_enqueue(message):
+
+    # If this message has an ID, avoid queueing it twice, assuming it's not a retry
+    message_id = message.get('message_id')
+    if message_id is not None and message_id in message_ids_being_sent and not message.get('retry_count'):
+        logger.debug('Not-requeueing message %s', message)
+        return
+
     # Set the target contact here so we determine the mode, which determines the
     # queue it gets inserted into. Skip this step if it's a retry because we'd
     # already have the message's contact info decided
@@ -1396,6 +1443,8 @@ def message_send_enqueue(message):
 
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
+        if message_id is not None:
+            message_ids_being_sent.add(message_id)
         per_mode_send_queues[message_mode].put(message)
         metrics.incr('send_queue_puts_cnt')
     else:
@@ -1484,6 +1533,7 @@ def main():
 
     maintain_workers(config)
 
+    disable_gwatch_renewer = config['sender'].get('disable_gwatch_renewer', False)
     gwatch_renewer_task = None
     prune_audit_logs_task = None
 
@@ -1508,7 +1558,7 @@ def main():
         # If we're currently a master, ensure our master-greenlets are running
         # and we're doing the master duties
         if coordinator.am_i_master():
-            if not bool(gwatch_renewer_task):
+            if not disable_gwatch_renewer and not bool(gwatch_renewer_task):
                 if should_mock_gwatch_renewer:
                     gwatch_renewer_task = spawn(mock_gwatch_renewer)
                 else:
@@ -1557,6 +1607,8 @@ def main():
 
         now = time.time()
         metrics.set('sender_uptime', int(now - start_time))
+
+        metrics.set('message_ids_being_sent_cnt', len(message_ids_being_sent))
 
         spawn(metrics.emit)
 

@@ -45,12 +45,12 @@ def test_configure(mocker):
         },
         'sender': {
             'debug': True,
+            'skipgmailwatch': True,
         },
         'oncall': 'http://localhost:8002',
         'role_lookup': 'dummy',
         'metrics': 'dummy',
         'skipsend': True,
-        'skipgmailwatch': True,
     })
 
 
@@ -246,7 +246,8 @@ def test_no_valid_modes(mocker):
     mocker.patch('iris.bin.sender.set_target_contact').return_value = False
     mock_mark_message_no_contact = mocker.patch('iris.bin.sender.mark_message_has_no_contact')
     mock_mark_message_no_contact.reset_mock()
-    from iris.bin.sender import message_send_enqueue
+    from iris.bin.sender import message_send_enqueue, message_ids_being_sent
+    message_ids_being_sent.clear()
 
     message_send_enqueue(fake_message)
     mock_mark_message_no_contact.assert_called_once()

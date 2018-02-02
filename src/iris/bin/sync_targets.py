@@ -310,6 +310,9 @@ def get_ldap_lists(l, search_strings, parent_list=None):
         pctrls = [c for c in serverctrls
                   if c.controlType == SimplePagedResultsControl.controlType]
 
+        if not pctrls:
+            # Paging not supported
+            break
         cookie = pctrls[0].cookie
         if not cookie:
             break
@@ -328,16 +331,19 @@ def get_ldap_list_membership(l, search_strings, list_name):
         msgid = l.search_ext(search_strings['user_search_string'],
                              ldap.SCOPE_SUBTREE,
                              serverctrls=[req_ctrl],
-                             attrlist=[search_strings['user_account_name_field']],
+                             attrlist=[search_strings['user_mail_field']],
                              filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
                              )
         rtype, rdata, rmsgid, serverctrls = l.result3(msgid, resp_ctrl_classes=known_ldap_resp_ctrls)
 
-        results |= {data[1][search_strings['user_account_name_field']][0] for data in rdata}
+        results |= {data[1].get(search_strings['user_mail_field'], [None])[0] for data in rdata}
 
         pctrls = [c for c in serverctrls
                   if c.controlType == SimplePagedResultsControl.controlType]
 
+        if not pctrls:
+            # Paging not supported
+            break
         cookie = pctrls[0].cookie
         if not cookie:
             break
@@ -381,9 +387,12 @@ def batch_remove_ldap_memberships(session, list_id, members):
     # query that has thousands of entries.
     deletes_per_match = 50
     for memberships_this_batch in batch_items_from_list(members, deletes_per_match):
-        affected = session.execute('''DELETE FROM `mailing_list_membership`
+        affected = session.execute('''DELETE `mailing_list_membership`
+                                      FROM `mailing_list_membership`
+                                      JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
                                       WHERE `list_id` = :list_id
-                                      AND `user_id` IN (SELECT `id` FROM `target` WHERE `name` IN :members AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))''',
+                                      AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                                      AND `destination` IN :members''',
                                    {'list_id': list_id, 'members': tuple(memberships_this_batch)}).rowcount
         logger.info('Deleted %s members from list id %s', affected, list_id)
     session.commit()
@@ -477,10 +486,12 @@ def sync_ldap_lists(ldap_settings, engine):
             session.commit()
 
         existing_members = {row[0] for row in session.execute('''
-                            SELECT `target`.`name`
+                            SELECT `target_contact`.`destination`
                             FROM `mailing_list_membership`
-                            JOIN `target` ON `target`.`id` = `mailing_list_membership`.`user_id`
-                            WHERE `mailing_list_membership`.`list_id` = :list_id''', {'list_id': list_id})}
+                            JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
+                            WHERE `mailing_list_membership`.`list_id` = :list_id
+                            AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                            ''', {'list_id': list_id})}
 
         add_members = members - existing_members
         kill_members = existing_members - members
@@ -492,7 +503,13 @@ def sync_ldap_lists(ldap_settings, engine):
                 try:
                     session.execute('''INSERT IGNORE INTO `mailing_list_membership`
                                        (`list_id`, `user_id`)
-                                       VALUES (:list_id, (SELECT `id` FROM `target` WHERE `name` = :name))''', {'list_id': list_id, 'name': member})
+                                       VALUES (:list_id,
+                                               (SELECT `target_id` FROM `target_contact`
+                                                JOIN `target` ON `target`.`id` = `target_id`
+                                                WHERE `destination` = :name
+                                                AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                                                AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')))
+                                    ''', {'list_id': list_id, 'name': member})
                     logger.info('Added %s to list %s', member, list_name)
                 except (IntegrityError, DataError):
                     metrics.incr('ldap_memberships_failed_to_add')

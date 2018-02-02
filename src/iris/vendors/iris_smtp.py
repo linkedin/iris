@@ -57,6 +57,23 @@ class iris_smtp(object):
 
         start = time.time()
         m = MIMEMultipart('alternative')
+
+        priority = message.get('priority')
+        if priority:
+            m['X-IRIS-PRIORITY'] = priority
+
+        application = message.get('application')
+        if application:
+            m['X-IRIS-APPLICATION'] = application
+
+        plan = message.get('plan')
+        if plan:
+            m['X-IRIS-PLAN'] = plan
+
+        incident_id = message.get('incident_id')
+        if incident_id:
+            m['X-IRIS-INCIDENT-ID'] = str(incident_id)
+
         m['from'] = from_address
         m['to'] = message['destination']
         if message.get('noreply'):
@@ -128,7 +145,7 @@ class iris_smtp(object):
 
             try:
                 conn.quit()
-            except:
+            except Exception:
                 pass
 
             # If we can't send it, try reconnecting and then sending it one more time before
@@ -163,7 +180,7 @@ class iris_smtp(object):
             logger.info('Trying to quit smtp connection to %s', self.last_conn_server)
             try:
                 self.last_conn.quit()
-            except:
+            except Exception:
                 pass
 
     @classmethod

@@ -154,7 +154,7 @@ header[data-page="error"] {
 .floating-module .module {
   position: relative;
   width: 250px;
-  height: 300px;
+  min-height: 300px;
   top: 45%;
   margin: auto;
   margin-top: -200px;
@@ -1400,6 +1400,7 @@ table.dataTable thead .sorting_asc {
 
 #priority-inner {
   width: 100%;
+  margin-bottom: 20px;
 }
 
 #priority-table {
@@ -1412,6 +1413,7 @@ table.dataTable thead .sorting_asc {
 
 #priority-controls {
   margin-top: 10px;
+  margin-bottom: 10px;
   margin-right: 20px;
 }
 
@@ -1763,4 +1765,8 @@ span.twitter-typeahead {
 }
 .input-group.input-group-sm span.twitter-typeahead .tt-dropdown-menu {
   top: 28px !important;
+}
+
+#timezone-select {
+  width: auto;
 }

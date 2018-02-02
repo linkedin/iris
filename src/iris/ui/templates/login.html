@@ -7,6 +7,9 @@
       <p>Iris</p>
     </div>
     <form method="POST">
+       {% if last_flash %}
+       <div class="alert alert-{{ last_flash.type }}">{{ last_flash.message }}</div>
+       {% endif %}
       <input class="form-control border-bottom" name="username" type="text" placeholder="Username" autofocus>
       <input class="form-control border-bottom" name="password" type="password" placeholder="Password">
       <button class="form-control btn btn-primary">login</button>

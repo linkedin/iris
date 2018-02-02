@@ -3,6 +3,7 @@
 
 from iris.constants import SMS_SUPPORT, CALL_SUPPORT
 from iris.plugins import find_plugin
+from iris.custom_import import import_custom_module
 from twilio.rest import TwilioRestClient
 from twilio.rest.resources import Connection
 from iris import db
@@ -10,12 +11,11 @@ from sqlalchemy.exc import IntegrityError
 import time
 import urllib
 import logging
-from .fcm import FCMNotifier
 
 logger = logging.getLogger(__name__)
 
 
-class iris_twilio(FCMNotifier):
+class iris_twilio(object):
     supports = frozenset([SMS_SUPPORT, CALL_SUPPORT])
 
     def __init__(self, config):
@@ -28,7 +28,10 @@ class iris_twilio(FCMNotifier):
             SMS_SUPPORT: self.send_sms,
             CALL_SUPPORT: self.send_call,
         }
-        super(iris_twilio, self).__init__(config)
+        push_config = config.get('push_notification', {})
+        self.push_active = push_config.get('activated', False)
+        if self.push_active:
+            self.notifier = import_custom_module('iris.push', push_config['type'])(push_config)
 
     def get_twilio_client(self):
         return TwilioRestClient(self.config['account_sid'],
@@ -111,11 +114,11 @@ class iris_twilio(FCMNotifier):
             payload['message_id'] = message_id
             payload['instruction'] = plugin.get_phone_menu_text()
             relay_cb_url = '%s/api/v0/twilio/calls/gather?%s' % (
-                self.config['relay_base_url'], urllib.urlencode(payload)
+                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
         else:
             relay_cb_url = '%s/api/v0/twilio/calls/say?%s' % (
-                self.config['relay_base_url'], urllib.urlencode(payload)
+                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
 
         start = time.time()
@@ -142,5 +145,6 @@ class iris_twilio(FCMNotifier):
         return send_time
 
     def send(self, message, customizations=None):
-        self.send_push(message)
+        if self.push_active:
+            self.notifier.send_push(message)
         return self.modes[message['mode']](message)
