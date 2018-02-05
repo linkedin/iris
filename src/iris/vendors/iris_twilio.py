@@ -3,6 +3,7 @@
 
 from iris.constants import SMS_SUPPORT, CALL_SUPPORT
 from iris.plugins import find_plugin
+from iris.custom_import import import_custom_module
 from twilio.rest import TwilioRestClient
 from twilio.rest.resources import Connection
 from iris import db
@@ -27,6 +28,10 @@ class iris_twilio(object):
             SMS_SUPPORT: self.send_sms,
             CALL_SUPPORT: self.send_call,
         }
+        push_config = config.get('push_notification', {})
+        self.push_active = push_config.get('activated', False)
+        if self.push_active:
+            self.notifier = import_custom_module('iris.push', push_config['type'])(push_config)
 
     def get_twilio_client(self):
         return TwilioRestClient(self.config['account_sid'],
@@ -140,4 +145,6 @@ class iris_twilio(object):
         return send_time
 
     def send(self, message, customizations=None):
+        if self.push_active:
+            self.notifier.send_push(message)
         return self.modes[message['mode']](message)

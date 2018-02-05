@@ -724,6 +724,17 @@ CREATE TABLE `mailing_list_membership` (
   CONSTRAINT `mailing_list_membership_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+
+DROP TABLE IF EXISTS `device`;
+CREATE TABLE `device` (
+  `registration_id` VARCHAR(255) NOT NULL,
+  `user_id` BIGINT(20) NOT NULL,
+  `platform` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`registration_id`),
+  CONSTRAINT `device_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
