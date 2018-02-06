@@ -42,6 +42,7 @@ stats_reset = {
     'ldap_memberships_removed': 0,
     'ldap_lists_failed_to_add': 0,
     'ldap_memberships_failed_to_add': 0,
+    'ldap_reconnects': 0
 }
 
 # logging
@@ -400,7 +401,7 @@ def batch_remove_ldap_memberships(session, list_id, members):
 
 def sync_ldap_lists(ldap_settings, engine):
     try:
-        l = ldap.initialize(ldap_settings['connection']['url'])
+        l = ldap.ldapobject.ReconnectLDAPObject(ldap_settings['connection']['url'])
     except Exception:
         logger.exception('Connecting to ldap to get our mailing lists failed.')
         return
@@ -444,7 +445,14 @@ def sync_ldap_lists(ldap_settings, engine):
     user_add_count = 0
 
     for list_cn, list_name in ldap_lists:
-        members = get_ldap_flat_membership(l, ldap_settings['search_strings'], list_cn, ldap_settings['max_depth'], 0, set())
+        try:
+            members = get_ldap_flat_membership(l, ldap_settings['search_strings'], list_cn, ldap_settings['max_depth'], 0, set())
+        except ldap.SERVER_DOWN:
+            # reconnect and retry once
+            metrics.incr('ldap_reconnects')
+            logger.warning('LDAP server went away for list %s. Reconnecting', list_name)
+            l.reconnect(ldap_settings['connection']['url'])
+            members = get_ldap_flat_membership(l, ldap_settings['search_strings'], list_cn, ldap_settings['max_depth'], 0, set())
 
         if not members:
             logger.info('Ignoring/pruning empty ldap list %s', list_name)
