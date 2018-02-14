@@ -537,7 +537,7 @@ def aggregate(now):
 
             # remove inactive message from the queue
             for message_id in inactive_message_ids:
-                del messages[message_id]
+                messages.pop(message_id, None)
 
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
@@ -554,7 +554,7 @@ def aggregate(now):
                 message_send_enqueue(m)
 
                 for message_id in active_message_ids:
-                    del messages[message_id]
+                    messages.pop(message_id, None)
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now

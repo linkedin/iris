@@ -141,7 +141,7 @@ class iris_smtp(object):
         try:
             conn.sendmail([from_address], [message['destination']], m.as_string())
         except Exception:
-            logger.exception('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
+            logger.warning('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
 
             try:
                 conn.quit()
