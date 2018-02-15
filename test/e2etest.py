@@ -22,6 +22,7 @@ ui_url = server
 
 invalid_role = '_invalid_role'
 invalid_user = '_invalid_user'
+invalid_mailing_list = '_invalid_mailing_list'
 
 sample_db_config = {
     'db': {
@@ -113,11 +114,29 @@ def iris_teams():
 
 
 @pytest.fixture(scope='module')
+def iris_mailing_lists():
+    '''List of all iris mailing-lists'''
+    re = requests.get(base_url + 'targets/mailing-list')
+    assert re.status_code == 200
+    return re.json()
+
+
+@pytest.fixture(scope='module')
 def iris_applications():
     '''List of all iris applications' metadata'''
     re = requests.get(base_url + 'applications')
     assert re.status_code == 200
     return re.json()
+
+
+@pytest.fixture(scope='module')
+def sample_mailing_list_0(iris_mailing_lists):
+    return iris_mailing_lists[0]
+
+
+@pytest.fixture(scope='module')
+def sample_mailing_list_1(iris_mailing_lists):
+    return iris_mailing_lists[1]
 
 
 @pytest.fixture(scope='module')
@@ -2953,6 +2972,64 @@ def test_timezones_list():
     re = requests.get(base_url + 'timezones', allow_redirects=False)
     assert re.status_code == 200
     assert isinstance(re.json(), list)
+
+
+def test_valid_target(sample_user, sample_mailing_list_1):
+    # Test invalid user
+    re = requests.get(base_url + 'targets/' + invalid_user + '/exists',
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert not re.json()['exists']
+
+    # Test valid user
+    re = requests.get(base_url + 'targets/' + sample_user + '/exists',
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert re.json()['exists']
+
+    # Test valid mailing-list
+    re = requests.get(base_url + 'targets/' + sample_mailing_list_1 + '/exists',
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert re.json()['exists']
+
+    # Test invalid mailing-list
+    re = requests.get(base_url + 'targets/' + invalid_mailing_list + '/exists',
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert not re.json()['exists']
+
+
+def test_list_membership(sample_user, sample_mailing_list_0,
+                         sample_mailing_list_1):
+    # sample_user(demo) is a part of sample_mailing_list_1(demo)
+    re = requests.get(base_url + 'users/' + sample_user + '/in_lists',
+                      params={'list': [sample_mailing_list_1]},
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert re.json()['is_member']
+
+    # sample_user(demo) is NOT a part of sample_mailing_list_0(abc)
+    re = requests.get(base_url + 'users/' + sample_user + '/in_lists',
+                      params={'list': [sample_mailing_list_0]},
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert not re.json()['is_member']
+
+    # check multiple lists
+    re = requests.get(base_url + 'users/' + sample_user + '/in_lists',
+                      params={'list': [sample_mailing_list_0,
+                                       sample_mailing_list_1]},
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert re.json()['is_member']
+
+    # check invalid multiple lists
+    re = requests.get(base_url + 'users/' + sample_user + '/in_lists',
+                      params={'list': [invalid_mailing_list]},
+                      headers=username_header(sample_user))
+    assert re.status_code == 200
+    assert not re.json()['is_member']
 
 
 def test_user_update_timezone(sample_user):
