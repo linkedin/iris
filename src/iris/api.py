@@ -3170,6 +3170,57 @@ class User(object):
         resp.body = ujson.dumps(user_data)
 
 
+class ValidTarget(object):
+    allow_read_no_auth = False
+    enforce_user = False
+
+    def on_get(self, req, resp, target_type):
+        valid_target_query = '''SELECT EXISTS(
+                                    SELECT 1
+                                    FROM `target`
+                                    WHERE `target`.`name` = %s)'''
+
+        try:
+            resp.body = ujson.dumps({'exists':
+                                     bool(db.engine.execute(valid_target_query,
+                                                            target_type).scalar())})
+        except Exception:
+            logger.exception('Error checking Valid Target for %s', target_type)
+            raise HTTPInternalServerError('Failed checking valid target')
+
+
+class UserMembership(object):
+    allow_read_no_auth = False
+    enforce_user = False
+
+    def on_get(self, req, resp, username):
+        lists = req.get_param_as_list('list', required=True)
+
+        membership_query = '''SELECT EXISTS(
+                                  SELECT 1
+                                  FROM `target`
+                                  WHERE `target`.`name` = %s
+                                  AND `target`.`id` IN (
+                                      SELECT `mailing_list_membership`.`user_id`
+                                      FROM `mailing_list_membership`
+                                      WHERE `list_id` IN (
+                                          SELECT `_target`.`id`
+                                          FROM `target` AS `_target`
+                                          JOIN `target_type`
+                                          ON `_target`.`type_id` = `target_type`.`id`
+                                          WHERE `target_type`.`name` = 'mailing-list'
+                                          AND `_target`.`name` IN %s)))'''
+
+        try:
+            resp.body = ujson.dumps({'is_member':
+                                     bool(db.engine.execute(membership_query,
+                                                            (username,
+                                                             lists)).scalar())})
+        except Exception:
+            logger.exception('Error checking lists membership for target: %s, lists: %s', username, lists)
+            raise HTTPInternalServerError('Failed checking group membership')
+
+
 class UserSettings(object):
     allow_read_no_auth = False
     enforce_user = True
@@ -4097,6 +4148,9 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
 
     api.add_route('/v0/modes', Modes())
+
+    api.add_route('/v0/targets/{target_type}/exists', ValidTarget())
+    api.add_route('/v0/users/{username}/in_lists', UserMembership())
 
     api.add_route('/v0/applications/{app_name}/quota', ApplicationQuota())
     api.add_route('/v0/applications/{app_name}/stats', ApplicationStats())

@@ -171,6 +171,11 @@ INSERT INTO `target` VALUES
     (7,'demo',3,1);
 UNLOCK TABLES;
 
+LOCK TABLES `mailing_list_membership` WRITE;
+INSERT INTO `mailing_list_membership` VALUES
+    (7,1);
+UNLOCK TABLES;
+
 LOCK TABLES `target_application_mode` WRITE;
 INSERT INTO `target_application_mode` VALUES
     (1,8,26,26);
