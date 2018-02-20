@@ -133,7 +133,7 @@ def relay(message, iris_client):
 
     # To and From headers are strangely missing
     if message.to_recipients:
-        headers.append({'name': 'To', 'value': message.to_recipients[0].email_address})
+        headers.append({'name': 'To', 'value': [r.email_address for r in message.to_recipients]})
     headers.append({'name': 'From', 'value': message.sender.email_address})
 
     data = {'headers': headers, 'body': message.text_body.strip()}

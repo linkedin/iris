@@ -3445,7 +3445,10 @@ class ResponseEmail(ResponseMixin):
         if not source:
             msg = 'No source found in headers: %s' % gmail_params['headers']
             raise HTTPBadRequest('Missing source', msg)
-        to = email_headers.get('To')
+        to = email_headers.get('To', [])
+        # 'To' will either be string of single recipient or list of several
+        if isinstance(to, basestring):
+            to = [to]
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
         source = source.split(' ')[-1].strip('<>')
@@ -3453,19 +3456,20 @@ class ResponseEmail(ResponseMixin):
 
         # Some people want to use emails to create iris incidents. Facilitate this.
         if to:
-            to = to.split(' ')[-1].strip('<>')
+            to = [t.split(' ')[-1].strip('<>') for t in to]
             with db.guarded_session() as session:
                 email_check_result = session.execute(
                     '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
                        FROM `incident_emails`
                        JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                       WHERE `email` = :email
+                       WHERE `email` IN :email
                        AND `email` NOT IN (
                            SELECT `destination`
                            FROM `target_contact`
                            WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
                        )''',
                     {'email': to}).fetchone()
+                # Only create incident for first email match
                 if email_check_result:
                     if 'In-Reply-To' in email_headers:
                         logger.warning(('Not creating incident for email %s as this '
