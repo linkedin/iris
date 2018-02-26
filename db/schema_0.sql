@@ -281,7 +281,7 @@ CREATE TABLE `response` (
   PRIMARY KEY (`id`),
   KEY `ix_response_message_id` (`message_id`),
   KEY `ix_response_created` (`created`),
-  CONSTRAINT `response_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`)
+  CONSTRAINT `response_ibfk_1` FOREIGN KEY (`message_id`) REFERENCES `message` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
