@@ -21,5 +21,7 @@ class iris_dummy(object):
         if 'email_subject' in message:
             logger.info('SEND: %(destination)s %(email_subject)s', message)
         else:
+            message['application'] = message.get('application')
+            message['subject'] = message.get('subject', 'Tracking message')
             logger.info('SEND: %(mode)s %(application)s %(destination)s %(subject).25s', message)
         return time_taken
