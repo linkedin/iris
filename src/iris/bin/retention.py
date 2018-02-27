@@ -173,7 +173,7 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                           %s
                         FROM `message`
                         JOIN `priority` on `priority`.`id` = `message`.`priority_id`
-                        JOIN `mode` on `mode`.`id` = `message`.`mode_id`
+                        LEFT JOIN `mode` on `mode`.`id` = `message`.`mode_id`
                         LEFT JOIN `template` ON `message`.`template_id` = `template`.`id`
                         LEFT JOIN `target` ON `message`.`target_id` = `target`.`id`
                         WHERE `message`.`incident_id` in %%s
