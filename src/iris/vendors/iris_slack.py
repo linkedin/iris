@@ -83,7 +83,7 @@ class iris_slack(object):
 
     def get_destination(self, destination):
         # If the destination doesn't have '@' this adds it
-        if not destination.startswith('@'):
+        if not (destination.startswith('@') or destination.startswith('#')):
             destination = '@%s' % (destination)
         return destination
 
