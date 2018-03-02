@@ -27,6 +27,7 @@ class iris_hipchat(object):
         self.room_id = int(self.config.get('room_id'))
         self.debug = self.config.get('debug')
         self.endpoint_url = self.config.get('base_url')
+        self.timeout = config.get('timeout', 10)
 
         self.headers = {
             'Content-type': 'application/json',
@@ -94,7 +95,8 @@ class iris_hipchat(object):
                                          headers=self.headers,
                                          params=params,
                                          json=payload,
-                                         proxies=self.proxy)
+                                         proxies=self.proxy,
+                                         timeout=self.timeout)
                 if response.status_code == 200 or response.status_code == 204:
                     return time.time() - start
                 else:
