@@ -39,6 +39,7 @@ class iris_messagebird(object):
             'User-Agent': 'Iris',
             'Content-Type': 'application/json'
         }
+        self.timeout = config.get('timeout', 10)
 
     def get_message_payload(self, message):
         """Format a proper message dict"""
@@ -63,7 +64,8 @@ class iris_messagebird(object):
                 response = requests.post(self.endpoint_url_messages,
                                          headers=self.headers,
                                          json=payload,
-                                         proxies=self.proxy)
+                                         proxies=self.proxy,
+                                         timeout=self.timeout)
                 if response.status_code == 201:
                     return time.time() - start
                 else:
@@ -83,7 +85,8 @@ class iris_messagebird(object):
                 response = requests.post(self.endpoint_url_voicemessages,
                                          headers=self.headers,
                                          json=payload,
-                                         proxies=self.proxy)
+                                         proxies=self.proxy,
+                                         timeout=self.timeout)
                 if response.status_code == 201:
                     return time.time() - start
                 else:

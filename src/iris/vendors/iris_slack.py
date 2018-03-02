@@ -27,6 +27,7 @@ class iris_slack(object):
             port = self.config['proxy']['port']
             self.proxy = {'http': 'http://%s:%s' % (host, port),
                           'https': 'https://%s:%s' % (host, port)}
+        self.timeout = config.get('timeout', 10)
         self.message_attachments = self.config.get('message_attachments', {})
         push_config = config.get('push_notification', {})
         self.push_active = push_config.get('activated', False)
@@ -95,7 +96,8 @@ class iris_slack(object):
         try:
             response = requests.post(self.config['base_url'],
                                      data=payload,
-                                     proxies=self.proxy)
+                                     proxies=self.proxy,
+                                     timeout=self.timeout)
             if response.status_code == 200:
                 data = response.json()
                 if data['ok']:

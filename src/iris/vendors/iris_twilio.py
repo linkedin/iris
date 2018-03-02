@@ -28,6 +28,7 @@ class iris_twilio(object):
             SMS_SUPPORT: self.send_sms,
             CALL_SUPPORT: self.send_call,
         }
+        self.timeout = config.get('timeout', 10)
         push_config = config.get('push_notification', {})
         self.push_active = push_config.get('activated', False)
         if self.push_active:
@@ -35,7 +36,8 @@ class iris_twilio(object):
 
     def get_twilio_client(self):
         return TwilioRestClient(self.config['account_sid'],
-                                self.config['auth_token'])
+                                self.config['auth_token'],
+                                timeout=self.timeout)
 
     def generate_message_text(self, message):
         content = []
