@@ -37,7 +37,7 @@ setuptools.setup(
         'cssmin==0.2.0',
         'pycrypto==2.6.1',
         'beaker==1.8.0',
-        'webassets==0.12.0',
+        'webassets==0.12.1',
         'python-ldap==2.4.9',
         'exchangelib==1.10.0',
         'setproctitle==1.1.8',
