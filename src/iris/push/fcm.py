@@ -13,11 +13,18 @@ class fcm(object):
         self.config = config
         self.api_key = self.config.get('api_key')
         self.notification = self.config.get('notification_title')
-
-    def get_fcm_client(self):
-        return FCMNotification(api_key=self.api_key)
+        self.proxy = None
+        if 'proxy' in self.config:
+            host = self.config['proxy']['host']
+            port = self.config['proxy']['port']
+            self.proxy = {'http': 'http://%s:%s' % (host, port),
+                          'https': 'https://%s:%s' % (host, port)}
+        self.client = FCMNotification(api_key=self.api_key, proxy_dict=self.proxy)
 
     def send_push(self, message):
+        # Tracking message have no target, skip sending push notification
+        if 'target' not in message:
+            return
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
         cursor.execute('''SELECT `registration_id`
@@ -27,11 +34,12 @@ class fcm(object):
                        message['target'])
         registration_ids = [row[0] for row in cursor]
         if registration_ids:
-            fcm_client = self.get_fcm_client()
             try:
-                response = fcm_client.notify_multiple_devices(registration_ids=registration_ids,
-                                                              message_title=self.notification,
-                                                              message_body=message.get('subject', ''))
+                data_message = {'incident_id': message.get('incident_id')}
+                response = self.client.notify_multiple_devices(registration_ids=registration_ids,
+                                                               message_title=self.notification,
+                                                               message_body=message.get('subject', ''),
+                                                               data_message=data_message)
                 invalid_ids = []
                 for idx, result in enumerate(response['results']):
                     if result.get('error') == 'NotRegistered':
