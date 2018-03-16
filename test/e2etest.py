@@ -2115,7 +2115,8 @@ def test_stats():
     assert re.status_code == 200
     data = re.json()
     for key in ('total_active_users', 'total_messages_sent_today', 'total_incidents_today', 'total_messages_sent',
-                'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',):
+                'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
+                'total_applications'):
         assert key in data
         assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 

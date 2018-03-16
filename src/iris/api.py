@@ -3926,7 +3926,8 @@ class Stats(object):
                                                                   AND NOT ISNULL(`updated`)
                                                                   ORDER BY time_to_claim) as time_to_claim
                                                             WHERE (SELECT @row_id := @row_id + 1)
-                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)'''
+                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
+            'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE'
         }
 
         stats = {}
