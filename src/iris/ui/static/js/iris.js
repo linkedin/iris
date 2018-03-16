@@ -2210,7 +2210,7 @@ iris = {
         app.allowViewingKey = isAdmin || isOwner;
         app.allowEditingEmailIncidents = isAdmin || isOwner;
         app.showEditOwners = isAdmin || isOwner;
-        app.allowDangerousActions = isAdmin;
+        app.allowDangerousActions = isAdmin || isOwner;
         app.allowEditingSupportedModes = isAdmin;
 
         // This gets turned to true when the edit button is clicked if the user

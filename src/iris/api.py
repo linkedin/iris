@@ -2536,8 +2536,20 @@ class Application(object):
             resp.body = '[]'
 
     def on_delete(self, req, resp, app_name):
-        if not req.context['is_admin']:
-            raise HTTPUnauthorized('Only admins can remove apps')
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to delete this app')
+        with db.guarded_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to delete this app.')
 
         affected = False
         with db.guarded_session() as session:
@@ -2687,8 +2699,22 @@ class ApplicationReKey(object):
     allow_read_no_auth = False
 
     def on_post(self, req, resp, app_name):
-        if not req.context['is_admin']:
-            raise HTTPUnauthorized('You must be an admin to rekey an app')
+        # Only admins and application owners can re-key
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to re-key this app')
+
+        with db.guarded_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to re-key this app.')
 
         data = {
             'app_name': app_name,
@@ -2866,8 +2892,20 @@ class ApplicationRename(object):
     allow_read_no_auth = False
 
     def on_put(self, req, resp, app_name):
-        if not req.context['is_admin']:
-            raise HTTPUnauthorized('Only admins can rename apps')
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to rename this app')
+        with db.guarded_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to rename this app.')
 
         try:
             data = ujson.loads(req.context['body'])

@@ -2622,7 +2622,7 @@ def test_view_app_key(sample_application_name, sample_admin_user):
 def test_change_app_key(sample_application_name, sample_admin_user):
     re = requests.post(base_url + 'applications/%s/rekey' % sample_application_name)
     assert re.status_code == 401
-    assert re.json()['title'] == 'You must be an admin to rekey an app'
+    assert re.json()['title'] == 'You must be a logged in user to re-key this app'
 
     re = requests.post(base_url + 'applications/%s/rekey' % 'fakeapp123', headers=username_header(sample_admin_user))
     assert re.status_code == 400
