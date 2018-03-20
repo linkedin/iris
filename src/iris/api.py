@@ -740,7 +740,7 @@ class AuthMiddleware(object):
 
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
-            if not equals(api_key, str(app['key'])):
+            if not equals(api_key, str(app['key'])) or equals(api_key, str(app['secondary_key'])):
                 logger.warn('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
@@ -778,37 +778,39 @@ class AuthMiddleware(object):
                     logger.warn('Unprivileged application %s tried authenticating %s',
                                 app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
-                api_key = str(app['key'])
                 window = int(time.time()) // 5
-                # If username header is present, throw that into the hmac validation as well
-                if username_header:
-                    text = '%s %s %s %s %s' % (window, method, path, body, username_header)
-                else:
-                    text = '%s %s %s %s' % (window, method, path, body)
-                HMAC = hmac.new(api_key, text, hashlib.sha512)
-                digest = base64.urlsafe_b64encode(HMAC.digest())
-                if equals(client_digest, digest):
-                    req.context['app'] = app
+                for api_key in (str(app['key']), str(app['secondary_key'])):
+                    # If username header is present, throw that into the hmac validation as well
                     if username_header:
-                        req.context['username'] = username_header
-                    return
-                else:
-                    if username_header:
-                        text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
+                        text = '%s %s %s %s %s' % (window, method, path, body, username_header)
                     else:
-                        text = '%s %s %s %s' % (window - 1, method, path, body)
+                        text = '%s %s %s %s' % (window, method, path, body)
                     HMAC = hmac.new(api_key, text, hashlib.sha512)
                     digest = base64.urlsafe_b64encode(HMAC.digest())
                     if equals(client_digest, digest):
                         req.context['app'] = app
                         if username_header:
                             req.context['username'] = username_header
+                        return
                     else:
+                        # Try again with window - 1
                         if username_header:
-                            logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                            text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
                         else:
-                            logger.warn('HMAC doesn\'t validate for app %s', app['name'])
-                        raise HTTPUnauthorized('Authentication failure', '', [])
+                            text = '%s %s %s %s' % (window - 1, method, path, body)
+                        HMAC = hmac.new(api_key, text, hashlib.sha512)
+                        digest = base64.urlsafe_b64encode(HMAC.digest())
+                        if equals(client_digest, digest):
+                            req.context['app'] = app
+                            if username_header:
+                                req.context['username'] = username_header
+                                return
+                # No successful HMACs match, fail auth.
+                if username_header:
+                    logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                else:
+                    logger.warn('HMAC doesn\'t validate for app %s', app['name'])
+                raise HTTPUnauthorized('Authentication failure', '', [])
 
             except (ValueError, KeyError):
                 logger.exception('Authentication failure')
@@ -2695,6 +2697,73 @@ class ApplicationKey(object):
         resp.body = ujson.dumps({'key': key})
 
 
+def generate_key():
+    return hashlib.sha256(os.urandom(32)).hexdigest()
+
+
+class ApplicationSecondaryKey(object):
+    allow_read_no_auth = False
+
+    def on_get(self, req, resp, app_name):
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to view this app\'s key')
+
+        with db.guarded_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to view this app\'s key.')
+
+            key = session.execute(
+                'SELECT `secondary_key` FROM `application` WHERE `name` = :app_name LIMIT 1',
+                {'app_name': app_name}).scalar()
+            session.close()
+
+        resp.body = ujson.dumps({'key': key})
+
+    def on_post(self, req, resp, app_name):
+        # Only admins and application owners can generate a secondary key
+        if not req.context['username']:
+            raise HTTPUnauthorized('You must be a logged in user to app')
+
+        with db.guarded_session() as session:
+            if not req.context['is_admin']:
+                has_permission = session.execute(
+                    '''SELECT 1
+                       FROM `application_owner`
+                       JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                       JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                       WHERE `target`.`name` = :username
+                       AND `application`.`name` = :app_name''',
+                    {'app_name': app_name, 'username': req.context['username']}).scalar()
+                if not has_permission:
+                    raise HTTPForbidden('You don\'t have permissions to re-key this app.')
+
+        data = {
+            'app_name': app_name,
+            'new_key': generate_key()
+        }
+
+        with db.guarded_session() as session:
+            affected = session.execute(
+                'UPDATE `application` SET `secondary_key` = :new_key WHERE `name` = :app_name AND `secondary_key` IS NULL',
+                data).rowcount
+            session.commit()
+            session.close()
+
+        if not affected:
+            raise HTTPBadRequest('Secondary key already exists, or app name incorrect')
+
+        resp.body = '[]'
+
+
 class ApplicationReKey(object):
     allow_read_no_auth = False
 
@@ -2718,19 +2787,21 @@ class ApplicationReKey(object):
 
         data = {
             'app_name': app_name,
-            'new_key': hashlib.sha256(os.urandom(32)).hexdigest()
+            'new_key': generate_key()
         }
 
         affected = False
         with db.guarded_session() as session:
+            # Promote secondary key to primary
             affected = session.execute(
-                'UPDATE `application` SET `key` = :new_key WHERE `name` = :app_name',
+                '''UPDATE `application` SET `key` = `secondary_key`, `secondary_key` = NULL
+                   WHERE `name` = :app_name AND `secondary_key` IS NOT NULL''',
                 data).rowcount
             session.commit()
             session.close()
 
         if not affected:
-            raise HTTPBadRequest('No rows changed; app name likely incorrect')
+            raise HTTPBadRequest('Re-key failed; secondary key does not exist or invalid app name')
 
         logger.info('Admin user %s has re-key\'d app %s', req.context['username'], app_name)
         resp.body = '[]'
@@ -4199,6 +4270,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/applications/{app_name}/stats', ApplicationStats())
     api.add_route('/v0/applications/{app_name}/key', ApplicationKey())
     api.add_route('/v0/applications/{app_name}/rekey', ApplicationReKey())
+    api.add_route('/v0/applications/{app_name}/secondary', ApplicationSecondaryKey())
     api.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
     api.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
     api.add_route('/v0/applications/{app_name}/plans', ApplicationPlans())

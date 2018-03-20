@@ -49,7 +49,58 @@ class TestAuth(falcon.testing.TestCase):
             resp.body = 'Hello world'
 
     def test_auth(self):
-        iris.cache.applications = {'app': {'key': 'key'}}
+        iris.cache.applications = {'app': {'key': 'key', 'secondary_key': None}}
+        api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
+        dummy = self.DummyResource()
+        api.add_route('/foo/bar', dummy)
+        self.api = api
+
+        window = int(time.time()) // 5
+        text = '%s %s %s %s' % (window, 'GET', '/foo/bar', '')
+        HMAC = hmac.new('key', text, hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest())
+        auth = 'hmac app:%s' % digest
+        result = self.simulate_get(path='/foo/bar', headers={'Authorization': auth})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, 'Hello world')
+
+        # Test query string
+        window = int(time.time()) // 5
+        text = '%s %s %s %s' % (window, 'GET', '/foo/bar?baz=123', '')
+        HMAC = hmac.new('key', text, hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest())
+        auth = 'hmac app:%s' % digest
+        result = self.simulate_get(path='/foo/bar', query_string='baz=123', headers={'Authorization': auth})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, 'Hello world')
+
+        # Test trailng slash
+        window = int(time.time()) // 5
+        text = '%s %s %s %s' % (window, 'GET', '/foo/bar/', '')
+        HMAC = hmac.new('key', text, hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest())
+        auth = 'hmac app:%s' % digest
+        result = self.simulate_get(path='/foo/bar/', headers={'Authorization': auth})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, 'Hello world')
+
+        # Test no auth header
+        result = self.simulate_get(path='/foo/bar')
+        self.assertEqual(result.status_code, 401)
+
+        # Test bad auth header
+        result = self.simulate_get(path='/foo/bar',
+                                   headers={'Authorization': 'foo' + auth})
+        self.assertEqual(result.status_code, 401)
+
+        # Test read only
+        dummy.allow_read_no_auth = True
+        result = self.simulate_get(path='/foo/bar')
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, 'Hello world')
+
+    def test_secondary_auth(self):
+        iris.cache.applications = {'app': {'key': 'asdf', 'secondary_key': 'key'}}
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)

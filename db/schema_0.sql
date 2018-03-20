@@ -35,6 +35,7 @@ CREATE TABLE `application` (
   `auth_only` tinyint(1) DEFAULT '0',
   `allow_other_app_incidents` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `allow_authenticating_users` tinyint(1) unsigned NOT NULL DEFAULT '0',
+  `secondary_key` varchar(64),
   PRIMARY KEY (`id`),
   UNIQUE KEY `name_idx` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

@@ -19,7 +19,7 @@ def cache_applications():
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
     cursor.execute('''SELECT `name`, `id`, `key`, `allow_other_app_incidents`,
-                             `allow_authenticating_users`
+                             `allow_authenticating_users`, `secondary_key`
                       FROM `application`''')
     apps = cursor.fetchall()
     new_applications = {}

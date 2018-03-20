@@ -2032,12 +2032,15 @@ iris = {
       applicationRenameButton: '#application-rename-button',
       applicationDeleteButton: '#application-delete-button',
       applicationRekeyButton: '#application-rekey-button',
+      applicationSecondaryKeyButton: '#application-secondary-key-button',
       showRenameModalButton: '#show-rename-modal-button',
       showDeleteModalButton: '#show-delete-modal-button',
       showRekeyModalButton: '#show-rekey-modal-button',
+      showSecondaryKeyModalButton: '#show-secondary-key-modal-button',
       removeVariableButton: '.remove-variable',
       removeOwnerButton: '.remove-owner',
       showApiKeyButton: '#show-api-key-button',
+      showSecondaryKeyButton: '#show-secondary-key-button',
       addVariableForm: '#add-variable-form',
       addOwnerForm: '#add-owner-form',
       addEmailIncidentForm: '#add-email-incident-form',
@@ -2068,10 +2071,13 @@ iris = {
       data.$page.on('click', data.showRenameModalButton, this.showRenameModal.bind(this));
       data.$page.on('click', data.showDeleteModalButton, this.showDeleteModal.bind(this));
       data.$page.on('click', data.showRekeyModalButton, this.showRekeyModal.bind(this));
+      data.$page.on('click', data.showSecondaryKeyModalButton, this.showSecondaryKeyModal.bind(this));
       data.$page.on('click', data.applicationRenameButton, this.renameApplication.bind(this));
       data.$page.on('click', data.applicationDeleteButton, this.deleteApplication.bind(this));
       data.$page.on('click', data.applicationRekeyButton, this.rekeyApplication.bind(this));
+      data.$page.on('click', data.applicationSecondaryKeyButton, this.genSecondaryKey.bind(this));
       data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
+      data.$page.on('click', data.showSecondaryKeyButton, this.showSecondaryKey.bind(this));
       data.$page.on('click', data.dangerousActionsToggle, this.toggleDangerousActions.bind(this));
       data.$page.on('click', data.removeVariableButton, function() {
         var variable = $(this).data('variable');
@@ -2245,6 +2251,20 @@ iris = {
         iris.createAlert('Unable to get key: ' + result.responseJSON.title);
       });
     },
+    showSecondaryKey: function() {
+      var self = this;
+      $(self.data.showSecondaryKeyButton).prop('disabled', true);
+      $.get('/v0/applications/' + self.data.application + '/secondary').done(function(result) {
+        self.data.model.secondaryKey = result.key;
+        if (result.key === null) {
+          self.data.model.secondaryKey = 'No secondary key exists'
+        }
+        self.modelPersist();
+        self.render();
+      }).fail(function(result) {
+        iris.createAlert('Unable to get key: ' + result.responseJSON.title);
+      });
+    },
     saveApplication: function() {
       var self = this, failedCheck = false;
       $('.application-settings').find('textarea').each(function(k, elem) {
@@ -2362,6 +2382,9 @@ iris = {
     showRekeyModal: function() {
       $('#rekey-app-modal').modal();
     },
+    showSecondaryKeyModal: function() {
+      $('#secondary-key-app-modal').modal();
+    },
     renameApplication: function() {
       var $nameBox = $('#app-new-name-box'),
           newName = $.trim($nameBox.val());
@@ -2422,6 +2445,23 @@ iris = {
         $('#rekey-app-modal').modal('hide');
         $('body').scrollTop(0);
         $rekeyBtn.prop('disabled', false);
+      });
+    },
+    genSecondaryKey: function() {
+      var $keyBtn = $(this.data.applicationRekeyButton);
+      $keyBtn.prop('disabled', true);
+      $.ajax({
+        url: '/v0/applications/' + this.data.application + '/secondary',
+        method: 'POST',
+        contentType: 'application/json'
+      }).done(function() {
+        iris.createAlert('Successfully generated secondary key', 'success')
+      }).fail(function(r) {
+        iris.createAlert('Failed to generate secondary key: ' + r.responseJSON['title'])
+      }).always(function() {
+        $('#secondary-key-app-modal').modal('hide');
+        $('body').scrollTop(0);
+        $keyBtn.prop('disabled', false);
       });
     },
     showLoader: function() {

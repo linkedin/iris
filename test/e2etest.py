@@ -2627,10 +2627,21 @@ def test_change_app_key(sample_application_name, sample_admin_user):
 
     re = requests.post(base_url + 'applications/%s/rekey' % 'fakeapp123', headers=username_header(sample_admin_user))
     assert re.status_code == 400
-    assert re.json()['title'] == 'No rows changed; app name likely incorrect'
+    assert re.json()['title'] == 'Re-key failed; secondary key does not exist or invalid app name'
+
+    re = requests.post(base_url + 'applications/%s/rekey' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Re-key failed; secondary key does not exist or invalid app name'
+
+    re = requests.post(base_url + 'applications/%s/secondary' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.get(base_url + 'applications/%s/secondary' % sample_application_name, headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    secondary_key = re.json()['key']
+    assert secondary_key
 
     re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
-    assert re.status_code == 200
     old_key = re.json()['key']
     assert old_key
 
@@ -2643,6 +2654,7 @@ def test_change_app_key(sample_application_name, sample_admin_user):
     assert new_key
 
     assert old_key != new_key
+    assert new_key == secondary_key
 
 
 def test_twilio_delivery_update(fake_message_id):
