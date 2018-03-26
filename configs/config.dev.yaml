@@ -5,6 +5,7 @@ server:
   host: 0.0.0.0
   port: 16649
   disable_auth: True # allow logins by existing users, but without checking credentials
+  local_api_url: http://localhost:16649
 
 db: &db
   conn:

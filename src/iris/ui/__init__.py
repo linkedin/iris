@@ -98,8 +98,8 @@ def get_flash(req):
 # are only retrievable by going through the API itself. Forge a request locally and keep the
 # beaker cookies so the current user can be authenticated. This will go away once each page
 # that makes use of window.appData is converted to use ajax for those values instead.
-def get_local(req, path):
-    return requests.get('http://127.0.0.1:16649/v0/%s' % path, cookies=req.cookies).json()
+def get_local_api(req, path):
+    return requests.get('%s/v0/%s' % (local_api_url, path), cookies=req.cookies).json()
 
 
 # Credit to Werkzeug for implementation
@@ -164,10 +164,10 @@ class Plan(object):
     def on_get(self, req, resp, plan):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('plan.html').render(request=req,
-                                                                target_roles=get_local(req, 'target_roles'),
-                                                                priorities=get_local(req, 'priorities'),
-                                                                templates=get_local(req, 'templates'),
-                                                                applications=get_local(req, 'applications'))
+                                                                target_roles=get_local_api(req, 'target_roles'),
+                                                                priorities=get_local_api(req, 'priorities'),
+                                                                templates=get_local_api(req, 'templates'),
+                                                                applications=get_local_api(req, 'applications'))
 
 
 class Incidents(object):
@@ -177,7 +177,7 @@ class Incidents(object):
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('incidents.html').render(request=req,
-                                                                     applications=get_local(req, 'applications'))
+                                                                     applications=get_local_api(req, 'applications'))
 
 
 class Incident(object):
@@ -196,8 +196,8 @@ class Messages(object):
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('messages.html').render(request=req,
-                                                                    applications=get_local(req, 'applications'),
-                                                                    priorities=get_local(req, 'priorities'))
+                                                                    applications=get_local_api(req, 'applications'),
+                                                                    priorities=get_local_api(req, 'priorities'))
 
 
 class Message(object):
@@ -225,8 +225,8 @@ class Template(object):
     def on_get(self, req, resp, template):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('template.html').render(request=req,
-                                                                    modes=get_local(req, 'modes'),
-                                                                    applications=get_local(req, 'applications'))
+                                                                    modes=get_local_api(req, 'modes'),
+                                                                    applications=get_local_api(req, 'applications'))
 
 
 class Applications(object):
@@ -236,7 +236,7 @@ class Applications(object):
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('applications.html').render(request=req,
-                                                                        applications=get_local(req, 'applications'))
+                                                                        applications=get_local_api(req, 'applications'))
 
 
 class Application(object):
@@ -246,9 +246,9 @@ class Application(object):
     def on_get(self, req, resp, application):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('application.html').render(request=req,
-                                                                       applications=get_local(req, 'applications'),
-                                                                       priorities=get_local(req, 'priorities'),
-                                                                       modes=get_local(req, 'modes') + ['drop'])
+                                                                       applications=get_local_api(req, 'applications'),
+                                                                       priorities=get_local_api(req, 'priorities'),
+                                                                       modes=get_local_api(req, 'modes') + ['drop'])
 
 
 class Login():
@@ -314,9 +314,9 @@ class User():
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('user.html').render(request=req,
-                                                                modes=get_local(req, 'modes'),
-                                                                priorities=get_local(req, 'priorities'),
-                                                                applications=get_local(req, 'applications'))
+                                                                modes=get_local_api(req, 'modes'),
+                                                                priorities=get_local_api(req, 'priorities'),
+                                                                applications=get_local_api(req, 'applications'))
 
 
 class JinjaValidate():
@@ -338,7 +338,7 @@ class JinjaValidate():
             resp.status = falcon.HTTP_400
             return
 
-        app_json = get_local(req, 'applications/%s' % application)
+        app_json = get_local_api(req, 'applications/%s' % application)
         sample_context_str = app_json.get('sample_context')
         if not sample_context_str:
             resp.body = ujson.dumps({'error': 'Missing sample_context from application config'})
@@ -392,12 +392,14 @@ class JinjaValidate():
 
 
 def init(config, app):
+    global local_api_url
     logger.info('Web asset root: "%s"', ui_root)
     auth_module = config.get('auth', {'module': 'iris.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
 
     debug = config['server'].get('disable_auth', False) is True
+    local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
 
     app.add_route('/static/bundles/{filename}', StaticResource('/static/bundles'))
     app.add_route('/static/images/{filename}', StaticResource('/static/images'))
