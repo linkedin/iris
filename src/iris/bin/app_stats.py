@@ -7,8 +7,8 @@ monkey.patch_all()  # NOQA
 import logging
 import os
 
-from iris import db, metrics
-from iris.api import load_config, ApplicationStats
+from iris import db, metrics, app_stats
+from iris.api import load_config
 
 # logging
 logger = logging.getLogger()
@@ -42,8 +42,10 @@ stats_reset = {
 
 def set_app_stats(app, stats, connection, cursor):
     for stat, val in stats.iteritems():
-        cursor.execute('''REPLACE INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
-                          VALUES (%s, %s, %s, NOW())''', (app['id'], stat, val))
+        cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
+                          VALUES (%s, %s, %s, NOW())
+                          ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
+                       (app['id'], stat, val, val))
         connection.commit()
 
 
@@ -54,7 +56,7 @@ def stats_task():
     applications = [{'id': row[0], 'name': row[1]} for row in cursor]
     for app in applications:
         try:
-            stats = ApplicationStats.calculate_app_stats(app, connection, cursor)
+            stats = app_stats.calculate_app_stats(app, connection, cursor)
             set_app_stats(app, stats, connection, cursor)
         except Exception:
             logger.exception('App stats calculation failed for app %s', app['name'])
@@ -71,7 +73,7 @@ def main():
     spawn(metrics.emit_forever)
 
     db.init(config)
-    while 1:
+    while True:
         logger.info('Starting app stats calculation loop')
         stats_task()
         logger.info('Waiting %d seconds until next iteration..', run_interval)

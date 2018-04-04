@@ -256,4 +256,3 @@ sync_script_nap_time: 3600 # wait time before syncing again
 #  activated: False
 #  devices_allowed_apps:
 #    - iris-relay
-
