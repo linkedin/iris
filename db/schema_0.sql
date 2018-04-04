@@ -736,6 +736,18 @@ CREATE TABLE `device` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 
+DROP TABLE IF EXISTS `application_stats`;
+CREATE TABLE `application_stats` (
+  `application_id` INT(11) NOT NULL,
+  `statistic` VARCHAR(255) NOT NULL,
+  `value` FLOAT NOT NULL,
+  `timestamp` DATETIME NOT NULL,
+  PRIMARY KEY (`application_id`, `statistic`),
+  CONSTRAINT `application_stats_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
