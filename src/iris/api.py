@@ -804,7 +804,7 @@ class AuthMiddleware(object):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
-                                return
+                            return
                 # No successful HMACs match, fail auth.
                 if username_header:
                     logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
