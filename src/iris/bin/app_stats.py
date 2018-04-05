@@ -42,11 +42,12 @@ stats_reset = {
 
 def set_app_stats(app, stats, connection, cursor):
     for stat, val in stats.iteritems():
-        cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
-                          VALUES (%s, %s, %s, NOW())
-                          ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
-                       (app['id'], stat, val, val))
-        connection.commit()
+        if val is not None:
+            cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
+                              VALUES (%s, %s, %s, NOW())
+                              ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
+                           (app['id'], stat, val, val))
+            connection.commit()
 
 
 def stats_task():
