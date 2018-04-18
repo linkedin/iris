@@ -12,7 +12,7 @@ class fcm(object):
     def __init__(self, config):
         self.config = config
         self.api_key = self.config.get('api_key')
-        self.notification = self.config.get('notification_title')
+        self.default_notification = self.config.get('notification_title')
         self.proxy = None
         if 'proxy' in self.config:
             host = self.config['proxy']['host']
@@ -36,10 +36,11 @@ class fcm(object):
         if registration_ids:
             try:
                 data_message = {'incident_id': message.get('incident_id')}
-                response = self.client.notify_multiple_devices(registration_ids=registration_ids,
-                                                               message_title=self.notification,
-                                                               message_body=message.get('subject', ''),
-                                                               data_message=data_message)
+                response = self.client.notify_multiple_devices(
+                    registration_ids=registration_ids,
+                    message_title=message.get('subject', self.default_notification),
+                    message_body=message.get('body', ''),
+                    data_message=data_message)
                 invalid_ids = []
                 for idx, result in enumerate(response['results']):
                     if result.get('error') == 'NotRegistered':
