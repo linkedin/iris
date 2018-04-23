@@ -22,6 +22,7 @@ from ldap.controls import SimplePagedResultsControl
 from ldap.filter import escape_filter_chars
 import time
 ldap_pagination_size = 1000
+ldap_timeout = None
 
 logging.getLogger('requests').setLevel(logging.WARNING)
 
@@ -304,7 +305,7 @@ def get_ldap_lists(l, search_strings, parent_list=None):
                              serverctrls=[req_ctrl],
                              attrlist=(search_strings['list_cn_field'], search_strings['list_name_field']),
                              filterstr=filterstr)
-        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, resp_ctrl_classes=known_ldap_resp_ctrls)
+        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
 
         results |= {(data[search_strings['list_cn_field']][0], data[search_strings['list_name_field']][0]) for (dn, data) in rdata}
 
@@ -335,7 +336,7 @@ def get_ldap_list_membership(l, search_strings, list_name):
                              attrlist=[search_strings['user_mail_field']],
                              filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
                              )
-        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, resp_ctrl_classes=known_ldap_resp_ctrls)
+        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
 
         results |= {data[1].get(search_strings['user_mail_field'], [None])[0] for data in rdata}
 
@@ -537,11 +538,14 @@ def sync_ldap_lists(ldap_settings, engine):
 
 
 def main():
+    global ldap_timeout
     config = load_config()
     metrics.init(config, 'iris-sync-targets', stats_reset)
 
+    default_ldap_timeout = 20
     default_nap_time = 3600
 
+    ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
     try:
         nap_time = int(config.get('sync_script_nap_time', default_nap_time))
     except ValueError:
