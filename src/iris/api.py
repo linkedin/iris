@@ -503,7 +503,7 @@ WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id
       `application_id` = (SELECT `id` from `application` WHERE `name` = :app)'''
 
 get_applications_query = '''SELECT
-    `id`, `name`, `context_template`, `sample_context`, `summary_template`
+    `id`, `name`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
 FROM `application`
 WHERE `auth_only` is False'''
 
