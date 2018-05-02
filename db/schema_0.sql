@@ -32,6 +32,7 @@ CREATE TABLE `application` (
   `context_template` text,
   `summary_template` text,
   `sample_context` text,
+  `mobile_template` text,
   `auth_only` tinyint(1) DEFAULT '0',
   `allow_other_app_incidents` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `allow_authenticating_users` tinyint(1) unsigned NOT NULL DEFAULT '0',
