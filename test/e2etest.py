@@ -1842,6 +1842,18 @@ def test_get_targets(sample_user, sample_user2, sample_team, sample_team2):
     assert sample_user in data
     assert sample_user2 not in data
 
+    re = requests.get(base_url + 'targets/user?name=' + sample_user)
+    data = re.json()
+    assert re.status_code == 200
+    assert sample_user in data
+    assert sample_user2 not in data
+
+    re = requests.get(base_url + 'targets/team?name=' + sample_team)
+    data = re.json()
+    assert re.status_code == 200
+    assert sample_team in data
+    assert sample_team2 not in data
+
 
 @pytest.mark.skip(reason="reanble this test when we can programatically create noc user in the test")
 def test_post_plan_noc(sample_user, sample_team, sample_application_name):

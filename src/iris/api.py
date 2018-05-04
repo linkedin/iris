@@ -2256,6 +2256,9 @@ class Target(object):
             req.params['startswith'] = req.params['startswith'] + '%'
             filters_sql.append('`name` like :startswith')
 
+        if 'name' in req.params:
+            filters_sql.append('`name` = :name')
+
         active = req.get_param_as_bool('active')
         if active is not None:
             req.params['active'] = active
