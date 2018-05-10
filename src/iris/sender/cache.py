@@ -191,7 +191,9 @@ class Plans():
         self.engine = engine
         self.active = {}
         self.data = {}
-        self.template_env = SandboxedEnvironment(autoescape=True)
+        # Autoescape turned off since HTML characters can exist in plan tracking template.
+        # See details in Templates()
+        self.template_env = SandboxedEnvironment(autoescape=False)
 
     def __getitem__(self, key):
         try:
