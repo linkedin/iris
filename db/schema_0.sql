@@ -729,10 +729,11 @@ CREATE TABLE `mailing_list_membership` (
 
 DROP TABLE IF EXISTS `device`;
 CREATE TABLE `device` (
-  `registration_id` VARCHAR(255) NOT NULL,
+  `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+  `registration_id` VARCHAR(255) NOT NULL UNIQUE,
   `user_id` BIGINT(20) NOT NULL,
   `platform` VARCHAR(255) NOT NULL,
-  PRIMARY KEY (`registration_id`),
+  PRIMARY KEY (`id`),
   CONSTRAINT `device_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
