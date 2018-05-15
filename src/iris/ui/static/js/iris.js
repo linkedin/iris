@@ -114,7 +114,8 @@ iris = {
     initFilters: function(){
       iris.typeahead.init('user');
       $('.datetimepicker').datetimepicker({
-        showClose: true
+        showClose: true,
+        keyBinds: {'delete': null}
       });
     }
   }, //end iris.plans
@@ -858,7 +859,8 @@ iris = {
     initFilters: function(){
       iris.typeahead.init('user');
       $('.datetimepicker').datetimepicker({
-        showClose: true
+        showClose: true,
+        keyBinds: {'delete': null}
       });
     }
   }, //end iris.templates
@@ -1351,7 +1353,8 @@ iris = {
       }
       iris.typeahead.init('user');
       $('.datetimepicker').datetimepicker({
-        showClose: true
+        showClose: true,
+        keyBinds: {'delete': null}
       });
     },
     claimIncident: function(e){
@@ -1533,7 +1536,8 @@ iris = {
       }
       iris.typeahead.init('user');
       $('.datetimepicker').datetimepicker({
-        showClose: true
+        showClose: true,
+        keyBinds: {'delete': null}
       });
       // $('#filter-start').data('DateTimePicker').date(moment().subtract(1, 'hours'));
     }
