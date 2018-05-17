@@ -390,7 +390,7 @@ iris = {
     deletePlan: function() {
       var $modal = $('#delete-plan-modal');
       $.ajax({
-          url: '/v0/plans/' + this.data.name,
+          url: '/v0/plans/' + this.data.id,
           method: 'DELETE'
       }).done(function() {
         window.onbeforeunload = null;
