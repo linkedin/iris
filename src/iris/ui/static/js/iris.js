@@ -2271,7 +2271,7 @@ iris = {
         var $elem = $(elem), field = $elem.data('field'), val = $elem.val();
         self.data.model[field] = val;
         $elem.removeClass('invalid-input');
-        if (field == 'context_template' || field == 'summary_template') {
+        if (field == 'context_template' || field == 'summary_template' || field == 'mobile_template') {
           try {
             Handlebars.compile(val)({})
           } catch (e) {
