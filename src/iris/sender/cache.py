@@ -405,6 +405,7 @@ class RoleTargets():
 
             if names is None:
                 logger.info('All role lookups modules failed to lookup %s:%s', role, target)
+                self.data[(role, target)] = None
                 return None
 
             names = self.prune_inactive_targets(names)
