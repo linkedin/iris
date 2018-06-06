@@ -2347,6 +2347,9 @@ class Application(object):
             if 'summary_template' not in data:
                 raise HTTPBadRequest('summary_template must be specified')
 
+            if 'mobile_template' not in data:
+                raise HTTPBadRequest('mobile_template must be specified')
+
             new_variables = data.get('variables')
             if not isinstance(new_variables, list):
                 raise HTTPBadRequest('variables must be specified and be a list')
@@ -2533,6 +2536,7 @@ class Application(object):
                 '''UPDATE `application`
                    SET `context_template` = :context_template,
                        `summary_template` = :summary_template,
+                       `mobile_template` = :mobile_template,
                        `sample_context` = :sample_context
                    WHERE `id` = :application_id LIMIT 1''',
                 data)
