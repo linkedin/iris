@@ -810,7 +810,7 @@ class AuthMiddleware(object):
                 if username_header:
                     logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
                 else:
-                    logger.warn('HMAC doesn\'t validate for app %s', app['name'])
+                    logger.warn('HMAC doesn\'t validate for app %s; %s doesn\'t match "%s"', app['name'], client_digest, text)
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
             except (ValueError, KeyError):
