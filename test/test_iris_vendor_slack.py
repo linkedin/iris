@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 
 from iris.vendors.iris_slack import iris_slack
-import ujson as json
 
 
 def test_atttachments_construction_for_incident():
@@ -27,7 +26,7 @@ def test_atttachments_construction_for_incident():
     assert msg_payload['channel'] == '@user1'
 
     attachments = msg_payload['attachments']
-    assert json.loads(attachments) == [{
+    assert attachments == [{
         'fallback': 'foo fallback',
         'pretext': 'foo pretext',
         'title': 'Iris incident %r' % fake_msg['incident_id'],

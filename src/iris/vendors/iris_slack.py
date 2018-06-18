@@ -68,7 +68,7 @@ class iris_slack(object):
                 }
             ]
         }
-        return ujson.dumps([att_json])
+        return [att_json]
 
     def get_message_payload(self, message):
         slack_message = {
@@ -95,17 +95,27 @@ class iris_slack(object):
         payload = self.get_message_payload(message)
         try:
             response = requests.post(self.config['base_url'],
-                                     data=payload,
+                                     data=ujson.dumps(payload),
                                      proxies=self.proxy,
                                      timeout=self.timeout)
             if response.status_code == 200:
-                data = response.json()
-                if data['ok']:
-                    return time.time() - start
-                # If message is invalid:
-                #   {u'ok': False, u'error': u'invalid_arg_name'}
-                logger.error('Received an error from slack api: %s',
-                             data['error'])
+                try:
+                    data = response.json()
+                    if data['ok']:
+                        return time.time() - start
+                    # If message is invalid:
+                    #   {u'ok': False, u'error': u'invalid_arg_name'}
+                    logger.error('Received an error from slack api: %s',
+                                 data['error'])
+                except Exception:
+                    # Mattermost compatibility
+                    data = response.text
+                    if data == 'ok':
+                        return time.time() - start
+                    # If message is invalid:
+                    #   {u'ok': False, u'error': u'invalid_arg_name'}
+                    logger.error('Received an error from slack api: %s',
+                                 data['error'])
             else:
                 logger.error('Failed to send message to slack: %d',
                              response.status_code)
