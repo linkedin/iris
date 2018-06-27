@@ -1328,15 +1328,16 @@ class Incidents(object):
         req.params.pop('target', None)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields)
+        if target:
+            query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
         if target:
-            where.append('''`incident`.`id` IN (
-                SELECT `incident_id`
-                FROM `message`
-                JOIN `target` ON `message`.`target_id`=`target`.`id`
+            where.append('''`message`.`target_id` IN
+                (SELECT `id`
+                FROM `target`
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
