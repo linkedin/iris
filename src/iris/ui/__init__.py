@@ -431,7 +431,8 @@ def init(config, app):
         'session.encrypt_key': config['user_session']['encrypt_key'],
         'session.validate_key': config['user_session']['sign_key'],
         'session.secure': not (config['server'].get('disable_auth', False) or config['server'].get('allow_http', False)),
-        'session.httponly': True
+        'session.httponly': True,
+        'session.crypto_type': 'cryptography'
     }
     app = SessionMiddleware(app, session_opts)
 
