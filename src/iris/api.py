@@ -610,6 +610,13 @@ def is_valid_tracking_settings(t, k, tpl):
     else:
         if t not in cache.modes:
             return False, 'Unknown tracking type: %s' % t
+
+    environment = SandboxedEnvironment()
+    for app in tpl:
+        try:
+            environment.from_string(tpl[app]['body'])          
+        except Exception as e:
+                return False, 'Invalid jinja syntax in incident tracking text dy html: %s' % e
     return True, None
 
 
@@ -2062,6 +2069,8 @@ class Templates(object):
         except Exception:
             logger.exception('SERVER ERROR')
             raise
+
+        
 
         with db.guarded_session() as session:
             template_id = session.execute(
