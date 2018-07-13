@@ -2070,8 +2070,6 @@ class Templates(object):
             logger.exception('SERVER ERROR')
             raise
 
-        
-
         with db.guarded_session() as session:
             template_id = session.execute(
                 '''INSERT INTO `template` (`name`, `created`, `user_id`)
