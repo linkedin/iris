@@ -614,7 +614,7 @@ def is_valid_tracking_settings(t, k, tpl):
     environment = SandboxedEnvironment()
     for app in tpl:
         try:
-            environment.from_string(tpl[app]['body'])          
+            environment.from_string(tpl[app]['body'])
         except Exception as e:
                 return False, 'Invalid jinja syntax in incident tracking text dy html: %s' % e
     return True, None
