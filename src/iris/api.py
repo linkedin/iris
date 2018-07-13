@@ -593,19 +593,19 @@ def is_valid_tracking_settings(t, k, tpl):
 
             try:
                 environment.from_string(tpl[app]['email_subject'])
-            except Exception as e:
+            except jinja2.TemplateSyntaxError as e:
                 return False, 'Invalid jinja syntax in subject: %s' % e
 
             try:
                 environment.from_string(tpl[app]['email_text'])
-            except Exception as e:
+            except jinja2.TemplateSyntaxError as e:
                 return False, 'Invalid jinja syntax in body: %s' % e
 
             email_html = tpl[app].get('email_html')
             if email_html is not None:
                 try:
                     environment.from_string(email_html)
-                except Exception as e:
+                except jinja2.TemplateSyntaxError as e:
                     return False, 'Invalid jinja syntax in email html: %s' % e
     else:
         if t not in cache.modes:
@@ -615,8 +615,8 @@ def is_valid_tracking_settings(t, k, tpl):
         for app in tpl:
             try:
                 environment.from_string(tpl[app]['body'])
-            except Exception as e:
-                    return False, 'Invalid jinja syntax in incident tracking text dy html: %s' % e
+            except jinja2.TemplateSyntaxError as e:
+                    return False, 'Invalid jinja syntax in incident tracking text: %s' % e
     return True, None
 
 
