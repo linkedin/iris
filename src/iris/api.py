@@ -3790,42 +3790,62 @@ class TwilioDeliveryUpdate(object):
             raise HTTPBadRequest('Invalid keys in payload')
 
         affected = False
-        with db.guarded_session() as session:
-            affected = session.execute(
-                '''UPDATE `twilio_delivery_status`
-                   SET `status` = :status
-                   WHERE `twilio_sid` = :sid''',
-                {'sid': sid, 'status': status}).rowcount
-            session.commit()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        try:
+            max_retries = 3
+            for i in xrange(max_retries):
+                try:
+                    affected = cursor.execute(
+                        '''UPDATE `twilio_delivery_status`
+                           SET `status` = %(status)s
+                           WHERE `twilio_sid` = %(sid)s''',
+                        {'sid': sid, 'status': status})
+                    connection.commit()
+                    break
+                except Exception:
+                    logger.exception('Failed running Twilio status query. (Try %s/%s)', i + 1, max_retries)
+                    sleep(.2)
 
             if status == 'failed':
-                msg_id = session.execute(
+                cursor.execute(
                     '''SELECT message_id
                        FROM `twilio_delivery_status`
-                       WHERE `twilio_sid` = :sid''',
-                    {'sid': sid}).scalar()
+                       WHERE `twilio_sid` = %(sid)s''',
+                    {'sid': sid})
+                msg_id = cursor.fetchone()
                 if msg_id is None:
                     raise HTTPBadRequest('No message id found for SID')
-                is_retry = session.execute(
+                msg_id = msg_id[0]
+                cursor.execute(
                     '''SELECT EXISTS(SELECT 1 FROM `twilio_retry`
-                                     WHERE `retry_id` = :msg_id)''', {'msg_id': msg_id}).scalar()
+                                     WHERE `retry_id` = %(msg_id)s)''', {'msg_id': msg_id})
+                is_retry = cursor.fetchone()[0]
                 # Don't retry messages that are already a retry
                 if not is_retry:
-                    retry_id = session.execute(
+                    cursor.execute(
                         '''INSERT INTO `message` (`created`, `incident_id`, `application_id`,
                                                   `target_id`, `priority_id`, `body`)
                            SELECT NOW(), `incident_id`, `application_id`, `target_id`, `priority_id`, `body`
-                           FROM `message` WHERE `id` = :msg_id
+                           FROM `message` WHERE `id` = %(msg_id)s
                         ''',
                         {'msg_id': msg_id}
-                    ).lastrowid
-                    session.execute(
+                    )
+                    retry_id = cursor.lastrowid
+                    cursor.execute(
                         '''INSERT INTO `twilio_retry` (`message_id`, `retry_id`)
-                           VALUES (:msg_id, :retry_id)
+                           VALUES (%(msg_id)s, %(retry_id)s)
                         ''',
                         {'msg_id': msg_id, 'retry_id': retry_id})
-                    session.commit()
-            session.close()
+                    connection.commit()
+            cursor.close()
+        except Exception:
+            msg = 'Failed to update Twilio delivery status'
+            logger.exception(msg)
+            raise HTTPBadRequest(msg, msg)
+        finally:
+            cursor.close()
+            connection.close()
 
         if not affected:
             logger.warn('No rows changed when updating delivery status for twilio sid: %s', sid)
