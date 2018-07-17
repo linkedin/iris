@@ -72,7 +72,8 @@ class iris_slack(object):
 
     def get_message_payload(self, message):
         slack_message = {
-            'text': '[%s] %s' % (message.get('application', 'unknown app'),
+            # Display application if exists, otherwise it's an incident tracking message
+            'text': '[%s] %s' % (message.get('application', 'Iris incident'),
                                  message['body']),
             'token': self.config['auth_token'],
             'channel': self.get_destination(message['destination'])
