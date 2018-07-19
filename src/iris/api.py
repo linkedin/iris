@@ -185,7 +185,7 @@ incident_filter_types = {
     'current_step': int,
 }
 
-incident_query = '''SELECT %s FROM `incident`
+incident_query = '''SELECT DISTINCT %s FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
