@@ -152,7 +152,7 @@ message_audit_log_query = '''SELECT `id`, `date`, `old`, `new`, `change_type`, `
                              ORDER BY `date` DESC'''
 
 incident_columns = {
-    'id': '`incident`.`id` as `id`',
+    'id': 'DISTINCT `incident`.`id` as `id`',
     'plan': '`plan`.`name` as `plan`',
     'plan_id': '`incident`.`plan_id` as `plan_id`',
     'active': '`incident`.`active` as `active`',
