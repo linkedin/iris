@@ -3106,7 +3106,7 @@ class Applications(object):
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(get_applications_query)
+        cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
         apps = cursor.fetchall()
         for app in apps:
             cursor.execute(get_vars_query, app['id'])
