@@ -389,7 +389,10 @@ def deactivate():
                 connection.commit()
                 break
         except Exception:
-            logger.exception('Failed running deactivate query. (Try %s/%s)', i + 1, max_retries)
+            if i == max_retries - 1:
+                logger.exception('Failed running deactivate query. (Try %s/%s)', i + 1, max_retries)
+            else:
+                logger.warn('Deadlocked running deactivate query. (Try %s/%s)', i + 1, max_retries)
             sleep(.2)
 
     cursor.close()
@@ -518,26 +521,18 @@ def aggregate(now):
     # see if it's time to send the batches
     logger.info('[-] start aggregate task - queued: %s', len(messages))
     start_aggregations = time.time()
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT `id` FROM `message` WHERE active=1')
+    all_actives = {r[0] for r in cursor}
+    cursor.close()
+    connection.close()
     for key in queues.keys():
         aggregation_window = cache.plans[key[0]]['aggregation_window']
         if now - sent.get(key, 0) >= aggregation_window:
             aggregated_message_ids = queues[key]
-
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute('SELECT `id` FROM `message` WHERE active=1 AND `id` in %s', [aggregated_message_ids])
-            active_message_ids = {r[0] for r in cursor}
-            cursor.close()
-            connection.close()
-
-            inactive_message_ids = aggregated_message_ids - active_message_ids
+            active_message_ids = aggregated_message_ids & all_actives
             l = len(active_message_ids)
-            logger.info('[x] dropped %s messages from claimed incidents, %s remain for %r',
-                        len(inactive_message_ids), l, key)
-
-            # remove inactive message from the queue
-            for message_id in inactive_message_ids:
-                messages.pop(message_id, None)
 
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
@@ -558,6 +553,14 @@ def aggregate(now):
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now
+    inactive_message_ids = set(messages.keys()) - all_actives
+    logger.info('[x] dropped %s inactive messages from claimed incidents, %s remain',
+                len(inactive_message_ids), len(messages))
+
+    # remove inactive message from the queue
+    for message_id in inactive_message_ids:
+        messages.pop(message_id, None)
+
     metrics.set('aggregations', time.time() - start_aggregations)
     logger.info('[*] aggregate task finished - queued: %s', len(messages))
 
@@ -915,7 +918,10 @@ def mark_message_as_sent(message):
             logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
             break
         except Exception:
-            logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
+            if i == max_retries - 1:
+                logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
+            else:
+                logger.warn('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
             sleep(.2)
 
     # Clean messages cache
@@ -948,8 +954,10 @@ def mark_message_as_sent(message):
             logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
             break
         except Exception:
-            logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
-            break
+            if i == max_retries - 1:
+                logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
+            else:
+                logger.warn('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
             sleep(.2)
 
     cursor.close()
