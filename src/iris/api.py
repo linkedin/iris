@@ -1340,6 +1340,8 @@ class Incidents(object):
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
+        if not (where or query_limit):
+            raise HTTPBadRequest('Incident query too broad, add filter or limit')
         sql_values = []
         if target:
             where.append('''`message`.`target_id` IN
@@ -1761,6 +1763,8 @@ class Messages(object):
         query = message_query % ', '.join(message_columns[f] % escaped_params for f in fields)
 
         where = gen_where_filter_clause(connection, message_filters, message_filter_types, req.params)
+        if not (where or query_limit):
+            raise HTTPBadRequest('Message query too broad, add limit or filter')
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
 
