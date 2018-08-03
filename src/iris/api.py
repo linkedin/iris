@@ -1340,8 +1340,6 @@ class Incidents(object):
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
-        if not (where or query_limit):
-            raise HTTPBadRequest('Incident query too broad, add filter or limit')
         sql_values = []
         if target:
             where.append('''`message`.`target_id` IN
@@ -1350,6 +1348,8 @@ class Incidents(object):
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
+        if not (where or query_limit):
+            raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
         if query_limit is not None:
