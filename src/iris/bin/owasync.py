@@ -194,7 +194,7 @@ def main():
         UseProxyHttpAdapter._my_proxies = proxies
         exchangelib.protocol.BaseProtocol.HTTP_ADAPTER_CLS = UseProxyHttpAdapter
 
-    creds = exchangelib.Credentials(**owaconfig['credentials'])
+    creds = exchangelib.ServiceAccount(**owaconfig['credentials'])
 
     try:
         nap_time = int(owaconfig.get('sleep_interval', 60))
