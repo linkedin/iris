@@ -30,29 +30,38 @@ def validate_msg_id(msg_id):
 
 
 def parse_response(response, mode, source):
+    claim_all = False
+    claim_last = False
     if response.lower().startswith('f'):
         return None, 'Sincerest apologies'
+    # One-letter shortcuts for claim all/last
+    elif re.match('^a\s*$', response, re.IGNORECASE):
+        claim_all = True
+    elif re.match('^l\s*$', response, re.IGNORECASE):
+        claim_last = True
 
-    halves = response.split(None, 1)
+    # Skip message splitting for single-letter responses
+    if not (claim_all or claim_last):
+        halves = response.split(None, 1)
 
-    # $id cmd (args..)
-    cmd = halves[1].split()[0].lower()
-    msg_id = halves[0]
-    if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
-        return msg_id, cmd
+        # $id cmd (args..)
+        cmd = halves[1].split()[0].lower()
+        msg_id = halves[0]
+        if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
+            return msg_id, cmd
 
-    # cmd $id (args..)
-    cmd = halves[0].lower()
-    msg_id = halves[1].split(None, 1)
-    if len(msg_id) == 1:
-        args = []
-    else:
-        args = msg_id[1:]
-    msg_id = msg_id[0]
-    if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
-        return msg_id, ' '.join([cmd] + args)
+        # cmd $id (args..)
+        cmd = halves[0].lower()
+        msg_id = halves[1].split(None, 1)
+        if len(msg_id) == 1:
+            args = []
+        else:
+            args = msg_id[1:]
+        msg_id = msg_id[0]
+        if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
+            return msg_id, ' '.join([cmd] + args)
 
-    if re.match('claim\s+last', response, re.IGNORECASE):
+    if claim_last or re.match('claim\s+last', response, re.IGNORECASE):
         target_name = lookup_username_from_contact(mode, source)
         if not target_name:
             logger.error('Failed resolving %s:%s to target name', mode, source)
@@ -74,7 +83,7 @@ def parse_response(response, mode, source):
         msg_id = ret[0] if ret else None
         return msg_id, 'claim'
 
-    elif re.match('claim\s+all', response, re.IGNORECASE):
+    elif claim_all or re.match('claim\s+all', response, re.IGNORECASE):
         target_name = lookup_username_from_contact(mode, source)
         if not target_name:
             logger.error('Failed resolving %s:%s to target name', mode, source)
