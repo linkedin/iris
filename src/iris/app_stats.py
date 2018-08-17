@@ -135,7 +135,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
     return stats
 
 
-def calculate_gobal_stats(connection, cursor, fields_filter=None):
+def calculate_global_stats(connection, cursor, fields_filter=None):
 
     queries = {
         'total_plans': 'SELECT COUNT(*) FROM `plan`',
