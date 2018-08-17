@@ -4014,6 +4014,7 @@ class Stats(object):
             stats = app_stats.calculate_gobal_stats(connection, cursor, fields_filter=fields_filter)
 
         else:
+            # select the most current global stats entry
             query = '''
                 SELECT `median_seconds_to_claim_last_month`, `total_incidents_today`, `total_active_users`, `total_plans`, `total_messages_sent`,
                 `total_applications`, `pct_incidents_claimed_last_month`, `total_incidents`, `total_messages_sent_today`, `timestamp`
@@ -4021,6 +4022,10 @@ class Stats(object):
                 WHERE `timestamp` = (SELECT MAX(`timestamp`) from `global_stats` gs2 WHERE gs2.`timestamp` = gs1.`timestamp`)
             '''
             cursor.execute(query)
+
+            if cursor.rowcount == 0:
+                logger.error('Error retrieving global stats from db')
+                raise HTTPInternalServerError('Error retrieving global stats from db')
 
             # build dictionary of stat names and values
             desc = cursor.description
