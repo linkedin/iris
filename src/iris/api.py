@@ -4016,6 +4016,7 @@ class Stats(object):
         cursor = connection.cursor()
         if self.real_time:
             stats = app_stats.calculate_gobal_stats(connection, cursor, fields_filter=fields_filter)
+
         else:
             query = '''
                 SELECT `median_seconds_to_claim_last_month`, `total_incidents_today`, `total_active_users`, `total_plans`, `total_messages_sent`,
