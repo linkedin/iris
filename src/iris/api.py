@@ -15,7 +15,6 @@ import os
 import datetime
 import logging
 import jinja2
-import itertools
 from jinja2.sandbox import SandboxedEnvironment
 from urlparse import parse_qs
 import ujson
