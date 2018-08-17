@@ -53,7 +53,7 @@ required_quota_keys = frozenset(['hard_quota_threshold', 'soft_quota_threshold',
 quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
                   'hard_quota_duration', 'soft_quota_duration', 'wait_time')
 
-soft_quota_notification_interval = 600
+soft_quota_notification_interval = 1800
 
 
 class ApplicationQuota(object):
