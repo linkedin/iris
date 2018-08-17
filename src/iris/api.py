@@ -4014,7 +4014,11 @@ class Stats(object):
 
         else:
             cursor.execute('SELECT `statistic`, `value` FROM `global_stats`')
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving global stats from db')
+                raise HTTPInternalServerError('Error retrieving global stats from db')
             stats = {row[0]: row[1] for row in cursor}
+
         cursor.close()
         connection.close()
         resp.status = HTTP_200
@@ -4046,6 +4050,10 @@ class ApplicationStats(object):
         else:
             cursor.execute('''SELECT `statistic`, `value` FROM `application_stats` WHERE `application_id` = %s''',
                            app['id'])
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving app stats from db')
+                raise HTTPInternalServerError('Error retrieving app stats from db')
+
             stats = {row[0]: row[1] for row in cursor}
         cursor.close()
         connection.close()
