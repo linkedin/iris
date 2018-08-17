@@ -42,15 +42,16 @@ stats_reset = {
 
 def set_global_stats(stats, connection, cursor):
 
-    m_s_t_c_l_m = stats['median_seconds_to_claim_last_month']
-    t_i_t = stats['total_incidents_today']
-    t_a_u = stats['total_active_users']
-    t_p = stats['total_plans']
-    t_m_s = stats['total_messages_sent']
-    t_a = stats['total_applications']
-    p_i_c_l_m = stats['pct_incidents_claimed_last_month']
-    t_i = stats['total_incidents']
-    t_m_s_t = stats['total_messages_sent_today']
+    query_args = []
+    query_args.append(stats['median_seconds_to_claim_last_month'])
+    query_args.append(stats['total_incidents_today'])
+    query_args.append(stats['total_active_users'])
+    query_args.append(stats['total_plans'])
+    query_args.append(stats['total_messages_sent'])
+    query_args.append(stats['total_applications'])
+    query_args.append(stats['pct_incidents_claimed_last_month'])
+    query_args.append(stats['total_incidents'])
+    query_args.append(stats['total_messages_sent_today'])
 
     query = '''
         INSERT INTO `global_stats`
@@ -59,7 +60,7 @@ def set_global_stats(stats, connection, cursor):
         VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
     '''
 
-    cursor.execute(query, (m_s_t_c_l_m, t_i_t, t_a_u, t_p, t_m_s, t_a, p_i_c_l_m, t_i, t_m_s_t))
+    cursor.execute(query, query_args)
     connection.commit()
 
 
