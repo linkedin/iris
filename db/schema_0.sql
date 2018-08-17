@@ -751,18 +751,10 @@ CREATE TABLE `application_stats` (
 
 DROP TABLE IF EXISTS `global_stats`;
 CREATE TABLE `global_stats` (
-  `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
-  `median_seconds_to_claim_last_month` FLOAT,
-  `total_incidents_today` BIGINT(20),
-  `total_active_users` BIGINT(20),
-  `total_plans` BIGINT(20),
-  `total_messages_sent` BIGINT(20),
-  `total_applications` BIGINT(20),
-  `pct_incidents_claimed_last_month` FLOAT,
-  `total_incidents` BIGINT(20),
-  `total_messages_sent_today` BIGINT(20),
+  `statistic` VARCHAR(255) NOT NULL,
+  `value` FLOAT NOT NULL,
   `timestamp` DATETIME NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`statistic`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 
