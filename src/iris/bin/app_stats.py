@@ -40,6 +40,30 @@ stats_reset = {
 }
 
 
+def set_global_stats(stats, connection, cursor):
+
+    query_args = []
+    query_args.append(stats['median_seconds_to_claim_last_month'])
+    query_args.append(stats['total_incidents_today'])
+    query_args.append(stats['total_active_users'])
+    query_args.append(stats['total_plans'])
+    query_args.append(stats['total_messages_sent'])
+    query_args.append(stats['total_applications'])
+    query_args.append(stats['pct_incidents_claimed_last_month'])
+    query_args.append(stats['total_incidents'])
+    query_args.append(stats['total_messages_sent_today'])
+
+    query = '''
+        INSERT INTO `global_stats`
+        (`median_seconds_to_claim_last_month`, `total_incidents_today`, `total_active_users`, `total_plans`, `total_messages_sent`,
+        `total_applications`, `pct_incidents_claimed_last_month`, `total_incidents`, `total_messages_sent_today`, `timestamp`)
+        VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    '''
+
+    cursor.execute(query, query_args)
+    connection.commit()
+
+
 def set_app_stats(app, stats, connection, cursor):
     for stat, val in stats.iteritems():
         if val is not None:
@@ -62,6 +86,13 @@ def stats_task():
         except Exception:
             logger.exception('App stats calculation failed for app %s', app['name'])
             metrics.incr('task_failure')
+    try:
+        stats = app_stats.calculate_gobal_stats(connection, cursor)
+        set_global_stats(stats, connection, cursor)
+    except Exception:
+        logger.exception('Global stats calculation failed')
+        metrics.incr('task_failure')
+
     cursor.close()
     connection.close()
 
