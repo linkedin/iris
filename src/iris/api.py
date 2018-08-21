@@ -1334,7 +1334,7 @@ class Incidents(object):
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
 
-        query = incident_query % ', '.join(incident_columns[f] for f in fields)
+        query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
         if target:
             query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
@@ -1652,6 +1652,39 @@ class Incident(object):
         resp.body = ujson.dumps({'incident_id': incident_id,
                                  'owner': owner,
                                  'active': is_active})
+
+
+class ClaimIncidents(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp):
+        params = ujson.loads(req.context['body'])
+        try:
+            owner = params['owner']
+            incident_ids = params['incident_ids']
+        except KeyError:
+            raise HTTPBadRequest('Missing owner or incident_ids fields')
+        if owner is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid claim: no matching owner')
+        claimed, unclaimed = utils.claim_bulk_incidents(incident_ids, owner)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'owner': owner,
+                                 'claimed': claimed,
+                                 'unclaimed': unclaimed})
 
 
 class Message(object):
@@ -4139,6 +4172,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/incidents/{incident_id}', Incident())
     api.add_route('/v0/incidents', Incidents())
+    api.add_route('/v0/incidents/claim', ClaimIncidents())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())

@@ -1257,13 +1257,20 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     re = requests.get(base_url + 'incidents/%s' % re.content.strip())
     assert re.status_code == 200
 
+    # Test claiming incident
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
-        'plan': sample_user + '-test-incident-post',
-        'context': {},
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+
+    # Test claim via batch endpoint
+    re = requests.post(base_url + 'incidents/claim', json={
+        'owner': sample_user,
+        'incident_ids': [incident_id]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'claimed': [incident_id], 'unclaimed': []}
 
     # Invalid claim owner
     re = requests.post(base_url + 'incidents/%d' % incident_id, json={
