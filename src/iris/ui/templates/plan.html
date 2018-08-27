@@ -298,6 +298,10 @@
     <li class="striped plan-step clearfix" draggable="true" data-mode="edit">
       <div class="remove-step light"> X </div>
   {{/if}}
+    <div class="plan-step-time">
+      Step time:<br>
+      <span class="step-time">1</span> minutes
+    </div>
   {{#each .}}
     {{>plan-notification}}
   {{/each}}
@@ -321,8 +325,8 @@
       <p class="item-content dynamic-index" title="{{ dynamic_index }}" ><label class="item-label light" data-toggle="tooltip" title="Dynamic target number">Target No.</label> {{ dynamic_index }}</p>
     {{/isEqual}}
     <p class="item-content" title="{{ priority }}"><label class="item-label light" data-html="true" data-toggle="tooltip" title="Type of notification sent. Defaults: <br /> Urgent - Phone Call <br /> High - SMS <br /> Medium - Email <br /> Low - Email <br /> ( These can be changed in the settings page )">Priority</label> {{ priority }}</p>
-    <p class="item-content" title="{{ secondsToMinutes wait }}"><label class="item-label light" data-toggle="tooltip" title="Minimum time that must elapse before repeating or moving onto the next escalation step.">Wait</label> {{ secondsToMinutes wait }} minutes</p>
-    <p class="item-content" title="{{ count }}"><label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label> {{ count }} times</p>
+    <p class="item-content notification-wait" title="{{ secondsToMinutes wait }}"><label class="item-label light" data-toggle="tooltip" title="Minimum time that must elapse before repeating or moving onto the next escalation step.">Wait</label> {{ secondsToMinutes wait }} minutes</p>
+    <p class="item-content notification-count" title="{{ count }}"><label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label> {{ count }} times</p>
     <p class="item-content" title="{{ template }}"><label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label> <a href="/templates/{{template}}">{{ template }}</a></p>
   </div>
 {{else}}
@@ -357,11 +361,11 @@
     </p>
     <p>
       <label class="item-label light" data-toggle="tooltip" title="Time to wait before repeating or moving onto the next escalation step">Wait</label>
-      <input type="text" class="form-control border-bottom" placeholder="Wait minutes" data-type="wait" data-default="true" value="{{ secondsToMinutes wait}}">
+      <input type="text" class="form-control border-bottom notification-wait" placeholder="Wait minutes" data-type="wait" data-default="true" value="{{ secondsToMinutes wait}}">
     </p>
     <p>
       <label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label>
-      <input type="number" class="form-control border-bottom" placeholder="# of times" data-type="count" value="{{count}}" min="1">
+      <input type="number" class="form-control border-bottom notification-count" placeholder="# of times" data-type="count" value="{{count}}" min="1">
     </p>
     <p>
       <label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label>
