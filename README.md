@@ -14,7 +14,7 @@ Setup database
 1. import dummy data: `mysql -u USER -p -o iris < ./db/dummy_data.sql`
 
 `dummy_data.sql` contains the following entities:
-  * user `demo`
+  * user `demo` with password `demo`
   * team `demo_team`
   * application `Autoalerts` with key: `a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49`
 
