@@ -2869,6 +2869,9 @@ iris = {
       }
       return accum;
     });
+    Handlebars.registerHelper('regex', function (val, regex) {
+      return (new RegExp(regex).test(val))
+    })
   } //end registerHandlebarHelpers
 }; //end iris
 
