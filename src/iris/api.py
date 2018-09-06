@@ -619,7 +619,7 @@ def is_valid_tracking_settings(t, k, tpl):
             try:
                 environment.from_string(tpl[app]['body'])
             except jinja2.TemplateSyntaxError as e:
-                    return False, 'Invalid jinja syntax in incident tracking text: %s' % e
+                return False, 'Invalid jinja syntax in incident tracking text: %s' % e
     return True, None
 
 
@@ -1474,7 +1474,7 @@ class Incidents(object):
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
-                                           for variable in app['variables']})
+                                            for variable in app['variables']})
             if len(context_json_str) > 65535:
                 raise HTTPBadRequest('Context too long')
 
