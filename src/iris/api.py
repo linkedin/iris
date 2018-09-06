@@ -2304,6 +2304,10 @@ class Target(object):
         if 'name' in req.params:
             filters_sql.append('`name` = :name')
 
+        if 'name__in' in req.params:
+            req.params['name__in'] = req.get_param_as_list('name__in')
+            filters_sql.append('`name` IN :name__in')
+
         active = req.get_param_as_bool('active')
         if active is not None:
             req.params['active'] = active
