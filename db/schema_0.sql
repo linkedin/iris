@@ -749,6 +749,14 @@ CREATE TABLE `application_stats` (
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `global_stats`;
+CREATE TABLE `global_stats` (
+  `statistic` VARCHAR(255) NOT NULL,
+  `value` FLOAT NOT NULL,
+  `timestamp` DATETIME NOT NULL,
+  PRIMARY KEY (`statistic`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

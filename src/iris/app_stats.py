@@ -133,3 +133,62 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
         if count_stat not in stats:
             stats[count_stat] = 0
     return stats
+
+
+def calculate_global_stats(connection, cursor, fields_filter=None):
+
+    queries = {
+        'total_plans': 'SELECT COUNT(*) FROM `plan`',
+        'total_incidents': 'SELECT COUNT(*) FROM `incident`',
+        'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
+        'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
+        'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
+        'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
+        'pct_incidents_claimed_last_month': '''SELECT ROUND(
+                                                (SELECT COUNT(*) FROM `incident`
+                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                AND `active` = FALSE
+                                                AND NOT isnull(`owner_id`)) /
+                                                (SELECT COUNT(*) FROM `incident`
+                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
+        'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
+                                                                            FROM `incident`
+                                                                            WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                            AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                            AND `active` = FALSE
+                                                                            AND NOT ISNULL(`owner_id`)
+                                                                            AND NOT ISNULL(`updated`)),
+                                                        @row_id := 0,
+                                                        (SELECT CEIL(AVG(time_to_claim)) as median
+                                                        FROM (SELECT `updated` - `created` as time_to_claim
+                                                                FROM `incident`
+                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
+                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                AND `active` = FALSE
+                                                                AND NOT ISNULL(`owner_id`)
+                                                                AND NOT ISNULL(`updated`)
+                                                                ORDER BY time_to_claim) as time_to_claim
+                                                        WHERE (SELECT @row_id := @row_id + 1)
+                                                        BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
+        'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE'
+    }
+
+    stats = {}
+    fields = queries.viewkeys()
+    if fields_filter:
+        fields &= set(fields_filter)
+
+    for key in fields:
+        start = time.time()
+        cursor.execute(queries[key])
+        result = cursor.fetchone()
+        if result:
+            result = result[-1]
+        else:
+            result = None
+        logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
+        stats[key] = result
+
+    return stats

@@ -3,6 +3,7 @@
 
 from time import time
 from gevent import spawn, sleep
+from gevent.lock import Semaphore
 from collections import deque
 from datetime import datetime
 import iris.cache
@@ -53,7 +54,7 @@ required_quota_keys = frozenset(['hard_quota_threshold', 'soft_quota_threshold',
 quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
                   'hard_quota_duration', 'soft_quota_duration', 'wait_time')
 
-soft_quota_notification_interval = 600
+soft_quota_notification_interval = 1800
 
 
 class ApplicationQuota(object):
@@ -74,7 +75,9 @@ class ApplicationQuota(object):
 
         self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
         self.last_incidents = {}  # application: (incident_id, time())
+        self.last_incidents_mutex = Semaphore()
         self.last_soft_quota_notification_time = {}  # application: time()
+        self.last_soft_quota_notification_time_mutex = Semaphore()
         metrics.add_new_metrics({'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0})
         spawn(self.refresh)
 
@@ -160,7 +163,8 @@ class ApplicationQuota(object):
 
         if hard_quota_usage > hard_limit:
             metrics.incr('quota_hard_exceed_cnt')
-            self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
+            with self.last_incidents_mutex:
+                self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
             return False
 
         # If soft limit breached, just notify owner and still send
@@ -173,7 +177,8 @@ class ApplicationQuota(object):
 
         if soft_quota_usage > soft_limit:
             metrics.incr('quota_soft_exceed_cnt')
-            self.notify_target(application, soft_limit, len(soft_buckets), *target)
+            with self.last_soft_quota_notification_time_mutex:
+                self.notify_target(application, soft_limit, len(soft_buckets), *target)
             return True
 
         return True

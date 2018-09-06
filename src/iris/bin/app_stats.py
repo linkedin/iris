@@ -40,6 +40,16 @@ stats_reset = {
 }
 
 
+def set_global_stats(stats, connection, cursor):
+    for stat, val in stats.iteritems():
+        if val is not None:
+            cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
+                              VALUES (%s, %s, NOW())
+                              ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
+                           (stat, val, val))
+            connection.commit()
+
+
 def set_app_stats(app, stats, connection, cursor):
     for stat, val in stats.iteritems():
         if val is not None:
@@ -62,6 +72,13 @@ def stats_task():
         except Exception:
             logger.exception('App stats calculation failed for app %s', app['name'])
             metrics.incr('task_failure')
+    try:
+        stats = app_stats.calculate_global_stats(connection, cursor)
+        set_global_stats(stats, connection, cursor)
+    except Exception:
+        logger.exception('Global stats calculation failed')
+        metrics.incr('task_failure')
+
     cursor.close()
     connection.close()
 

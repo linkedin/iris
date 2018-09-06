@@ -616,7 +616,7 @@ def is_valid_tracking_settings(t, k, tpl):
             try:
                 environment.from_string(tpl[app]['body'])
             except jinja2.TemplateSyntaxError as e:
-                    return False, 'Invalid jinja syntax in incident tracking text: %s' % e
+                return False, 'Invalid jinja syntax in incident tracking text: %s' % e
     return True, None
 
 
@@ -1347,7 +1347,7 @@ class Incidents(object):
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
 
-        query = incident_query % ', '.join(incident_columns[f] for f in fields)
+        query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
         if target:
             query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
@@ -1482,7 +1482,7 @@ class Incidents(object):
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
-                                           for variable in app['variables']})
+                                            for variable in app['variables']})
             if len(context_json_str) > 65535:
                 raise HTTPBadRequest('Context too long')
 
@@ -1667,6 +1667,39 @@ class Incident(object):
         resp.body = ujson.dumps({'incident_id': incident_id,
                                  'owner': owner,
                                  'active': is_active})
+
+
+class ClaimIncidents(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp):
+        params = ujson.loads(req.context['body'])
+        try:
+            owner = params['owner']
+            incident_ids = params['incident_ids']
+        except KeyError:
+            raise HTTPBadRequest('Missing owner or incident_ids fields')
+        if owner is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid claim: no matching owner')
+        claimed, unclaimed = utils.claim_bulk_incidents(incident_ids, owner)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'owner': owner,
+                                 'claimed': claimed,
+                                 'unclaimed': unclaimed})
 
 
 class Message(object):
@@ -1961,39 +1994,39 @@ class Template(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
-            if template_id.isdigit():
-                where = 'WHERE `template`.`id` = %s'
-            else:
-                where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
-            query = single_template_query + where
+        if template_id.isdigit():
+            where = 'WHERE `template`.`id` = %s'
+        else:
+            where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
+        query = single_template_query + where
 
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute(query, template_id)
-            results = cursor.fetchall()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(query, template_id)
+        results = cursor.fetchall()
 
-            if results:
-                r = results[0]
-                t = {
-                    'id': r[0],
-                    'name': r[1],
-                    'active': r[2],
-                    'creator': r[3],
-                    'created': r[4]
-                }
-                content = {}
-                for r in results:
-                    content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
-                t['content'] = content
-                cursor = connection.cursor(db.dict_cursor)
-                cursor.execute(single_template_query_plans, t['name'])
-                t['plans'] = cursor.fetchall()
-                connection.close()
-                payload = ujson.dumps(t)
-            else:
-                raise HTTPNotFound()
-            resp.status = HTTP_200
-            resp.body = payload
+        if results:
+            r = results[0]
+            t = {
+                'id': r[0],
+                'name': r[1],
+                'active': r[2],
+                'creator': r[3],
+                'created': r[4]
+            }
+            content = {}
+            for r in results:
+                content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
+            t['content'] = content
+            cursor = connection.cursor(db.dict_cursor)
+            cursor.execute(single_template_query_plans, t['name'])
+            t['plans'] = cursor.fetchall()
+            connection.close()
+            payload = ujson.dumps(t)
+        else:
+            raise HTTPNotFound()
+        resp.status = HTTP_200
+        resp.body = payload
 
     def on_post(self, req, resp, template_id):
         template_params = ujson.loads(req.context['body'])
@@ -4020,69 +4053,31 @@ class Healthcheck(object):
 class Stats(object):
     allow_read_no_auth = True
 
-    def on_get(self, req, resp):
-        queries = {
-            'total_plans': 'SELECT COUNT(*) FROM `plan`',
-            'total_incidents': 'SELECT COUNT(*) FROM `incident`',
-            'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
-            'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
-            'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
-            'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
-            'pct_incidents_claimed_last_month': '''SELECT ROUND(
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                    AND `active` = FALSE
-                                                    AND NOT isnull(`owner_id`)) /
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
-            'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
-                                                                                FROM `incident`
-                                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                                AND `active` = FALSE
-                                                                                AND NOT ISNULL(`owner_id`)
-                                                                                AND NOT ISNULL(`updated`)),
-                                                            @row_id := 0,
-                                                            (SELECT CEIL(AVG(time_to_claim)) as median
-                                                            FROM (SELECT `updated` - `created` as time_to_claim
-                                                                  FROM `incident`
-                                                                  WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                  AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                  AND `active` = FALSE
-                                                                  AND NOT ISNULL(`owner_id`)
-                                                                  AND NOT ISNULL(`updated`)
-                                                                  ORDER BY time_to_claim) as time_to_claim
-                                                            WHERE (SELECT @row_id := @row_id + 1)
-                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
-            'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE'
-        }
+    def __init__(self, config):
+        cfg = config.get('app-stats', {})
+        # Calculate stats in real time (True), or query offline stats
+        # generated by the app stats daemon (False)
+        self.real_time = cfg.get('real_time', True)
 
-        stats = {}
+    def on_get(self, req, resp):
 
         fields_filter = req.get_param_as_list('fields')
-        fields = queries.viewkeys()
-        if fields_filter:
-            fields &= set(fields_filter)
-
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
-        for key in fields:
-            start = time.time()
-            cursor.execute(queries[key])
-            result = cursor.fetchone()
-            if result:
-                result = result[-1]
-            else:
-                result = None
-            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
-            stats[key] = result
+        if self.real_time:
+            stats = app_stats.calculate_global_stats(connection, cursor, fields_filter=fields_filter)
+
+        else:
+            cursor.execute('SELECT `statistic`, `value` FROM `global_stats`')
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving global stats from db')
+                raise HTTPInternalServerError('Error retrieving global stats from db')
+            stats = {row[0]: row[1] for row in cursor}
+
         cursor.close()
         connection.close()
-
         resp.status = HTTP_200
-        resp.body = ujson.dumps(stats)
+        resp.body = ujson.dumps(stats, sort_keys=True)
 
 
 class ApplicationStats(object):
@@ -4110,6 +4105,10 @@ class ApplicationStats(object):
         else:
             cursor.execute('''SELECT `statistic`, `value` FROM `application_stats` WHERE `application_id` = %s''',
                            app['id'])
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving app stats from db')
+                raise HTTPInternalServerError('Error retrieving app stats from db')
+
             stats = {row[0]: row[1] for row in cursor}
         cursor.close()
         connection.close()
@@ -4191,6 +4190,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/incidents/{incident_id}', Incident())
     api.add_route('/v0/incidents', Incidents())
+    api.add_route('/v0/incidents/claim', ClaimIncidents())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
@@ -4242,7 +4242,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     if mobile_config.get('activated'):
         api.add_route('/v0/devices', Devices(mobile_config))
 
-    api.add_route('/v0/stats', Stats())
+    api.add_route('/v0/stats', Stats(config))
 
     api.add_route('/v0/timezones', SupportedTimezones(supported_timezones))
 

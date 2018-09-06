@@ -507,6 +507,15 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
         'Body': 'claim all'
     }
 
+    sms_claim_all_body_2 = {
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'a'
+    }
+
     email_claim_all_payload = {
         'body': 'claim all',
         'headers': [
@@ -578,7 +587,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     assert re.status_code == 200
     assert re.json()['active'] == 0
 
-    # Verify SMS with two incidents from different apps
+    # Verify SMS with two incidents from different apps, using one-letter response
     incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
     assert incident_id_1
 
@@ -594,7 +603,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     assert re.json()['active'] == 1
 
     # Response will be two lines, one for each application and its claimed incidents
-    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body_2)
     assert re.status_code == 200
     assert set(re.json()['app_response'].splitlines()) == {'%s: Iris Incidents claimed (1): %s' % (sample_application_name, incident_id_1),
                                                            '%s: Iris Incidents claimed (1): %s' % (sample_application_name2, incident_id_2)}
@@ -671,7 +680,7 @@ def test_api_response_claim_last(sample_user, sample_phone, sample_application_n
     assert re.json()['active'] == 1
 
     data = {
-        'body': 'claim last',
+        'body': 'l',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},
@@ -1248,6 +1257,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     re = requests.get(base_url + 'incidents/%s' % re.content.strip())
     assert re.status_code == 200
 
+    # Test claiming incident
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
         'plan': sample_user + '-test-incident-post',
@@ -1255,6 +1265,14 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+
+    # Test claim via batch endpoint
+    re = requests.post(base_url + 'incidents/claim', json={
+        'owner': sample_user,
+        'incident_ids': [incident_id]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'claimed': [incident_id], 'unclaimed': []}
 
     # Invalid claim owner
     re = requests.post(base_url + 'incidents/%d' % incident_id, json={
