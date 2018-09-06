@@ -893,6 +893,17 @@ class ACLMiddleware(object):
         req.context['user_settings'] = settings
 
 
+def acl_allowed(req, username):
+    '''
+    Helper for checking ACLs for a given username when username is not included in params.
+    Allow if the username matches the session user, if an app is using an API key and is
+    allowed to authenticate users, or if the user is an admin.
+    '''
+    return req.context['username'] == username or \
+        req.context.get('app', {}).get('allow_authenticating_users') or \
+        req.context['is_admin']
+
+
 class Plan(object):
     allow_read_no_auth = True
 
@@ -1221,11 +1232,13 @@ class Plans(object):
 
         if not plan_name:
             raise HTTPBadRequest('Invalid plan', 'Empty plan name')
-
         if plan_name.isdigit():
             raise HTTPBadRequest('Invalid plan', 'Plan name cannot be a number')
 
-        # FIXME: catch creator not exist error
+        if not plan_params.get('creator'):
+            raise HTTPBadRequest('Invalid plan', 'Plan must specify a creator')
+        if not acl_allowed(req, plan_params['creator']):
+            raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
 
         tracking_key = plan_params.get('tracking_key')
         tracking_type = plan_params.get('tracking_type')
@@ -1631,6 +1644,8 @@ class Incident(object):
             raise HTTPBadRequest('"owner" field required')
 
         if owner is not None:
+            if not acl_allowed(req, owner):
+                raise HTTPUnauthorized('Invalid claimer for this app/user')
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
             cursor.execute(
@@ -2055,6 +2070,9 @@ class Templates(object):
             if 'creator' not in template_params:
                 raise HTTPBadRequest('creator argument missing')
 
+            if not acl_allowed(req, template_params['creator']):
+                raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
+
             content = template_params.pop('content')
             contents = []
             template_env = SandboxedEnvironment(autoescape=True)
@@ -2069,7 +2087,7 @@ class Templates(object):
                         logger.exception('Invalid jinja syntax')
                         raise HTTPBadRequest('Invalid jinja template', str(e))
                     contents.append(_content)
-        except HTTPBadRequest:
+        except HTTPBadRequest, HTTPUnauthorized:
             raise
         except Exception:
             logger.exception('SERVER ERROR')
