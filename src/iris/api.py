@@ -1374,33 +1374,47 @@ class Incidents(object):
     def on_post(self, req, resp):
         '''
         Create incidents. Id for the new incident will be returned.
+
         **Example request**:
+
         .. sourcecode:: http
+
            POST /v0/incidents HTTP/1.1
            Content-Type: application/json
+
            {
                "plan": "test-plan",
                "context": {"number": 1, "str": "hello"}
            }
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 201 Created
            Content-Type: application/json
+
            1
+
         :statuscode 201: incident created
         :statuscode 400: invalid request
         :statuscode 404: plan not found
         :statuscode 401: application is not allowed to create incident for other application
+
         A request is considered invalid if:
+
         - plan name is missing
         - application is invalid
         - context json blob is longer than 655355 bytes
         - none of the templates used in the plan supports the given application
+
         To create an incident for a dynamic plan (one that defines dynamic targets), an
         additional `dynamic_targets` field must be passed along with the plan and context.
         Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
         `dynamic_targets` parameter should take the following form:
+
         .. sourcecode:: json
+
             [
                 {
                     "role": "user",
@@ -1411,6 +1425,7 @@ class Incidents(object):
                     "target": "team-foo"
                 }
             ]
+
         This will map target 0 to the user "jdoe", and target 1 to the team "team-foo".
         '''
         incident_params = ujson.loads(req.context['body'])
@@ -1459,7 +1474,7 @@ class Incidents(object):
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
-                                            for variable in app['variables']})
+                                           for variable in app['variables']})
             if len(context_json_str) > 65535:
                 raise HTTPBadRequest('Context too long')
 
@@ -1517,13 +1532,20 @@ class Incident(object):
     def on_get(self, req, resp, incident_id):
         '''
         Get incident by ID.
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/incident/1 HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            {
                "updated": 1492057026,
                "plan_id": 48271,
@@ -1575,22 +1597,31 @@ class Incident(object):
         '''
         Claim incidents by incident id. Deactivates the incident and
         any associated messages, preventing further escalation.
+
         **Example request**:
+
         .. sourcecode:: http
+
            POST /v0/incidents/123 HTTP/1.1
            Content-Type: application/json
+
            {
                "owner": "jdoe"
            }
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            {
                "incident_id": "123",
                "owner": "jdoe",
                "active": false
            }
+
         '''
         try:
             incident_id = int(incident_id)
@@ -1667,13 +1698,20 @@ class Message(object):
     def on_get(self, req, resp, message_id):
         '''
         Get information for an iris message by id
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/messages/{message_id} HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            {
               "body": "message body",
               "incident_id": 2590447,
@@ -1710,13 +1748,20 @@ class MessageAuditLog(object):
     def on_get(self, req, resp, message_id):
         '''
         Get a message's log of changes
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/messages/{message_id}/auditlog HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            [
              {
                "old": "sms",
@@ -1790,12 +1835,17 @@ class Notifications(object):
         Create out of band notifications. Notification is ad-hoc message that's
         not tied to an incident. To achieve real-time delivery, notifications
         are not persisted in the Database.
+
         You can set the priority key to honor target's priority preference or
         set the mode key to force the message transport.
+
         **Example request**:
+
         .. sourcecode:: http
+
            POST /v0/notifications HTTP/1.1
            Content-Type: application/json
+
            {
                "role": "secondary-oncall",
                "target": "test_oncall_team",
@@ -1803,9 +1853,12 @@ class Notifications(object):
                "body": "something is on fire",
                "priority": "high"
            }
+
         .. sourcecode:: http
+
            POST /v0/notifications HTTP/1.1
            Content-Type: application/json
+
            {
                "role": "user",
                "target": "test_user",
@@ -1813,15 +1866,22 @@ class Notifications(object):
                "body": "something is on fire",
                "mode": "email"
            }
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            []
+
         :statuscode 200: notification send request queued
         :statuscode 400: invalid request
         :statuscode 401: application is not allowed to create out of band notification
+
         A request is considered invalid if:
+
         - either target, subject or role is missing
         - both priority and mode are missing
         - invalid priority, mode
@@ -1924,39 +1984,39 @@ class Template(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
-        if template_id.isdigit():
-            where = 'WHERE `template`.`id` = %s'
-        else:
-            where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
-        query = single_template_query + where
+            if template_id.isdigit():
+                where = 'WHERE `template`.`id` = %s'
+            else:
+                where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
+            query = single_template_query + where
 
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor()
-        cursor.execute(query, template_id)
-        results = cursor.fetchall()
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(query, template_id)
+            results = cursor.fetchall()
 
-        if results:
-            r = results[0]
-            t = {
-                'id': r[0],
-                'name': r[1],
-                'active': r[2],
-                'creator': r[3],
-                'created': r[4]
-            }
-            content = {}
-            for r in results:
-                content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
-            t['content'] = content
-            cursor = connection.cursor(db.dict_cursor)
-            cursor.execute(single_template_query_plans, t['name'])
-            t['plans'] = cursor.fetchall()
-            connection.close()
-            payload = ujson.dumps(t)
-        else:
-            raise HTTPNotFound()
-        resp.status = HTTP_200
-        resp.body = payload
+            if results:
+                r = results[0]
+                t = {
+                    'id': r[0],
+                    'name': r[1],
+                    'active': r[2],
+                    'creator': r[3],
+                    'created': r[4]
+                }
+                content = {}
+                for r in results:
+                    content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
+                t['content'] = content
+                cursor = connection.cursor(db.dict_cursor)
+                cursor.execute(single_template_query_plans, t['name'])
+                t['plans'] = cursor.fetchall()
+                connection.close()
+                payload = ujson.dumps(t)
+            else:
+                raise HTTPNotFound()
+            resp.status = HTTP_200
+            resp.body = payload
 
     def on_post(self, req, resp, template_id):
         template_params = ujson.loads(req.context['body'])
@@ -2176,13 +2236,20 @@ class TargetRoles(object):
     def on_get(self, req, resp):
         '''
         Target role fetch endpoint.
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/target_roles HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            [
                {
                    "name": "user",
@@ -2804,13 +2871,20 @@ class ApplicationEmailIncidents(object):
     def on_get(self, req, resp, app_name):
         '''
         Get email addresses which will create incidents on behalf of this application
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/applications/{app_name}/incident_emails HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            {
              "incident@fakeemail.cde": "page_oncall_plan",
              "audit@fakeemail.abc": "audit_plan"
@@ -3006,13 +3080,20 @@ class ApplicationPlans(object):
         Search endpoint for active plans that support a given app.
         A plan supports an app if one of its steps uses a template
         that defines content for that application.
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/applications/app-foo/plans?name__contains=bar& HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            [
                {
                    "description": "This is plan bar",
@@ -3147,13 +3228,20 @@ class Modes(object):
     def on_get(self, req, resp):
         '''
         List all iris modes
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/modes HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            ["sms", "email", "slack", "call"]
         '''
         connection = db.engine.raw_connection()
@@ -3419,14 +3507,19 @@ class ResponseMixin(object):
     def handle_user_response(self, mode, msg_id, source, content):
         '''
         Take action against the parsed user response form utils.parse_response().
+
         If the action involves claiming an incident (either one incident, or all
         using 'claim all'), run the appropriate plugin for that app on the user response,
         and update the user's response in the DB.
+
         Return the message generated by the plugin to the user, in the form of
+
         .. sourcecode::
             tuple (app_name, message_to_return)
+
         There are some special cases. If the msg_id is None and content is a string,
         that special string is returned to the user rather than any plugins being run.
+
         '''
         def validate_app(app):
             if not app:
@@ -3879,13 +3972,20 @@ class ReprioritizationMode(object):
     def on_delete(self, req, resp, username, src_mode_name):
         '''
         Delete a reprioritization mode for a user's mode setting
+
         **Example request**:
+
         .. sourcecode:: http
+
            DELETE /v0/users/reprioritization/{username}/{src_mode_name} HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: application/json
+
            []
         '''
         with db.guarded_session() as session:
@@ -3911,13 +4011,20 @@ class Healthcheck(object):
     def on_get(self, req, resp):
         '''
         Healthcheck endpoint. Returns contents of healthcheck file.
+
         **Example request**:
+
         .. sourcecode:: http
+
            GET /v0/healthcheck HTTP/1.1
+
         **Example response**:
+
         .. sourcecode:: http
+
            HTTP/1.1 200 OK
            Content-Type: text/plain
+
            GOOD
         '''
         try:
