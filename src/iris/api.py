@@ -1984,39 +1984,39 @@ class Template(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
-            if template_id.isdigit():
-                where = 'WHERE `template`.`id` = %s'
-            else:
-                where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
-            query = single_template_query + where
+        if template_id.isdigit():
+            where = 'WHERE `template`.`id` = %s'
+        else:
+            where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
+        query = single_template_query + where
 
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute(query, template_id)
-            results = cursor.fetchall()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(query, template_id)
+        results = cursor.fetchall()
 
-            if results:
-                r = results[0]
-                t = {
-                    'id': r[0],
-                    'name': r[1],
-                    'active': r[2],
-                    'creator': r[3],
-                    'created': r[4]
-                }
-                content = {}
-                for r in results:
-                    content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
-                t['content'] = content
-                cursor = connection.cursor(db.dict_cursor)
-                cursor.execute(single_template_query_plans, t['name'])
-                t['plans'] = cursor.fetchall()
-                connection.close()
-                payload = ujson.dumps(t)
-            else:
-                raise HTTPNotFound()
-            resp.status = HTTP_200
-            resp.body = payload
+        if results:
+            r = results[0]
+            t = {
+                'id': r[0],
+                'name': r[1],
+                'active': r[2],
+                'creator': r[3],
+                'created': r[4]
+            }
+            content = {}
+            for r in results:
+                content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
+            t['content'] = content
+            cursor = connection.cursor(db.dict_cursor)
+            cursor.execute(single_template_query_plans, t['name'])
+            t['plans'] = cursor.fetchall()
+            connection.close()
+            payload = ujson.dumps(t)
+        else:
+            raise HTTPNotFound()
+        resp.status = HTTP_200
+        resp.body = payload
 
     def on_post(self, req, resp, template_id):
         template_params = ujson.loads(req.context['body'])
