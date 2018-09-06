@@ -303,6 +303,11 @@ def create_messages(incident_id, plan_notification_id):
     body = ''
 
     if not names:
+
+        # if message is optional don't bother the creator, simply return true instead
+        if plan_notification['optional']:
+            return True
+
         # Try to get creator of the plan and nag them instead
         metrics.incr('role_target_lookup_error')
         name = None
