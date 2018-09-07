@@ -1261,6 +1261,13 @@ class Plans(object):
         }
 
         dynamic_indices = set()
+
+        # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
+        for (i, step) in enumerate(plan_params['steps']):
+            for (j, notification) in enumerate(step):
+                if 'optional' not in notification:
+                    plan_params['steps'][i][j]['optional'] = 0
+
         for steps in plan_params['steps']:
             for step in steps:
                 if 'dynamic_index' in step:
