@@ -376,7 +376,7 @@ insert_plan_step_query = '''INSERT INTO `plan_notification` (
 )'''
 
 insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
-    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `optional`, dynamic_index`
+    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`, `optional`
 ) VALUES (
     :plan_id,
     :step,
@@ -384,8 +384,8 @@ insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
     :template,
     :repeat,
     :wait,
-    :optional,
-    :dynamic_index
+    :dynamic_index,
+    :optional
 )'''
 
 reprioritization_setting_query = '''SELECT
