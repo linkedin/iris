@@ -154,6 +154,8 @@ iris = {
       trackingTemplateBtn: '#tracking-notification[data-view="false"] .tracking-inner h4',
       variablesTemplateSource: $('#variables-template').html(),
       appSelect: '.template-application',
+      countInput: '.notification-count',
+      waitInput: '.notification-wait',
       template: null,
       ajaxResponse: null,
       submitModel: {},
@@ -244,7 +246,34 @@ iris = {
       data.$page.on('change', data.appSelect, this.renderVariables.bind(this));
       data.$page.on('change', data.testPlanInputs, this.updateTestPlanValues);
       data.$page.on('change', data.toggleDynamic, this.toggleDynamicTargets);
+      data.$page.on('change', data.waitInput, this.updateStepTimes.bind(this))
+      data.$page.on('change', data.countInput, this.updateStepTimes.bind(this))
       window.onbeforeunload = iris.unloadDialog.bind(this);
+    },
+    updateStepTimes: function() {
+      var self = this;
+      $('.step-time').each(function(_, element) {
+        self.updateStepTime(element)
+      });
+    },
+    updateStepTime: function(element) {
+      var $element = $(element),
+          waits = [],
+          stepTime;
+
+      $element.parent().siblings('.plan-notification').each(function(_, n) {
+        var $n = $(n);
+        if ($n.attr('data-mode') === 'view') {
+          waits.push($n.children('.notification-wait')[0].title * $n.children('.notification-count')[0].title);
+        } else {
+          waits.push($n.find('.notification-wait')[0].value * $n.find('.notification-count')[0].value);
+        }
+      })
+      stepTime = Math.min.apply(null, waits);
+      if (stepTime === 0) {
+        stepTime = 1;
+      }
+      $element.text(stepTime);
     },
     getPlan: function(plan){
       var self = this,
@@ -302,6 +331,7 @@ iris = {
             self.data.$page.html(template(response));
             self.loadVersionSelect();
             iris.changeTitle('Plan ' + response.name);
+            self.updateStepTimes()
           }).fail(function(){
             iris.createAlert('"' + plan +'" plan not found. <a href="/plans/new">Create a new plan.</a>');
           });
@@ -329,6 +359,7 @@ iris = {
       response.target_roles = window.appData.target_roles;
       response.applications = window.appData.applications;
       this.data.$page.html(this.data.template(response));
+      this.updateStepTimes();
       iris.typeahead.init();
     },
     testPlanModal: function() {
@@ -2869,6 +2900,9 @@ iris = {
       }
       return accum;
     });
+    Handlebars.registerHelper('regex', function (val, regex) {
+      return (new RegExp(regex).test(val))
+    })
   } //end registerHandlebarHelpers
 }; //end iris
 

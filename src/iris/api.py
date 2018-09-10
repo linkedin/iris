@@ -818,7 +818,7 @@ class AuthMiddleware(object):
                     logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
                 else:
                     logger.warn('HMAC doesn\'t validate for app %s; %s doesn\'t match "%s"', app['name'], client_digest, text)
-                raise HTTPUnauthorized('Authentication failure', '', [])
+                raise HTTPUnauthorized('Authentication failure', 'HMAC failed validation. Check API key/clock skew', [])
 
             except (ValueError, KeyError):
                 logger.exception('Authentication failure')
@@ -826,7 +826,7 @@ class AuthMiddleware(object):
 
         else:
             logger.warn('Request has malformed/missing HMAC authorization header')
-            raise HTTPUnauthorized('Authentication failure', '', [])
+            raise HTTPUnauthorized('Authentication failure', 'Malformed/missing HMAC authorization header', [])
 
 
 class ACLMiddleware(object):
@@ -2321,6 +2321,10 @@ class Target(object):
 
         if 'name' in req.params:
             filters_sql.append('`name` = :name')
+
+        if 'name__in' in req.params:
+            req.params['name__in'] = req.get_param_as_list('name__in')
+            filters_sql.append('`name` IN :name__in')
 
         active = req.get_param_as_bool('active')
         if active is not None:
