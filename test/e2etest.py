@@ -897,7 +897,6 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "wait": 300,
                     "repeat": 1,
                     "template": sample_template_name,
-                    "optional": 0
                 },
                 {
                     "role": "team",
@@ -906,7 +905,6 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "wait": 600,
                     "repeat": 0,
                     "template": sample_template_name,
-                    "optional": 0
                 },
             ]
         ],
@@ -1019,7 +1017,6 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "wait": 600,
                     "repeat": 0,
                     "template": sample_template_name,
-                    "optional": 0
                 },
                 {
                     "dynamic_index": 1,
@@ -1027,7 +1024,6 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "wait": 300,
                     "repeat": 1,
                     "template": sample_template_name,
-                    "optional": 0
                 },
             ],
             [
@@ -1037,7 +1033,6 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "wait": 300,
                     "repeat": 1,
                     "template": sample_template_name,
-                    "optional": 0
                 },
                 {
                     "dynamic_index": 1,
@@ -1045,7 +1040,6 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "wait": 600,
                     "repeat": 0,
                     "template": sample_template_name,
-                    "optional": 0
                 },
             ]
         ],
