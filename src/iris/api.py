@@ -1279,8 +1279,7 @@ class Plans(object):
                     step['plan_id'] = plan_id
                     step['step'] = index
                     # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
-                    if 'optional' not in step:
-                        step['optional'] = 0
+                    step.setdefault('optional', 0)
 
                     priority = cache.priorities.get(step['priority'])
                     role = cache.target_roles.get(step.get('role'))
