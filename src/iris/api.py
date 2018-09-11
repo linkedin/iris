@@ -278,6 +278,7 @@ single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
     `plan_notification`.`step` as `step`,
     `plan_notification`.`repeat` as `repeat`,
     `plan_notification`.`wait` as `wait`,
+    `plan_notification`.`optional` as `optional`,
     `target_role`.`name` as `role`,
     `target`.`name` as `target`,
     `plan_notification`.`template` as `template`,
@@ -359,7 +360,7 @@ insert_plan_query = '''INSERT INTO `plan` (
 )'''
 
 insert_plan_step_query = '''INSERT INTO `plan_notification` (
-    `plan_id`, `step`, `priority_id`, `target_id`, `template`, `role_id`, `repeat`, `wait`
+    `plan_id`, `step`, `priority_id`, `target_id`, `template`, `role_id`, `repeat`, `wait`, `optional`
 ) VALUES (
     :plan_id,
     :step,
@@ -370,11 +371,12 @@ insert_plan_step_query = '''INSERT INTO `plan_notification` (
     :template,
     :role_id,
     :repeat,
-    :wait
+    :wait,
+    :optional
 )'''
 
 insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
-    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`
+    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`, `optional`
 ) VALUES (
     :plan_id,
     :step,
@@ -382,7 +384,8 @@ insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
     :template,
     :repeat,
     :wait,
-    :dynamic_index
+    :dynamic_index,
+    :optional
 )'''
 
 reprioritization_setting_query = '''SELECT
@@ -1144,6 +1147,7 @@ class Plans(object):
                             "target": "demo",
                             "template": "template-foo",
                             "wait": 0
+                            "optional": 0
                         }
                     ]
                 ],
@@ -1200,6 +1204,7 @@ class Plans(object):
                             "repeat": 0,
                             "template": "template-foo",
                             "wait": 0
+                            "optional": 0
                         }
                     ]
                 ],
@@ -1269,6 +1274,7 @@ class Plans(object):
         }
 
         dynamic_indices = set()
+
         for steps in plan_params['steps']:
             for step in steps:
                 if 'dynamic_index' in step:
@@ -1285,6 +1291,9 @@ class Plans(object):
                     dynamic = step.get('dynamic_index') is not None
                     step['plan_id'] = plan_id
                     step['step'] = index
+                    # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
+                    step.setdefault('optional', 0)
+
                     priority = cache.priorities.get(step['priority'])
                     role = cache.target_roles.get(step.get('role'))
 

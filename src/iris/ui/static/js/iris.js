@@ -171,6 +171,7 @@ iris = {
         dynamic_index: 0,
         dynamic: 0,
         count: 1,
+        optional: 0,
         steps: [[{count: 1, id: 'n0', dynamic_index: 0}]]
       },
       blankTrackingTemplateModel: {

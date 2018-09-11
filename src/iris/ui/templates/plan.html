@@ -2,6 +2,7 @@
 {% block content %}
 <div class="main plan-details"></div>
 
+
 <!-- Modal for deleting this plan -->
 <div class="modal fade" id="delete-plan-modal" tabindex="-1" role="dialog" aria-labelledby="delete-plan-modal-btn">
   <div class="modal-dialog" role="document">
@@ -328,6 +329,7 @@
     <p class="item-content notification-wait" title="{{ secondsToMinutes wait }}"><label class="item-label light" data-toggle="tooltip" title="Minimum time that must elapse before repeating or moving onto the next escalation step.">Wait</label> {{ secondsToMinutes wait }} minutes</p>
     <p class="item-content notification-count" title="{{ count }}"><label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label> {{ count }} times</p>
     <p class="item-content" title="{{ template }}"><label class="item-label light" data-toggle="tooltip" title="Content to use for the notification">Template</label> <a href="/templates/{{template}}">{{ template }}</a></p>
+    <p class="item-content" title="{{ optional }}"> <label class="item-label light" data-toggle="tooltip" title="If set to true, this notification won't generate an alert if it fails to find a valid target.">Optional</label> {{#if optional }}Yes{{else}}No{{/if}}</p>
   </div>
 {{else}}
   <div draggable="true" class="plan-notification" data-mode="edit" data-dynamic="{{#if dynamic}}1{{else}}0{{/if}}" id="notification-{{id}}">
@@ -373,6 +375,13 @@
         {{#each @root.availableTemplates}}
           <option value="{{this}}" {{isSelected this ../template}}>{{this}}</option>
         {{/each}}
+      </select>
+    </p>
+    <p>
+      <label class="item-label light" data-toggle="tooltip" title="If set to true, this notification won't generate an alert if it fails to find a valid target.">Optional</label>
+      <select class="content-template form-control border-bottom" data-type="optional">
+          <option value="0">No</option>
+          <option value="1">Yes</option>
       </select>
     </p>
   </div>

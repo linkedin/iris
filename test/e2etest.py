@@ -876,7 +876,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "role": "oncall-primary",
@@ -884,7 +885,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
             [
@@ -894,7 +896,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "urgent",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "role": "team",
@@ -902,7 +904,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "medium",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ]
         ],
@@ -973,7 +975,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                 "priority": "medium",
                 "wait": 600,
                 "repeat": 0,
-                "template": sample_template_name}
+                "template": sample_template_name,
+                "optional": 0}
     # Test bad role
     data['steps'][0][0] = bad_step
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
@@ -1013,14 +1016,14 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ],
             [
@@ -1029,14 +1032,14 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "priority": "urgent",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "medium",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ]
         ],
@@ -1070,7 +1073,8 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                 "priority": "medium",
                 "wait": 600,
                 "repeat": 0,
-                "template": sample_template_name}
+                "template": sample_template_name,
+                "optional": 0}
     # Test bad dynamic target index
     data['steps'][0][0] = bad_step
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
@@ -1231,7 +1235,8 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "role": "oncall-primary",
@@ -1239,7 +1244,8 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
@@ -1298,14 +1304,16 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
@@ -1429,7 +1437,8 @@ def test_post_incident_without_apps(sample_user, sample_team, sample_template_na
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
@@ -1522,7 +1531,8 @@ def test_api_get_nested_context(sample_user, sample_team, sample_template_name, 
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
@@ -2515,7 +2525,8 @@ def test_application_plans(sample_user, sample_template_name, sample_application
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 }
             ]
         ],
@@ -3116,8 +3127,8 @@ class TestDelete(object):
             cursor.execute("INSERT INTO message(`id`, `created`, `application_id`, "
                            "`target_id`, `plan_id`, `priority_id`, `template_id`)"
                            "VALUES (1, '2015-09-25 22:54:31', 8, 8, 2, 8, 1)")
-            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id)"
-                           "VALUES (1, 2, 1, 1, 8, 8, 8)")
+            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id, `optional`)"
+                           "VALUES (1, 2, 1, 1, 8, 8, 8, 0)")
             cursor.execute("INSERT INTO incident(`id`, `plan_id`, `created`, `application_id`, `current_step`, `active`)"
                            "VALUES (1, 2, '2015-09-25 22:54:31', 8, 1, 1)")
             conn.commit()
@@ -3151,8 +3162,8 @@ class TestDelete(object):
             assert result.exit_code == 1
 
             # Test failure with only plan referencing template
-            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id)"
-                           "VALUES (1, 29, 1, 1, 8, 8, 8)")
+            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id, `optional`)"
+                           "VALUES (1, 29, 1, 1, 8, 8, 8, 0)")
             cursor.execute("DELETE FROM message WHERE id = 1")
             conn.commit()
             result = runner.invoke(iris_ctl.template, ['delete', 'foobar', '--config=../configs/config.dev.yaml'],

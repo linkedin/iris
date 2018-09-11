@@ -210,6 +210,7 @@ CREATE TABLE `plan_notification` (
   `step` int(11) NOT NULL,
   `template` varchar(255) DEFAULT NULL,
   `target_id` bigint(20),
+  `optional` TINYINT(1) NOT NULL DEFAULT '0',
   `role_id` int(11),
   `priority_id` int(11) NOT NULL,
   `repeat` int(11) NOT NULL DEFAULT '0',
