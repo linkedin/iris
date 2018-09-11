@@ -914,7 +914,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     data['steps'] = sorted(data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
 
     # Test post to plans endpoint (create plan)
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
     plan_id = re.content.strip()
     new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
@@ -976,7 +976,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                 "template": sample_template_name}
     # Test bad role
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Role not found for step 1'
 
@@ -984,7 +984,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     bad_step['role'] = 'user'
     bad_step['target'] = invalid_user
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Target %s not found for step 1' % invalid_user
 
@@ -992,7 +992,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     bad_step['target'] = sample_team
     bad_step['priority'] = 'foo'
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Priority not found for step 1'
 
@@ -1048,7 +1048,7 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
     data['steps'] = sorted(data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
 
     # Test post to plans endpoint (create plan)
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
     plan_id = re.content.strip()
     new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
@@ -1073,7 +1073,7 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                 "template": sample_template_name}
     # Test bad dynamic target index
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Dynamic target numbers must span 0..n without gaps'
 
@@ -1115,7 +1115,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     }
 
     # Test creating and deleting by ID
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
     plan_id = re.content.strip()
     assert plan_id
@@ -1130,7 +1130,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     assert re.status_code == 404
 
     # Test creating and deleting by name
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
     plan_id = re.content.strip()
     assert plan_id
@@ -1148,7 +1148,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     data_cant_kill = data.copy()
     data_cant_kill['name'] += '-but-cant'
 
-    re = requests.post(base_url + 'plans', json=data_cant_kill)
+    re = requests.post(base_url + 'plans', json=data_cant_kill, headers=username_header(sample_user))
     assert re.status_code == 201
     plan_id = re.content.strip()
     assert plan_id
@@ -1183,7 +1183,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         ],
         'isValid': True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json() == {'description': 'Role oncall-primary is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
 
@@ -1209,12 +1209,12 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         ],
         'isValid': True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json() == {'description': 'Role user is not appropriate for target %s in step 1' % sample_team, 'title': 'Invalid role'}
 
 
-def test_post_incident(sample_user, sample_team, sample_application_name, sample_template_name):
+def test_post_incident(sample_user, sample_team, sample_application_name, sample_template_name, superuser_application):
     data = {
         "creator": sample_user,
         "name": sample_user + "-test-incident-post",
@@ -1245,7 +1245,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     re = requests.post(base_url + 'incidents', json={
@@ -1260,7 +1260,9 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     # Test claiming incident
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+        'plan': sample_user + '-test-incident-post',
+        'context': {},
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
 
@@ -1275,7 +1277,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     # Invalid claim owner
     re = requests.post(base_url + 'incidents/%d' % incident_id, json={
         'owner': invalid_user,
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid claim: no matching owner'
 
@@ -1309,7 +1311,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # Create incident
@@ -1327,7 +1329,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     # Claim
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers=username_header(sample_user))
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
 
@@ -1390,11 +1392,11 @@ def test_post_incident_change_application(sample_user, sample_application_name, 
         'owner': sample_user,
         'plan': sample_user + '-test-incident-post',
         'context': {},
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
 
-    # sample_application_name2 is not allowed to make plans as sample_application_name, so this will fail
+    # sample_application_name2 is not allowed to make incidents as sample_application_name, so this will fail
     re = requests.post(base_url + 'incidents', json={
         'plan': sample_user + '-test-incident-post',
         'context': {},
@@ -1433,7 +1435,7 @@ def test_post_incident_without_apps(sample_user, sample_team, sample_template_na
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # The application in sample_application_name2 does not have any sample_template_name templates, so this
@@ -1525,7 +1527,7 @@ def test_api_get_nested_context(sample_user, sample_team, sample_template_name, 
             ],
         ],
         'creator': sample_user,
-    })
+    }, headers=username_header(sample_user))
     assert re.status_code == 201
 
     ctx = {
@@ -1562,7 +1564,7 @@ def test_large_incident_context(sample_user, sample_application_name):
         'aggregation_reset': 1,
         'steps': [],
         'creator': sample_user,
-    })
+    }, headers=username_header(sample_user))
     assert re.status_code == 201
 
     ctx = {
@@ -1795,7 +1797,7 @@ def test_create_template(sample_user, sample_application_name):
         },
     }
 
-    re = requests.post(base_url + 'templates/', json=post_payload)
+    re = requests.post(base_url + 'templates/', json=post_payload, headers=username_header(sample_user))
     assert re.status_code == 201
     template_id = int(re.text)
 
@@ -2520,7 +2522,7 @@ def test_application_plans(sample_user, sample_template_name, sample_application
         "isValid": True
     }
     # Create plan
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # Check that plan appears for sample app 1

@@ -290,7 +290,8 @@ class Login():
             flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
-        url = req.get_param('next')
+        # Remove newlines to prevent HTTP request splitting
+        url = req.get_param('next', default='').replace('\n', '')
 
         if not url or url.startswith('/'):
             raise HTTPFound(url or default_route)
@@ -432,7 +433,8 @@ def init(config, app):
         'session.validate_key': config['user_session']['sign_key'],
         'session.secure': not (config['server'].get('disable_auth', False) or config['server'].get('allow_http', False)),
         'session.httponly': True,
-        'session.crypto_type': 'cryptography'
+        'session.crypto_type': 'cryptography',
+        'session.samesite': 'Lax'
     }
     app = SessionMiddleware(app, session_opts)
 
