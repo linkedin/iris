@@ -899,9 +899,9 @@ def acl_allowed(req, username):
     Allow if the username matches the session user, if an app is using an API key and is
     allowed to authenticate users, or if the user is an admin.
     '''
-    return req.context['username'] == username or \
-        req.context.get('app', {}).get('allow_authenticating_users') or \
-        req.context['is_admin']
+    return (req.context['username'] == username or
+            req.context.get('app', {}).get('allow_authenticating_users') or
+            req.context['is_admin'])
 
 
 class Plan(object):
@@ -2120,7 +2120,7 @@ class Templates(object):
                         logger.exception('Invalid jinja syntax')
                         raise HTTPBadRequest('Invalid jinja template', str(e))
                     contents.append(_content)
-        except HTTPBadRequest, HTTPUnauthorized:
+        except (HTTPBadRequest, HTTPUnauthorized):
             raise
         except Exception:
             logger.exception('SERVER ERROR')
