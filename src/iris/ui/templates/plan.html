@@ -380,8 +380,8 @@
     <p>
       <label class="item-label light" data-toggle="tooltip" title="If set to true, this notification won't generate an alert if it fails to find a valid target.">Optional</label>
       <select class="content-template form-control border-bottom" data-type="optional">
-          <option value="0">No</option>
-          <option value="1">Yes</option>
+          <option value="1" {{# if optional}}selected{{/if}}>Yes</option>
+          <option value="0" {{# unless optional}}selected{{/unless}}>No</option>
       </select>
     </p>
   </div>
