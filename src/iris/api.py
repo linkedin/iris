@@ -1287,12 +1287,18 @@ class Plans(object):
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
 
             for index, steps in enumerate(plan_params['steps'], start=1):
+
+                # A plan must have at least one non-optonal notification per step, if it doesn't reject the plan
+                only_optional_flag = True
+
                 for step in steps:
                     dynamic = step.get('dynamic_index') is not None
                     step['plan_id'] = plan_id
                     step['step'] = index
                     # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
                     step.setdefault('optional', 0)
+                    if step['optional'] == 0:
+                        only_optional_flag = False
 
                     priority = cache.priorities.get(step['priority'])
                     role = cache.target_roles.get(step.get('role'))
@@ -1330,6 +1336,9 @@ class Plans(object):
                     except IntegrityError:
                         raise HTTPBadRequest('Invalid plan',
                                              'Target not found for step %s' % index)
+
+                if only_optional_flag:
+                    raise HTTPBadRequest('Invalid plan', 'You must have at least one non-optional notification per step. Step %s has none.' % index)
 
             session.execute('INSERT INTO `plan_active` (`name`, `plan_id`) '
                             'VALUES (:name, :plan_id) ON DUPLICATE KEY UPDATE `plan_id`=:plan_id',

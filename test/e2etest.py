@@ -886,7 +886,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "wait": 300,
                     "repeat": 1,
                     "template": sample_template_name,
-                    "optional": 0
+                    "optional": 1
                 },
             ],
             [
@@ -998,6 +998,17 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Priority not found for step 1'
+
+    # Test bad all optional
+    bad_step['role'] = 'team'
+    bad_step['target'] = sample_team
+    bad_step['priority'] = 'medium'
+    bad_step['optional'] = 1
+    data['steps'][0][0] = bad_step
+    data['steps'][0][1] = bad_step
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
+    assert re.status_code == 400
+    assert re.json()['description'] == 'You must have at least one non-optional notification per step. Step 1 has none.'
 
 
 def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
