@@ -70,9 +70,9 @@ def test_parse_valid_body():
             "ip_addresses": {
                 "default": "8.8.8.8"
             },
-            "metadata": null,
-            "managed": false,
-            "uri": null,
+            "metadata": "null",
+            "managed": "false",
+            "uri": "null",
             "agent_id": "agentA"
         },
         "check": {
@@ -82,8 +82,8 @@ def test_parse_valid_body():
             "details": {
                 "url": "http://www.example.com",
                 "method": "GET",
-                "follow_redirects": true,
-                "include_body": false
+                "follow_redirects": "true",
+                "include_body": "false"
             },
             "monitoring_zones_poll": [
                 "mzTEST1",
@@ -93,26 +93,26 @@ def test_parse_valid_body():
             "timeout": 30,
             "period": 60,
             "target_alias": "default",
-            "target_hostname": null,
+            "target_hostname": "null",
             "target_resolver": "",
-            "disabled": false,
-            "metadata": null,
-            "confd_name": null,
-            "confd_hash": null,
+            "disabled": "false",
+            "metadata": "null",
+            "confd_name": "null",
+            "confd_hash": "null",
             "check_version": 0
         },
         "alarm": {
             "id": "alTEST",
             "label": "Alarm Testing Notifications",
-            "check_type": null,
+            "check_type": "null",
             "check_id": "chTEST",
             "entity_id": "enTEST",
             "criteria": "if (metric[\"t\"] >= 2.1) { return CRITICAL } return OK",
-            "disabled": false,
-            "notification_plan_id": null,
-            "metadata": null,
-            "confd_name": null,
-            "confd_hash": null
+            "disabled": "false",
+            "notification_plan_id": "null",
+            "metadata": "null",
+            "confd_name": "null",
+            "confd_hash": "null"
         },
         "tenant_id": "845119",
         "dashboard_link": "https://intelligence.rackspace.com/cloud/entities/enTEST/checks/chTEST/alarm/alTEST"
