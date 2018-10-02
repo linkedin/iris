@@ -43,7 +43,7 @@ class rackspace(object):
         self.validate_post(alert_params)
 
         with db.guarded_session() as session:
-            plan = req.context['plan']
+            plan = req.get_param('plan', required=False)
             if plan is None:
                 raise HTTPBadRequest('missing plan in url parameters')
 

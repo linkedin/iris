@@ -711,8 +711,6 @@ class AuthMiddleware(object):
             # Ignore HMAC requirements for custom webhooks
             if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
                 app = req.get_param('application', required=True)
-                # Used in rackspace webhook but not alertmanager
-                plan = req.get_param('plan', required=False)
             else:
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
 
@@ -721,7 +719,6 @@ class AuthMiddleware(object):
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
             req.context['app'] = cache.applications[app]
-            req.context['plan'] =  plan
         except TypeError:
             return
 
@@ -735,17 +732,12 @@ class AuthMiddleware(object):
         # Ignore HMAC requirements for custom webhooks
         if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
             app_name = req.get_param('application', required=True)
-
             app = cache.applications.get(app_name)
             if not app:
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
 
             req.context['app'] = app
-
-            # optionally used and validated based on webhook impl
-            plan_name = req.get_param('plan', required=False)
-            req.context['plan'] = plan_name
 
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
