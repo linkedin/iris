@@ -108,6 +108,8 @@ role_lookups:
   - dummy # dummy role lookup used for testing purposes. Disable this in production.
 
 oncall-api: http://localhost:8080  # oncall url
+oncall-app: app # application for oncall auth
+oncall-key: abc # API key for oncall auth
 
 applications:
  - dummy_app
