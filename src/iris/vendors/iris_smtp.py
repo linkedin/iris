@@ -1,6 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
+from gevent import sleep
 from iris.constants import EMAIL_SUPPORT, IM_SUPPORT
 from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
@@ -22,6 +23,7 @@ class iris_smtp(object):
 
     def __init__(self, config):
         self.config = config
+        self.retry_interval = config.get('retry_interval', 0)
         self.modes = {
             EMAIL_SUPPORT: self.send_email,
             IM_SUPPORT: self.send_email,
@@ -164,6 +166,9 @@ class iris_smtp(object):
                     return None
 
             try:
+                # If configured, sleep to back-off on connection
+                if self.retry_interval:
+                    sleep(self.retry_interval)
                 conn.sendmail([from_address], [message['destination']], m.as_string())
                 logger.info('Message successfully sent through %s after reconnecting', self.last_conn_server)
             except Exception:
