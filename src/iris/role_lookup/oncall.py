@@ -5,6 +5,7 @@ import requests
 from requests.exceptions import RequestException
 import logging
 from iris.metrics import stats
+import oncallclient
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,13 @@ class oncall(object):
     def __init__(self, config):
         headers = requests.utils.default_headers()
         headers['User-Agent'] = 'iris role lookup (%s)' % headers.get('User-Agent')
+        app = config.get('oncall-app', '')
+        key = config.get('oncall-key', '')
         self.requests = requests.session()
+        if app and key:
+            self.requests.auth = oncallclient.OncallAuth(app, key)
+        oncallclient.OncallAuth(app, key)
         self.requests.headers = headers
-        self.requests.verify = False
         self.endpoint = config['oncall-api'] + '/api/v0'
 
     def call_oncall(self, url):

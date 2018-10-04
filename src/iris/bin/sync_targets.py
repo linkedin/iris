@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import requests
+import oncallclient
 from phonenumbers import format_number, parse, PhoneNumberFormat
 from phonenumbers.phonenumberutil import NumberParseException
 
@@ -116,9 +117,9 @@ def prune_target(engine, target_name, target_type):
         metrics.incr('sql_errors')
 
 
-def fetch_teams_from_oncall(oncall_base_url):
+def fetch_teams_from_oncall(oncall):
     try:
-        return requests.get('%s/api/v0/teams?fields=name&active=1' % oncall_base_url).json()
+        return oncall.get('%steams?fields=name&active=1' % oncall.url).json()
     except (ValueError, requests.exceptions.RequestException):
         logger.exception('Failed hitting oncall endpoint to fetch list of team names')
         return []
@@ -136,11 +137,11 @@ def fix_user_contacts(contacts):
     return contacts
 
 
-def fetch_users_from_oncall(oncall_base_url):
-    oncall_user_endpoint = oncall_base_url + '/api/v0/users?fields=name&fields=contacts&fields=active'
+def fetch_users_from_oncall(oncall):
+    oncall_user_endpoint = oncall.url + 'users?fields=name&fields=contacts&fields=active'
     try:
         return {user['name']: fix_user_contacts(user['contacts'])
-                for user in requests.get(oncall_user_endpoint).json()
+                for user in oncall.get(oncall_user_endpoint).json()
                 if user['active']}
     except (ValueError, KeyError, requests.exceptions.RequestException):
         logger.exception('Failed hitting oncall endpoint to fetch list of users')
@@ -155,13 +156,14 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         logger.error('Missing URL to oncall-api, which we use for user/team lookups. Bailing.')
         return
 
-    oncall_users = fetch_users_from_oncall(oncall_base_url)
+    oncall = oncallclient.OncallClient(config.get('oncall-app', ''), config.get('oncall-key', ''), oncall_base_url)
+    oncall_users = fetch_users_from_oncall(oncall)
 
     if not oncall_users:
         logger.warning('No users found. Bailing.')
         return
 
-    oncall_team_names = fetch_teams_from_oncall(oncall_base_url)
+    oncall_team_names = fetch_teams_from_oncall(oncall)
 
     if not oncall_team_names:
         logger.warning('We do not have a list of team names')

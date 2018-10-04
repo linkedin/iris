@@ -41,7 +41,8 @@ setuptools.setup(
         'python-ldap==2.4.9',
         'exchangelib==1.10.0',
         'setproctitle==1.1.8',
-        'pyfcm==1.4.3'
+        'pyfcm==1.4.3',
+        'oncallclient==1.0.0'
     ],
     extras_require={
         'kazoo': ['kazoo==2.3.1'],
