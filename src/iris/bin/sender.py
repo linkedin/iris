@@ -553,7 +553,7 @@ def aggregate(now):
                 m['aggregated_ids'] = list(active_message_ids)
                 message_send_enqueue(m)
 
-                for message_id in active_message_ids:
+                for message_id in aggregated_message_ids:
                     messages.pop(message_id, None)
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
@@ -657,7 +657,7 @@ def fetch_and_prepare_message():
             # too many messages for the aggregation key - enqueue
 
             # add message id to aggregation queue
-            queues[key] = set([message_id])
+            queues.setdefault(key, set()).add(message_id)
             # add message id to queue for deduping
             messages[message_id] = m
             # initialize last sent tracker
