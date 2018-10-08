@@ -2,7 +2,6 @@
 # See LICENSE in the project root for license information.
 
 import requests
-from requests.exceptions import RequestException
 import logging
 from iris.metrics import stats
 import oncallclient
@@ -27,7 +26,7 @@ class oncall(object):
         url = str(self.endpoint + url)
         try:
             r = self.requests.get(url)
-        except RequestException:
+        except Exception:
             logger.exception('Failed hitting oncall-api for url "%s"', url)
             return None
 
