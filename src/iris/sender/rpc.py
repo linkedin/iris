@@ -89,16 +89,31 @@ def handle_api_notification_request(socket, address, req):
         logger.warn('Dropping OOB message with invalid target "%s" from app %s',
                     target, notification['application'])
         return
+    expanded_targets = target
 
-    try:
-        expanded_targets = cache.targets_for_role(role, target)
-    except IrisRoleLookupException:
-        expanded_targets = None
-    if not expanded_targets:
-        reject_api_request(socket, address, 'INVALID role:target')
-        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
-                    role, target, notification['application'])
-        return
+    # if role is literal_target skip unrolling
+    if role == 'literal_target':
+        # target_literal requires that a mode be set and no priority be defined
+        if not notification.get('mode'):
+            reject_api_request(socket, address, 'INVALID mode not set for literal_target role')
+            logger.warn('Dropping OOB message with invalid role:mode from app %s',
+                        notification['application'])
+            return
+        if notification.get('priority'):
+            reject_api_request(socket, address, 'INVALID role literal_target does not support priority')
+            logger.warn('Dropping OOB message with invalid role:priority from app %s',
+                        notification['application'])
+            return
+    else:
+        try:
+            expanded_targets = cache.targets_for_role(role, target)
+        except IrisRoleLookupException:
+            expanded_targets = None
+        if not expanded_targets:
+            reject_api_request(socket, address, 'INVALID role:target')
+            logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                        role, target, notification['application'])
+            return
 
     sanitize_unicode_dict(notification)
 

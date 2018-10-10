@@ -1867,6 +1867,10 @@ class Notifications(object):
         You can set the priority key to honor target's priority preference or
         set the mode key to force the message transport.
 
+        You can use the role "literal_target" to prevent unrolling of targets and
+        send messages directly to mailing lists or slack channels.
+        Note that if you use this role you MUST specify the mode key as well.
+
         **Example request**:
 
         .. sourcecode:: http
