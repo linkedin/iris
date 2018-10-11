@@ -89,8 +89,7 @@ def handle_api_notification_request(socket, address, req):
         logger.warn('Dropping OOB message with invalid target "%s" from app %s',
                     target, notification['application'])
         return
-    expanded_targets = target
-
+    expanded_targets = None
     # if role is literal_target skip unrolling
     if role == 'literal_target':
         # target_literal requires that a mode be set and no priority be defined
@@ -144,10 +143,13 @@ def handle_api_notification_request(socket, address, req):
                        address, role, target, notification['application'],
                        notification.get('priority', notification.get('mode', '?')))
 
-    for _target in expanded_targets:
-        temp_notification = notification.copy()
-        temp_notification['target'] = _target
-        send_funcs['message_send_enqueue'](temp_notification)
+    if role == 'literal_target':
+        send_funcs['message_send_enqueue'](notification)
+    else:
+        for _target in expanded_targets:
+            temp_notification = notification.copy()
+            temp_notification['target'] = _target
+            send_funcs['message_send_enqueue'](temp_notification)
     metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 
