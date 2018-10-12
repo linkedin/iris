@@ -1871,7 +1871,7 @@ class Notifications(object):
         send messages directly to mailing lists or slack channels.
         Note that if you use this role you MUST specify the mode key but not the priority.
         This role will set the destination to the target value so make sure the target
-        is a valid email address, slack channel, slack username, etc. 
+        is a valid email address, slack channel, slack username, etc.
 
         **Example request**:
 
