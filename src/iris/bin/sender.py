@@ -1146,7 +1146,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
-        if 'unexpanded' in message:
+        if message.get('unexpanded'):
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
         elif message['mode'] == 'email':
             metrics.incr('task_failure')

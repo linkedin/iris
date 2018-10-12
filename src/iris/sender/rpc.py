@@ -91,7 +91,7 @@ def handle_api_notification_request(socket, address, req):
         return
     expanded_targets = None
     # if role is literal_target skip unrolling
-    if 'unexpanded' not in notification:
+    if not notification.get('unexpanded'):
         try:
             expanded_targets = cache.targets_for_role(role, target)
         except IrisRoleLookupException:
@@ -131,7 +131,7 @@ def handle_api_notification_request(socket, address, req):
                        address, role, target, notification['application'],
                        notification.get('priority', notification.get('mode', '?')))
 
-    if 'unexpanded' in notification:
+    if notification.get('unexpanded'):
         notification['destination'] = notification['target']
         send_funcs['message_send_enqueue'](notification)
     else:
