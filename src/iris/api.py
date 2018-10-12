@@ -1867,6 +1867,12 @@ class Notifications(object):
         You can set the priority key to honor target's priority preference or
         set the mode key to force the message transport.
 
+        You can use the role "literal_target" to prevent unrolling of targets and
+        send messages directly to mailing lists or slack channels.
+        Note that if you use this role you MUST specify the mode key but not the priority.
+        This role will set the destination to the target value so make sure the target
+        is a valid email address, slack channel, slack username, etc.
+
         **Example request**:
 
         .. sourcecode:: http
@@ -1893,6 +1899,19 @@ class Notifications(object):
                "subject": "wake up",
                "body": "something is on fire",
                "mode": "email"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "role": "literal_target",
+               "target": "#slackchannel",
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "slack"
            }
 
         **Example response**:
@@ -1938,6 +1957,13 @@ class Notifications(object):
         else:
             raise HTTPBadRequest(
                 'Both priority and mode are missing, at least one of it is required')
+        if message['role'] == 'literal_target':
+            # target_literal requires that a mode be set and no priority be defined
+            if 'mode' not in message:
+                raise HTTPBadRequest('INVALID mode not set for literal_target role')
+            if 'priority' in message:
+                raise HTTPBadRequest('INVALID role literal_target does not support priority')
+            message['unexpanded'] = True
 
         # Avoid problems down the line if we have no way of creating the
         # message body, which happens if both body and template are not

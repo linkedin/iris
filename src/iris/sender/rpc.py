@@ -89,16 +89,18 @@ def handle_api_notification_request(socket, address, req):
         logger.warn('Dropping OOB message with invalid target "%s" from app %s',
                     target, notification['application'])
         return
-
-    try:
-        expanded_targets = cache.targets_for_role(role, target)
-    except IrisRoleLookupException:
-        expanded_targets = None
-    if not expanded_targets:
-        reject_api_request(socket, address, 'INVALID role:target')
-        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
-                    role, target, notification['application'])
-        return
+    expanded_targets = None
+    # if role is literal_target skip unrolling
+    if not notification.get('unexpanded'):
+        try:
+            expanded_targets = cache.targets_for_role(role, target)
+        except IrisRoleLookupException:
+            expanded_targets = None
+        if not expanded_targets:
+            reject_api_request(socket, address, 'INVALID role:target')
+            logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                        role, target, notification['application'])
+            return
 
     sanitize_unicode_dict(notification)
 
@@ -129,10 +131,14 @@ def handle_api_notification_request(socket, address, req):
                        address, role, target, notification['application'],
                        notification.get('priority', notification.get('mode', '?')))
 
-    for _target in expanded_targets:
-        temp_notification = notification.copy()
-        temp_notification['target'] = _target
-        send_funcs['message_send_enqueue'](temp_notification)
+    if notification.get('unexpanded'):
+        notification['destination'] = notification['target']
+        send_funcs['message_send_enqueue'](notification)
+    else:
+        for _target in expanded_targets:
+            temp_notification = notification.copy()
+            temp_notification['target'] = _target
+            send_funcs['message_send_enqueue'](temp_notification)
     metrics.incr('notification_cnt')
     socket.sendall(msgpack.packb('OK'))
 

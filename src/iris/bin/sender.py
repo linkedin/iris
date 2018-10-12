@@ -779,9 +779,10 @@ def set_target_contact_by_priority(message):
 
 
 def set_target_contact(message):
-    # If we already have a destination set (eg incident tracking emails) no-op this
+    # If we already have a destination set (eg incident tracking emails or literal_target notifications) no-op this
     if 'destination' in message:
         return True
+
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
     try:
         if 'mode' in message or 'mode_id' in message:
@@ -1058,7 +1059,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
     retry_count = message.get('retry_count')
     is_retry = retry_count is not None
     if is_retry and retry_count >= MAX_MESSAGE_RETRIES:
-        logger.warning('Maximum retry count for %s breached')
+        logger.warning('Maximum retry count for app: %s target:%s breached', message.get('application', '?'), message.get('target', '?'))
         return
 
     if not is_retry:
@@ -1145,7 +1146,9 @@ def fetch_and_send_message(send_queue, vendor_manager):
     except Exception:
         logger.exception('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
-        if message['mode'] == 'email':
+        if message.get('unexpanded'):
+            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
+        elif message['mode'] == 'email':
             metrics.incr('task_failure')
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
         else:
