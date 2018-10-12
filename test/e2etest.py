@@ -2278,7 +2278,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
         'body': 'foo'
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 400
-    assert re.json()['description'] == 'INVALID mode not set for literal_target role'
+    assert re.json()['title'] == 'INVALID mode not set for literal_target role'
 
     re = requests.post(base_url + 'notifications', json={
         'role': 'literal_target',
@@ -2290,7 +2290,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
         'body': '',
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 400
-    assert re.json()['description'] == 'INVALID role literal_target does not support priority'
+    assert re.json()['title'] == 'INVALID role literal_target does not support priority'
 
     re = requests.post(base_url + 'notifications', json={
         'mode': 'email',

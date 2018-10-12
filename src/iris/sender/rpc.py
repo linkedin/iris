@@ -91,19 +91,7 @@ def handle_api_notification_request(socket, address, req):
         return
     expanded_targets = None
     # if role is literal_target skip unrolling
-    if role == 'literal_target':
-        # target_literal requires that a mode be set and no priority be defined
-        if 'mode' not in notification:
-            reject_api_request(socket, address, 'INVALID mode not set for literal_target role')
-            logger.warn('Dropping OOB message with invalid role:mode from app %s',
-                        notification['application'])
-            return
-        if 'priority' in notification:
-            reject_api_request(socket, address, 'INVALID role literal_target does not support priority')
-            logger.warn('Dropping OOB message with invalid role:priority from app %s',
-                        notification['application'])
-            return
-    else:
+    if 'unexpanded' not in notification:
         try:
             expanded_targets = cache.targets_for_role(role, target)
         except IrisRoleLookupException:
@@ -143,7 +131,8 @@ def handle_api_notification_request(socket, address, req):
                        address, role, target, notification['application'],
                        notification.get('priority', notification.get('mode', '?')))
 
-    if role == 'literal_target':
+    if 'unexpanded' in notification:
+        notification['destination'] = notification['target']
         send_funcs['message_send_enqueue'](notification)
     else:
         for _target in expanded_targets:

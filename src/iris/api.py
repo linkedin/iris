@@ -1957,6 +1957,13 @@ class Notifications(object):
         else:
             raise HTTPBadRequest(
                 'Both priority and mode are missing, at least one of it is required')
+        if message['role'] == 'literal_target':
+            # target_literal requires that a mode be set and no priority be defined
+            if 'mode' not in message:
+                raise HTTPBadRequest('INVALID mode not set for literal_target role')
+            if 'priority' in message:
+                raise HTTPBadRequest('INVALID role literal_target does not support priority')
+            message['unexpanded'] = True
 
         # Avoid problems down the line if we have no way of creating the
         # message body, which happens if both body and template are not
