@@ -1907,7 +1907,7 @@ class Notifications(object):
            Content-Type: application/json
 
            {
-               "role": "literal_user",
+               "role": "literal_target",
                "target": "#slackchannel",
                "subject": "wake up",
                "body": "something is on fire",
