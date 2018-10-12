@@ -1869,7 +1869,9 @@ class Notifications(object):
 
         You can use the role "literal_target" to prevent unrolling of targets and
         send messages directly to mailing lists or slack channels.
-        Note that if you use this role you MUST specify the mode key as well.
+        Note that if you use this role you MUST specify the mode key but not the priority.
+        This role will set the destination to the target value without so make sure the target
+        is a valid email address, slack channel, slack username, etc. 
 
         **Example request**:
 
@@ -1897,6 +1899,19 @@ class Notifications(object):
                "subject": "wake up",
                "body": "something is on fire",
                "mode": "email"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "role": "literal_user",
+               "target": "#slackchannel",
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "slack"
            }
 
         **Example response**:
