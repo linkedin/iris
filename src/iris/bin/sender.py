@@ -805,7 +805,7 @@ def set_target_contact(message):
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
-            result = True   
+            result = True
         else:
             # message triggered by incident will only have priority
             result = set_target_contact_by_priority(message)
@@ -1056,7 +1056,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
         message = send_queue.get(True, 4)
     except queue.Empty:
         return
-    blame_str = 'app:%s  target:%s' % (message.get('application', '?'), message.get('target', '?')) 
+    blame_str = 'app:%s  target:%s' % (message.get('application', '?'), message.get('target', '?'))
 
     metrics.incr('send_queue_gets_cnt')
 

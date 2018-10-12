@@ -2271,6 +2271,28 @@ def test_post_invalid_notification(sample_user, sample_application_name):
     assert re.json()['description'] == 'INVALID role:target'
 
     re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID mode not set for literal_target role'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
+        'mode': 'email',
+        'priority': 'low',
+        'email_html': 'foobar',
+        'body': '',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['description'] == 'INVALID role literal_target does not support priority'
+
+    re = requests.post(base_url + 'notifications', json={
         'mode': 'email',
         'role': 'user',
         'target': sample_user,
@@ -2317,6 +2339,17 @@ def test_post_notification(sample_user, sample_application_name):
         'target': sample_user,
         'subject': 'test',
         'priority': 'low',
+        'mode': 'email',
+        'email_html': 'foobar',
+        'body': '',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
         'mode': 'email',
         'email_html': 'foobar',
         'body': '',

@@ -93,12 +93,12 @@ def handle_api_notification_request(socket, address, req):
     # if role is literal_target skip unrolling
     if role == 'literal_target':
         # target_literal requires that a mode be set and no priority be defined
-        if not notification.get('mode'):
+        if 'mode' not in notification:
             reject_api_request(socket, address, 'INVALID mode not set for literal_target role')
             logger.warn('Dropping OOB message with invalid role:mode from app %s',
                         notification['application'])
             return
-        if notification.get('priority'):
+        if 'priority' in notification:
             reject_api_request(socket, address, 'INVALID role literal_target does not support priority')
             logger.warn('Dropping OOB message with invalid role:priority from app %s',
                         notification['application'])
