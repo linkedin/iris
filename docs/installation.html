@@ -97,6 +97,9 @@
 <li class="toctree-l2 current"><a class="reference internal" href="admin_manual.html#introduction">Introduction</a><ul class="current">
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#getting-started-with-docker">Getting started with Docker</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#user-management">User management</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#integrating-iris-and-oncall">Integrating Iris and Oncall</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#development-setup-of-iris-and-oncall">Development Setup of Iris and Oncall</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration</a></li>
@@ -177,8 +180,43 @@
 <div class="section" id="getting-started-with-docker">
 <h2>Getting started with Docker<a class="headerlink" href="#getting-started-with-docker" title="Permalink to this headline">¶</a></h2>
 <p>We have built a docker compose setup for you to spin up Iris cluster in one
-command. Please clone the docker compose repository and follow the readme
+command. Please clone the docker compose <a class="reference external" href="https://github.com/jrgp/iris-docker-compose">repository</a> and follow the readme
 there.</p>
+</div>
+<div class="section" id="user-management">
+<h2>User management<a class="headerlink" href="#user-management" title="Permalink to this headline">¶</a></h2>
+<p>At LinkedIn, user management is done in an Active Directory server external
+to the Iris/Oncall system. We use the <code class="docutils literal"><span class="pre">sync_targets.py</span> <span class="pre">script</span></code> in <code class="docutils literal"><span class="pre">src/iris/bin</span></code>
+for our user management, syncing Iris&#8217;s list of users from Oncall. If this
+is too heavyweight for your use-case (or you&#8217;re just starting to work with
+Iris), we have a small user administration tool that can populate the Iris
+database without setting up this sync script: <a class="reference external" href="https://github.com/jrgp/iris-admin">iris-admin</a>.</p>
+</div>
+<div class="section" id="integrating-iris-and-oncall">
+<h2>Integrating Iris and Oncall<a class="headerlink" href="#integrating-iris-and-oncall" title="Permalink to this headline">¶</a></h2>
+<p>Iris uses Oncall for two primary functions: user management and role lookup.</p>
+<p>User management with Oncall is controlled via the <code class="docutils literal"><span class="pre">sync_targets.py</span></code> script in
+<code class="docutils literal"><span class="pre">src/iris/bin</span></code>. This is configured with the <code class="docutils literal"><span class="pre">oncall-api</span></code> key in the Iris
+config file. In our provided example <code class="docutils literal"><span class="pre">config.dev.yaml</span></code>, this is set to
+<code class="docutils literal"><span class="pre">localhost:8080</span></code>. Running the target sync script will sync all teams, users,
+and user contact info from Oncall into Iris.</p>
+<p>For role lookup, Iris queries Oncall with the <code class="docutils literal"><span class="pre">oncall</span></code> class in
+<code class="docutils literal"><span class="pre">src/iris/role_lookup/oncall.py</span></code>. In an Iris plan, users can specify roles
+such as &#8220;oncall-primary&#8221; and &#8220;oncall-secondary&#8221;. Then, in the Iris sender,
+Iris will look up the current on-call for the specified team using a REST API
+call to Oncall. This is again configured with the <code class="docutils literal"><span class="pre">oncall-api</span></code> key in the
+Iris config file.</p>
+</div>
+<div class="section" id="development-setup-of-iris-and-oncall">
+<h2>Development Setup of Iris and Oncall<a class="headerlink" href="#development-setup-of-iris-and-oncall" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li>Set up MySQL for both Iris and Oncall. In both projects, database schemas and dummy data can be found in the <code class="docutils literal"><span class="pre">db</span></code> directory. These can be loaded with <code class="docutils literal"><span class="pre">mysql</span> <span class="pre">-u</span>&#160; <span class="pre">user</span> <span class="pre">-p</span> <span class="pre">&lt;</span> <span class="pre">schema_0.sql</span></code>, and so on for the other sql files. You may need to toggle the <code class="docutils literal"><span class="pre">ONLY_FULL_GROUP_BY</span></code> MySQL mode with the query: <code class="docutils literal"><span class="pre">SET</span> <span class="pre">GLOBAL</span> <span class="pre">sql_mode=(SELECT</span> <span class="pre">REPLACE(&#64;&#64;sql_mode,'ONLY_FULL_GROUP_BY',''));</span></code></li>
+<li>For both projects, install required dependencies in a virtualenv, then run them locally using <code class="docutils literal"><span class="pre">make</span></code>.</li>
+<li>Manage Oncall users, either using the LDAP sync script or with <a class="reference external" href="https://github.com/dwang159/oncall-admin">oncall-admin</a>. Load users and contact info into Oncall, then use the Oncall UI (hosted on <code class="docutils literal"><span class="pre">localhost:8080</span></code> by default) to create teams and on-call events/rotations.</li>
+<li>Modify the Iris config file, changing the <code class="docutils literal"><span class="pre">oncall-api</span></code> key to the location where Oncall is being hosted (<code class="docutils literal"><span class="pre">localhost:8080</span></code> by default). In addition, in the <code class="docutils literal"><span class="pre">role_lookups</span></code> key, uncomment the oncall line.</li>
+<li>Using the Iris virtualenv, run the <code class="docutils literal"><span class="pre">sync_targets.py</span></code> script using <code class="docutils literal"><span class="pre">make</span> <span class="pre">targets</span></code>. This should sync users from Oncall to Iris.</li>
+<li>To test integration, use the Iris frontend (hosted at <code class="docutils literal"><span class="pre">localhost:16649</span></code> by default) to create an Iris plan using the &#8220;oncall-primary&#8221; role with a team defined in Oncall. Ensure this team has an active primary event in Oncall, then test the plan in the Iris UI. Running the Iris sender (<code class="docutils literal"><span class="pre">make</span> <span class="pre">sender</span></code>) should then result in  logged message sent to the primary on-call of the test team.</li>
+</ol>
 </div>
 </div>
 

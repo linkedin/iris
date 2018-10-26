@@ -269,6 +269,7 @@ Static plan example:</p>
                 &quot;target&quot;: &quot;demo&quot;,
                 &quot;template&quot;: &quot;template-foo&quot;,
                 &quot;wait&quot;: 0
+                &quot;optional&quot;: 0
             }
         ]
     ],
@@ -329,6 +330,7 @@ parameters:</p>
                 &quot;repeat&quot;: 0,
                 &quot;template&quot;: &quot;template-foo&quot;,
                 &quot;wait&quot;: 0
+                &quot;optional&quot;: 0
             }
         ]
     ],
@@ -482,6 +484,47 @@ Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
 </div>
 </dd></dl>
 
+<dl class="post">
+<dt id="post--v0-incidents-incident_id">
+<code class="descname">POST </code><code class="descname">/v0/incidents/{incident_id}</code><a class="headerlink" href="#post--v0-incidents-incident_id" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Claim incidents by incident id. Deactivates the incident and
+any associated messages, preventing further escalation.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/incidents/123</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;jdoe&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;incident_id&quot;</span><span class="p">:</span> <span class="s2">&quot;123&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;jdoe&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;active&quot;</span><span class="p">:</span> <span class="kc">false</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-messages">
 <h3>/v0/messages<a class="headerlink" href="#v0-messages" title="Permalink to this headline">¶</a></h3>
@@ -556,6 +599,11 @@ not tied to an incident. To achieve real-time delivery, notifications
 are not persisted in the Database.</p>
 <p>You can set the priority key to honor target&#8217;s priority preference or
 set the mode key to force the message transport.</p>
+<p>You can use the role &#8220;literal_target&#8221; to prevent unrolling of targets and
+send messages directly to mailing lists or slack channels.
+Note that if you use this role you MUST specify the mode key but not the priority.
+This role will set the destination to the target value so make sure the target
+is a valid email address, slack channel, slack username, etc.</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 <span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
@@ -578,6 +626,18 @@ set the mode key to force the message transport.</p>
     <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
     <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
     <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;literal_target&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;#slackchannel&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span>
 <span class="p">}</span>
 </pre></div>
 </div>
