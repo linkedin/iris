@@ -2610,6 +2610,10 @@ iris = {
               params[$this.attr('data-param')] = moment(qs_value).unix();
             }
             break;
+          case 'filter-target':
+            $this.typeahead('val', qs_value);
+            params[$this.attr('data-param')] = qs_value;
+            break;
           default:
             $this.val(qs_value);
             params[$this.attr('data-param')] = qs_value;
