@@ -26,7 +26,7 @@ setuptools.setup(
         'falcon==1.1.0',
         'falcon-cors==1.1.2',
         'ujson==1.35',
-        'requests==2.9.1',
+        'requests==2.20.0',
         'PyMySQL==0.7.2',
         'SQLAlchemy==1.0.11',
         'Jinja2==2.8',
