@@ -1081,7 +1081,13 @@ class Plans(object):
                      "name": "foo-sla0"
                  }
              ]
-          '''
+        You can also search for plans that have specific targets in their steps by using the field 'target'
+
+        **example request**
+
+        GET /v0/plans?target=foo&active=1 HTTP/1.1
+
+        '''
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
@@ -1092,6 +1098,21 @@ class Plans(object):
 
         query = plan_query % ', '.join(plan_columns[f] for f in fields)
 
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.ss_dict_cursor)
+
+        plan_target = req.params.pop('target', None)
+        # search for plans which have steps that target a specific user
+        if plan_target is not None:
+            try:
+                cursor.execute('SELECT `id` FROM `target` WHERE `name` = %s', plan_target)
+                plan_target_id = cursor.fetchone()['id']
+            except Exception:
+                raise HTTPBadRequest('Invalid provided target.')
+
+            plan_target_join = ' JOIN `plan_notification` ON `plan_notification`.`id` = `plan`.`id` AND `plan_notification`.`target_id` = %s' % plan_target_id
+            query = query + plan_target_join
+
         where = []
         active = req.get_param_as_bool('active')
         req.params.pop('active', None)
@@ -1101,7 +1122,6 @@ class Plans(object):
             else:
                 where.append('`plan_active`.`plan_id` IS NULL')
 
-        connection = db.engine.raw_connection()
         where += gen_where_filter_clause(
             connection, plan_filters, plan_filter_types, req.params)
 
@@ -1111,7 +1131,6 @@ class Plans(object):
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
