@@ -1110,7 +1110,7 @@ class Plans(object):
             except Exception:
                 raise HTTPBadRequest('Invalid provided target.')
 
-            plan_target_join = ' JOIN `plan_notification` ON `plan_notification`.`id` = `plan`.`id` AND `plan_notification`.`target_id` = %s' % plan_target_id
+            plan_target_join = ' JOIN `plan_notification` ON `plan_notification`.`plan_id` = `plan`.`id` AND `plan_notification`.`target_id` = %s' % plan_target_id
             query = query + plan_target_join
 
         where = []
