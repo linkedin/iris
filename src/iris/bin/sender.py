@@ -366,7 +366,7 @@ def create_messages(incident_id, plan_notification_id):
 
         else:
             metrics.incr('target_not_found')
-            logger.error('No target found: %s', name)
+            logger.warn('Failed to notify plan creator; no active target found: %s', name)
 
     connection.commit()
     cursor.close()

@@ -483,7 +483,7 @@ def init(api_host, config):
                                 'JOIN `plan_active` ON `plan_notification`.`plan_id` = `plan_active`.`plan_id` '
                                 'AND `plan_notification`.`id` IN %s'))
     target_reprioritization = TargetReprioritization(db.engine)
-    target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s', None)
+    target_names = Cache(db.engine, 'SELECT * FROM `target` WHERE `name`=%s AND `active` = TRUE', None)
     role_lookups = get_role_lookups(config)
     targets_for_role = RoleTargets(role_lookups, db.engine)
     dynamic_plan_map = DynamicPlanMap(db.engine,
