@@ -264,6 +264,20 @@ plan_filter_types = {
 plan_query = '''SELECT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
 LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`'''
 
+plan_target_query = '''SELECT `plan_id` FROM `plan_notification`
+JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`'''
+
+plan_target_fields = [
+    'target',
+    'target__contains',
+    'target__startswith',
+    'target__endswith'
+]
+
+plan_target_filters = {
+    'target': '`target`.`name`'
+}
+
 single_plan_query = '''SELECT `plan`.`id` as `id`, `plan`.`name` as `name`,
     `plan`.`threshold_window` as `threshold_window`, `plan`.`threshold_count` as `threshold_count`,
     `plan`.`aggregation_window` as `aggregation_window`, `plan`.`aggregation_reset` as `aggregation_reset`,
@@ -1101,17 +1115,17 @@ class Plans(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.ss_dict_cursor)
 
-        plan_target = req.params.pop('target', None)
         # search for plans which have steps that target a specific user
-        if plan_target is not None:
-            try:
-                cursor.execute('SELECT `id` FROM `target` WHERE `name` = %s', plan_target)
-                plan_target_id = cursor.fetchone()['id']
-            except Exception:
-                raise HTTPBadRequest('Invalid provided target.')
+        for target_field in plan_target_fields:
+            if req.params.get(target_field, None):
+                target_query = plan_target_query
+                where = []
+                where += gen_where_filter_clause(connection, plan_target_filters, plan_filter_types, req.params)
+                if where:
+                    target_query = target_query + ' WHERE ' + ' AND '.join(where)
 
-            plan_target_join = ' JOIN `plan_notification` ON `plan_notification`.`plan_id` = `plan`.`id` AND `plan_notification`.`target_id` = %s' % plan_target_id
-            query = query + plan_target_join
+                query = query + ' JOIN (' + target_query + ') `plan_notification_subset` ON `plan_notification_subset`.`plan_id` = `plan`.`id`'
+                break
 
         where = []
         active = req.get_param_as_bool('active')
