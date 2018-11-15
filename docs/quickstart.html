@@ -1,0 +1,666 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Quickstart &mdash; Iris 0.0.14 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="genindex.html"/>
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
+        <link rel="next" title="Iris admin manual" href="admin_manual.html"/>
+        <link rel="prev" title="Iris user manual" href="user_manual.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> Iris
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.0.14
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="user_manual.html">Iris user manual</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quickstart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#pre-requisites">Pre-requisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setting-things-up">Setting things up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-the-database">Configuring the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#creating-an-escalation-plan">Creating an escalation plan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#defining-terms">Defining terms:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#back-to-the-plan">Back to the plan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#iris-sender">Iris sender</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#a-deeper-look-at-applications">A deeper look at applications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#triggering-incidents-programmatically">Triggering incidents programmatically</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-real-users">Adding real users</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-authentication">Adding authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wrapping-up">Wrapping up</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="admin_manual.html">Iris admin manual</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Iris</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Quickstart</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="quickstart">
+<h1>Quickstart<a class="headerlink" href="#quickstart" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="pre-requisites">
+<h2>Pre-requisites<a class="headerlink" href="#pre-requisites" title="Permalink to this headline">¶</a></h2>
+<p>Before starting this guide, ensure the following are
+installed/configured properly:</p>
+<blockquote>
+<div><ul class="simple">
+<li>Git</li>
+<li>MySQL 5.7</li>
+<li>Python 2.7</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="setting-things-up">
+<h2>Setting things up<a class="headerlink" href="#setting-things-up" title="Permalink to this headline">¶</a></h2>
+<p>First thing&#8217;s first: clone the Iris repo:</p>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">git</span><span class="nd">@github</span><span class="o">.</span><span class="n">com</span><span class="p">:</span><span class="n">linkedin</span><span class="o">/</span><span class="n">iris</span><span class="o">.</span><span class="n">git</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt>Let&#8217;s take a quick look through the source code.</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal"><span class="pre">ops</span></code> - examples of deployment options with Docker, Kubernetes, etc</li>
+<li><code class="docutils literal"><span class="pre">db</span></code> - schema and dummy data for testing</li>
+<li><code class="docutils literal"><span class="pre">test</span></code> - end-to-end tests and unit tests</li>
+<li><dl class="first docutils">
+<dt><code class="docutils literal"><span class="pre">src/iris</span></code> - the main source code directory</dt>
+<dd><ul class="first last">
+<li><code class="docutils literal"><span class="pre">bin</span></code> - various daemons. The biggest one to note here is <code class="docutils literal"><span class="pre">sender.py</span></code>, which handles Iris&#8217;s message sending</li>
+<li><code class="docutils literal"><span class="pre">api.py</span></code> - Main REST API code</li>
+<li><code class="docutils literal"><span class="pre">ui</span></code> - Frontend JS, CSS, and static assets. Also contains authentication modules for the FE, and bundling setup.</li>
+<li><code class="docutils literal"><span class="pre">vendors</span></code> - Pluggable modules handling message sending for various contact modes. Leveraged by the Iris sender.</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+<p>Set up a virtual env, install dependencies, and set up development
+environment.</p>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">virtualenv</span> <span class="n">venv</span>
+<span class="n">source</span> <span class="n">venv</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">activate</span>
+<span class="n">sudo</span> <span class="n">apt</span><span class="o">-</span><span class="n">get</span> <span class="n">install</span> <span class="n">libssl</span><span class="o">-</span><span class="n">dev</span> <span class="n">libxml2</span><span class="o">-</span><span class="n">dev</span> <span class="n">libxslt1</span><span class="o">-</span><span class="n">dev</span> <span class="n">libsasl2</span><span class="o">-</span><span class="n">dev</span> <span class="n">python</span><span class="o">-</span><span class="n">dev</span> <span class="n">libldap2</span><span class="o">-</span><span class="n">dev</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s1">&#39;.[dev,kazoo]</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="configuring-the-database">
+<h2>Configuring the database<a class="headerlink" href="#configuring-the-database" title="Permalink to this headline">¶</a></h2>
+<p>Out of the box, Iris expects the database to be set up with username
+<code class="docutils literal"><span class="pre">root</span></code> and no password. This isn&#8217;t very secure, so let&#8217;s create an
+<code class="docutils literal"><span class="pre">iris</span></code> user. Log in as root, and add the new user. We&#8217;ll also need to
+turn off the <code class="docutils literal"><span class="pre">ONLY_FULL_GROUP_BY</span></code> MySQL mode.</p>
+<div class="code sql highlight-default"><div class="highlight"><pre><span></span>CREATE USER ‘iris’@’localhost’ IDENTIFIED BY ‘iris’
+CREATE DATABASE iris
+GRANT ALL ON iris.* TO iris@localhost
+SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,&#39;ONLY_FULL_GROUP_BY&#39;,&#39;&#39;));
+</pre></div>
+</div>
+<p>Now let’s load the schema and some dummy data. Navigate to project root,
+then run:</p>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">mysql</span> <span class="o">-</span><span class="n">u</span> <span class="n">iris</span> <span class="o">-</span><span class="n">p</span> <span class="o">&lt;</span> <span class="o">./</span><span class="n">db</span><span class="o">/</span><span class="n">schema_0</span><span class="o">.</span><span class="n">sql</span>
+<span class="n">mysql</span> <span class="o">-</span><span class="n">u</span> <span class="n">iris</span> <span class="o">-</span><span class="n">p</span> <span class="o">-</span><span class="n">o</span> <span class="n">iris</span> <span class="o">&lt;</span> <span class="o">./</span><span class="n">db</span><span class="o">/</span><span class="n">dummy_data</span><span class="o">.</span><span class="n">sql</span>
+</pre></div>
+</div>
+<p>dummy_data.sql contains the following entities: - user demo with
+password demo - team demo_team - application Autoalerts with key:
+a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49</p>
+<p>Confirm that this is successful:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">SHOW</span> <span class="n">TABLES</span><span class="p">;</span>
+<span class="o">+-----------------------------+</span>
+<span class="o">|</span> <span class="n">Tables_in_iris</span>              <span class="o">|</span>
+<span class="o">+-----------------------------+</span>
+<span class="o">|</span> <span class="n">application</span>                 <span class="o">|</span>
+<span class="o">|</span> <span class="n">application_mode</span>            <span class="o">|</span>
+<span class="o">|</span> <span class="n">application_owner</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">application_quota</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">application_stats</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">default_application_mode</span>    <span class="o">|</span>
+<span class="o">|</span> <span class="n">device</span>                      <span class="o">|</span>
+<span class="o">|</span> <span class="n">dynamic_plan_map</span>            <span class="o">|</span>
+<span class="o">|</span> <span class="n">generic_message_sent_status</span> <span class="o">|</span>
+<span class="o">|</span> <span class="n">global_stats</span>                <span class="o">|</span>
+<span class="o">|</span> <span class="n">incident</span>                    <span class="o">|</span>
+<span class="o">|</span> <span class="n">incident_emails</span>             <span class="o">|</span>
+<span class="o">|</span> <span class="n">mailing_list</span>                <span class="o">|</span>
+<span class="o">|</span> <span class="n">mailing_list_membership</span>     <span class="o">|</span>
+<span class="o">|</span> <span class="n">message</span>                     <span class="o">|</span>
+<span class="o">|</span> <span class="n">message_changelog</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">mode</span>                        <span class="o">|</span>
+<span class="o">|</span> <span class="n">plan</span>                        <span class="o">|</span>
+<span class="o">|</span> <span class="n">plan_active</span>                 <span class="o">|</span>
+<span class="o">|</span> <span class="n">plan_notification</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">priority</span>                    <span class="o">|</span>
+<span class="o">|</span> <span class="n">response</span>                    <span class="o">|</span>
+<span class="o">|</span> <span class="n">target</span>                      <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_application_mode</span>     <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_contact</span>              <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_mode</span>                 <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_reprioritization</span>     <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_role</span>                 <span class="o">|</span>
+<span class="o">|</span> <span class="n">target_type</span>                 <span class="o">|</span>
+<span class="o">|</span> <span class="n">team</span>                        <span class="o">|</span>
+<span class="o">|</span> <span class="n">template</span>                    <span class="o">|</span>
+<span class="o">|</span> <span class="n">template_active</span>             <span class="o">|</span>
+<span class="o">|</span> <span class="n">template_content</span>            <span class="o">|</span>
+<span class="o">|</span> <span class="n">template_variable</span>           <span class="o">|</span>
+<span class="o">|</span> <span class="n">twilio_delivery_status</span>      <span class="o">|</span>
+<span class="o">|</span> <span class="n">twilio_retry</span>                <span class="o">|</span>
+<span class="o">|</span> <span class="n">user</span>                        <span class="o">|</span>
+<span class="o">|</span> <span class="n">user_setting</span>                <span class="o">|</span>
+<span class="o">|</span> <span class="n">user_team</span>                   <span class="o">|</span>
+<span class="o">+-----------------------------+</span>
+<span class="mi">39</span> <span class="n">rows</span> <span class="ow">in</span> <span class="nb">set</span> <span class="p">(</span><span class="mf">0.00</span> <span class="n">sec</span><span class="p">)</span>
+
+<span class="n">mysql</span><span class="o">&gt;</span> <span class="n">SELECT</span> <span class="o">*</span> <span class="n">FROM</span> <span class="n">target</span><span class="p">;</span>
+<span class="o">+----+-----------+---------+--------+</span>
+<span class="o">|</span> <span class="nb">id</span> <span class="o">|</span> <span class="n">name</span>      <span class="o">|</span> <span class="n">type_id</span> <span class="o">|</span> <span class="n">active</span> <span class="o">|</span>
+<span class="o">+----+-----------+---------+--------+</span>
+<span class="o">|</span>  <span class="mi">1</span> <span class="o">|</span> <span class="n">demo</span>      <span class="o">|</span>       <span class="mi">1</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">2</span> <span class="o">|</span> <span class="n">abc</span>       <span class="o">|</span>       <span class="mi">1</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">3</span> <span class="o">|</span> <span class="n">foo</span>       <span class="o">|</span>       <span class="mi">1</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">4</span> <span class="o">|</span> <span class="n">demo_team</span> <span class="o">|</span>       <span class="mi">2</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">5</span> <span class="o">|</span> <span class="n">foo_team</span>  <span class="o">|</span>       <span class="mi">2</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">6</span> <span class="o">|</span> <span class="n">abc</span>       <span class="o">|</span>       <span class="mi">3</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">|</span>  <span class="mi">7</span> <span class="o">|</span> <span class="n">demo</span>      <span class="o">|</span>       <span class="mi">3</span> <span class="o">|</span>      <span class="mi">1</span> <span class="o">|</span>
+<span class="o">+----+-----------+---------+--------+</span>
+<span class="mi">7</span> <span class="n">rows</span> <span class="ow">in</span> <span class="nb">set</span> <span class="p">(</span><span class="mf">0.00</span> <span class="n">sec</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>We have an Iris database now! Update the configs so Iris can read the
+DB. These live in <code class="docutils literal"><span class="pre">configs/config.dev.yaml</span></code>. Change this</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">db</span><span class="p">:</span> <span class="o">&amp;</span><span class="n">db</span>
+  <span class="n">conn</span><span class="p">:</span>
+    <span class="n">kwargs</span><span class="p">:</span>
+      <span class="n">scheme</span><span class="p">:</span> <span class="n">mysql</span><span class="o">+</span><span class="n">pymysql</span>
+      <span class="n">user</span><span class="p">:</span> <span class="n">root</span>
+      <span class="n">password</span><span class="p">:</span> <span class="s2">&quot;&quot;</span>
+      <span class="n">host</span><span class="p">:</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span>
+      <span class="n">database</span><span class="p">:</span> <span class="n">iris</span>
+      <span class="n">charset</span><span class="p">:</span> <span class="n">utf8</span>
+    <span class="nb">str</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">%(scheme)s</span><span class="s2">://</span><span class="si">%(user)s</span><span class="s2">:</span><span class="si">%(password)s</span><span class="s2">@</span><span class="si">%(host)s</span><span class="s2">/</span><span class="si">%(database)s</span><span class="s2">?charset=</span><span class="si">%(charset)s</span><span class="s2">&quot;</span>
+<span class="o">&lt;/</span><span class="n">pre</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p>To this, updating user/password accordingly:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">db</span><span class="p">:</span> <span class="o">&amp;</span><span class="n">db</span>
+  <span class="n">conn</span><span class="p">:</span>
+    <span class="n">kwargs</span><span class="p">:</span>
+      <span class="n">scheme</span><span class="p">:</span> <span class="n">mysql</span><span class="o">+</span><span class="n">pymysql</span>
+      <span class="n">user</span><span class="p">:</span> <span class="n">iris</span>
+      <span class="n">password</span><span class="p">:</span> <span class="n">iris</span>
+      <span class="n">host</span><span class="p">:</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span>
+      <span class="n">database</span><span class="p">:</span> <span class="n">iris</span>
+      <span class="n">charset</span><span class="p">:</span> <span class="n">utf8</span>
+    <span class="nb">str</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">%(scheme)s</span><span class="s2">://</span><span class="si">%(user)s</span><span class="s2">:</span><span class="si">%(password)s</span><span class="s2">@</span><span class="si">%(host)s</span><span class="s2">/</span><span class="si">%(database)s</span><span class="s2">?charset=</span><span class="si">%(charset)s</span><span class="s2">&quot;</span>
+</pre></div>
+</div>
+<p>Almost ready! Use <code class="docutils literal"><span class="pre">make</span></code> in project root directory to run Iris API,
+then verify with curl:</p>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span>$ curl localhost:16649/v0/targets
+[&quot;abc&quot;,&quot;demo&quot;,&quot;demo_team&quot;,&quot;foo&quot;,&quot;foo_team&quot;]
+</pre></div>
+</div>
+</div>
+<div class="section" id="creating-an-escalation-plan">
+<h2>Creating an escalation plan<a class="headerlink" href="#creating-an-escalation-plan" title="Permalink to this headline">¶</a></h2>
+<p>Navigate to the &#8220;Plans&#8221; page using the top bar. Click “Create New Plan”
+on the top right to make a new escalation plan. <img alt="create-plan" src="_images/create-plan.png" /></p>
+<p>Let&#8217;s focus on the main content here. There’s additional settings for
+Aggregation, Incident tracking etc, but we can take a look at those
+later. Our plan has a name, description, and list of steps. Each step
+has a number of notifications. Iris will send messages according to this
+escalation plan until someone acknowledges (claims) the incident. After
+claiming, escalation will stop, and no more messages will be sent.</p>
+</div>
+<div class="section" id="defining-terms">
+<h2>Defining terms:<a class="headerlink" href="#defining-terms" title="Permalink to this headline">¶</a></h2>
+<p>“Role” and “Target” determine the recipient of the message. Here, our
+role is “User”, and our target is “Demo”, meaning that we’re sending a
+message to the demo user. Other roles allow for dynamic definitions in
+escalation plans; for example, the “Oncall-Primary” role allows Iris to
+look up the on-call engineer for a target team when escalating. For now,
+we’ll just focus on user, which is the simplest role.</p>
+<p>“Priority” determines the importance of the message. Users can map
+different priorities to different contact modes. For example, user A
+might decide to map “medium” messages to SMS, while user B might map
+medium to emails instead. By default, this mapping is: Low: email
+Medium: email High: sms Urgent: call</p>
+<p>“Wait” determines how many minutes to wait after sending a message
+before proceeding to the next one. “Count” determines how many times the
+message will be repeated before moving on.</p>
+<p>“Template” defines the template used to generate message content. Iris
+allows you to customize message content using this template definition.
+To generate the message, Iris will render the template with the incident
+context and pass along the resulting content.</p>
+<p>Finally, “Optional” allows messages to fail without raising an alert.
+Otherwise, if Optional is false, a message that cannot be delivered will
+result in an alerting message sent to the plan creator. Setting this to
+true can be useful for (role, target) combinations that may not always
+be present (e.g. oncall-secondary).</p>
+</div>
+<div class="section" id="back-to-the-plan">
+<h2>Back to the plan<a class="headerlink" href="#back-to-the-plan" title="Permalink to this headline">¶</a></h2>
+<p>In step 1, we send a medium priority message to the demo user two times,
+waiting five minutes after sending each message before sending the next.
+After that, we send two urgent messages, waiting 10 minutes between.
+Let’s publish the plan with the button on the top right. Back in the
+Iris UI, give your new plan a test by clicking the button on the top
+right. Use the Autoalerts application. <img alt="test-incident" src="_images/test-incident.png" /></p>
+<p>We’ve made an incident! But, if we navigate to the “Incidents” page,
+we’ll see that there’s no currently active incidents. This is because
+our incident hasn’t yet sent a message. For messages to be sent, we’ll
+need to get the Iris sender daemon running.</p>
+</div>
+<div class="section" id="iris-sender">
+<h2>Iris sender<a class="headerlink" href="#iris-sender" title="Permalink to this headline">¶</a></h2>
+<p>In the root directory of the project, activate the virtualenv and run
+<code class="docutils literal"><span class="pre">make</span> <span class="pre">sender</span></code> (Keep Iris API running as well). Iris sender is
+responsible for message sending. It runs on a 60 second loop, checking
+the DB for new incidents and creating messages for those incidents if
+necessary. A lot of Iris’s complexity lives here, so we’ll be coming
+back to the sender shortly. For now, let’s set it running and test out
+our new escalation plan. The logs should have a snippet similar to
+below:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">963</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">*</span><span class="p">]</span> <span class="mi">1</span> <span class="n">new</span> <span class="n">incidents</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">975</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">*</span><span class="p">]</span> <span class="mi">1</span> <span class="n">new</span> <span class="n">messages</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">975</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">*</span><span class="p">]</span> <span class="n">escalate</span> <span class="n">task</span> <span class="n">finished</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">975</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">-</span><span class="p">]</span> <span class="n">start</span> <span class="n">deactivate</span> <span class="n">task</span><span class="o">...</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">979</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">*</span><span class="p">]</span> <span class="n">deactivate</span> <span class="n">task</span> <span class="n">finished</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">979</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">-</span><span class="p">]</span> <span class="n">start</span> <span class="n">send</span> <span class="n">task</span><span class="o">...</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">981</span> <span class="n">INFO</span> <span class="n">root</span> <span class="mi">1</span> <span class="n">new</span> <span class="n">messages</span> <span class="n">waiting</span> <span class="ow">in</span> <span class="n">database</span> <span class="o">-</span> <span class="n">queued</span><span class="p">:</span> <span class="mi">0</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">981</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">*</span><span class="p">]</span> <span class="n">send</span> <span class="n">task</span> <span class="n">finished</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">982</span> <span class="n">INFO</span> <span class="n">root</span> <span class="p">[</span><span class="o">-</span><span class="p">]</span> <span class="n">start</span> <span class="n">aggregate</span> <span class="n">task</span> <span class="o">-</span> <span class="n">queued</span><span class="p">:</span> <span class="mi">0</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">985</span> <span class="n">INFO</span> <span class="n">root</span> <span class="n">Sending</span> <span class="n">message</span> <span class="p">(</span><span class="n">ID</span> <span class="mi">4</span><span class="p">)</span> <span class="n">locally</span>
+<span class="mi">2018</span><span class="o">-</span><span class="mi">11</span><span class="o">-</span><span class="mi">06</span> <span class="mi">01</span><span class="p">:</span><span class="mi">07</span><span class="p">:</span><span class="mi">17</span><span class="p">,</span><span class="mi">986</span> <span class="n">INFO</span> <span class="n">iris</span><span class="o">.</span><span class="n">vendors</span><span class="o">.</span><span class="n">iris_dummy</span> <span class="n">SEND</span><span class="p">:</span> <span class="n">call</span> <span class="n">Autoalerts</span> <span class="o">+</span><span class="mi">1</span> <span class="mi">223</span><span class="o">-</span><span class="mi">456</span><span class="o">-</span><span class="mi">7890</span>
+</pre></div>
+</div>
+<p>Here, we see that Iris sender has sent a dummy call to +1 233-456-7890
+(the phone number configured for the demo user). Now, if we navigate to
+the incidents list, we’ll see that our incident has shown up. We can now
+claim the incident from the UI to stop further escalation.</p>
+<p>Sending a real message If we want to send a real message, we’ll first
+need to configure Iris sender to use a different message vendor.
+Currently, the config is set up to use the iris_dummy vendor, which
+logs messages without actually sending anything. Instead of that, let’s
+set up something using Twilio, which provides call and SMS services. You
+can set up a free Twilio account pretty easily at <a class="reference external" href="https://www.twilio.com">this
+link</a>. After that, set up a new project with
+programmable SMS and voice. We’ll need a few things from Twilio to get
+started: a Twilio phone number, an Account SID, and an Auth token. In
+addition, we’ll need to set up a TwiML Bin to generate the content of
+our messages without needing to spin up a new webserver. Some docs for
+that can be found
+<a class="reference external" href="https://www.twilio.com/blog/2016/05/introducing-native-twiml-bins-powered-by-the-twilio-cloud.html">here</a>.
+We’ll want the content of our bin to be:</p>
+<div class="code html highlight-default"><div class="highlight"><pre><span></span>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;Response&gt;
+  &lt;Say language=&quot;en-US&quot; voice=&quot;alice&quot;&gt;
+    {{content}}
+  &lt;/Say&gt;
+&lt;/Response&gt;
+</pre></div>
+</div>
+<p>Head back to <code class="docutils literal"><span class="pre">configs/config.dev.yaml</span></code>. On line 139, we see a skeleton
+configuration for the Twilio message vendor:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="c1">#- type: iris_twilio</span>
+<span class="c1">#  name: twilio_1</span>
+<span class="c1">#  account_sid: &#39;&#39;</span>
+<span class="c1">#  auth_token: &#39;&#39;</span>
+<span class="c1">#  twilio_number: &#39;&#39;</span>
+<span class="c1">#  relay_base_url: &#39;&#39;</span>
+</pre></div>
+</div>
+<p>Change this to match below, filling in the account_sid, auth_token,
+and twilio_number fields appropriately. We’ll also need to fill in the
+relay_base_url with the url of our TwiML bin, and configure the
+say/gather endpoints to the empty string. This way, Twilio will hit the
+TwiML bin URL without any trailing endpoint, which is needed for this to
+work properly. When you’re done, the config should look like this:</p>
+- type: iris_twilio
+  name: twilio_1
+  account_sid: ‘AC123…’
+  auth_token: ‘abc…’
+  twilio_number: ‘+11234567890’
+  relay_base_url: 'https://handler.twilio.com/abc'
+  say_endpoint: ‘’
+  gather_endpoint: ‘'
+</pre><p>We’ll need to remove the “[]” from the <code class="docutils literal"><span class="pre">vendors:</span> <span class="pre">[]</span></code> line on 118, and
+set <code class="docutils literal"><span class="pre">debug:</span> <span class="pre">False</span></code> in the sender settings on line 59. Re-run make/make
+sender to pick up the new configurations. Finally, change the contact
+info for the demo user to match the number you verified with Twilio:</p>
+<div class="code sql highlight-default"><div class="highlight"><pre><span></span><span class="n">UPDATE</span> <span class="n">target_contact</span>
+<span class="n">SET</span> <span class="n">destination</span> <span class="o">=</span> <span class="s1">&#39;+1 123-456-7890&#39;</span>
+<span class="n">WHERE</span> <span class="n">target_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">SELECT</span> <span class="nb">id</span> <span class="n">FROM</span> <span class="n">target</span> <span class="n">WHERE</span> <span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;demo&#39;</span> <span class="n">AND</span> <span class="n">type_id</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">AND</span> <span class="n">mode_id</span> <span class="n">IN</span> <span class="p">(</span><span class="n">SELECT</span> <span class="nb">id</span> <span class="n">FROM</span> <span class="n">mode</span> <span class="n">WHERE</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;sms&#39;</span> <span class="n">OR</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;call&#39;</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Now, we can use the iris_twilio vendor for sending messages. Let’s
+trigger another incident, using the “Test Plan” button for “Example
+plan” in the same way we did before. Make sure Iris sender is running,
+and wait for Iris to call. After a minute or so, you should receive a
+phone call from your Twilio number saying “test_call”. ## Customizing
+call content Now that we’ve set up phone calls via Twilio, let’s
+customize the message content to say something a little more useful than
+“test_call”. To do that, we’ll need to modify the template that our
+escalation plan is using. If we examine the notifications in “Example
+plan”, we see that hey all use the “test_template” message template.
+Let’s make some changes to that. Navigate to the Templates page, and
+click on test_template in the list on that page. <img alt="template" src="_images/template.png" /> Here, we
+see that test_template defines message content for a number of
+different contact modes. For now, let’s focus on call. Note that this
+template defines content for a specific application, Autoalerts.
+Autoalerts defines a number of variables, which are shown on the page as
+well. Our template can inject the value of any of these variables into
+the message content using Jinja template syntax. As an example of this,
+let’s change the content of the call message to:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span>Hello world! {{ notes }}
+</pre></div>
+</div>
+<p>Clone the template, make the change, then publish the new template. This
+will deactivate the previous version of the template. The “Example plan”
+escalation plan will use the new version of “test_template” when it
+creates a message from now on, ignoring the previous version. Let’s
+check it out by testing “Example plan” again. We should get a call now
+saying “Hello world! This is a note.”</p>
+</div>
+<div class="section" id="a-deeper-look-at-applications">
+<h2>A deeper look at applications<a class="headerlink" href="#a-deeper-look-at-applications" title="Permalink to this headline">¶</a></h2>
+<p>In the previous section, we discussed that test_template defined
+message content on a per-application basis. Let’s dive a little deeper
+into the concept of an Iris application. Each Iris app represents an
+integration with Iris. To explain this a more clearly, let’s look at
+Autoalerts as an example.</p>
+<p>Head to the “Applications” page, and click on Autoalerts in the list
+that shows up. We should get something that looks like this:
+<img alt="application" src="_images/application.png" /></p>
+<p>At the top, we see that the application defines a number of variables.
+When this application creates an Iris incident, it provides a context
+JSON object that defines these variables. As we saw earlier, this
+incident context is rendered via the escalation plan’s template to
+create the message content. When we trigger an incident with the “Test
+Plan” button, we use the sample context defined on this page as the
+incident’s context. For example, in the previous section, we sent a
+phone call using the <code class="docutils literal"><span class="pre">{{notes}}</span></code> variable, which is defined as “This
+is a note” in the Autoalerts sample context.</p>
+<p>Applications also define a context template, which defines the content
+of the Incident details page in the Iris UI. We can edit this template
+here and see the result when we navigate back to the incident detail
+page. For example, try adding a “&lt;h2&gt; Hello World! &lt;/h2&gt;” below the
+“{{#context}}” line. When we take a look at any of our previous
+incidents, we get: <img alt="hello-context" src="_images/hello-context.png" /></p>
+<p>Finally, the summary template defines the content on the incident list
+page. Since each incident has a different context, it’s up to the
+application to define how an incident should be summarized in the
+incident list. The resulting content of the Autoalerts summary template
+is shown below. <img alt="summary-list" src="_images/incident-list.png" /></p>
+</div>
+<div class="section" id="triggering-incidents-programmatically">
+<h2>Triggering incidents programmatically<a class="headerlink" href="#triggering-incidents-programmatically" title="Permalink to this headline">¶</a></h2>
+<p>Iris applications provide an API key that can be used to trigger
+incidents programmatically via the Iris REST API. Let’s take a look at
+how this works by writing a quick script to trigger incidents. Using the
+<a class="reference external" href="https://pypi.org/project/irisclient/">Iris python client</a>, this is
+pretty easy:</p>
+<div class="code python highlight-default"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">irisclient</span>
+
+<span class="n">iris</span> <span class="o">=</span> <span class="n">irisclient</span><span class="o">.</span><span class="n">IrisClient</span><span class="p">(</span><span class="s1">&#39;Autoalerts&#39;</span><span class="p">,</span> <span class="s1">&#39;a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49&#39;</span><span class="p">,</span> <span class="s1">&#39;https://localhost:16649&#39;</span><span class="p">)</span>
+<span class="n">iris</span><span class="o">.</span><span class="n">incident</span><span class="p">(</span><span class="s1">&#39;Example plan&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;notes&#39;</span><span class="p">:</span> <span class="s1">&#39;This is a programmatic incident!&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+<p>Remember to make sure the sender is running, and wait for the new phone
+call. This one should now say “This is a programmatic incident”. If we
+define our message templates properly, our outbound messages can now
+include useful information about each incident.</p>
+</div>
+<div class="section" id="adding-real-users">
+<h2>Adding real users<a class="headerlink" href="#adding-real-users" title="Permalink to this headline">¶</a></h2>
+<p>Previously, we routed all of the messages going to the demo user to our
+own phone numbers through a big SQL query run on the database. This is
+obviously non-ideal. There are a number of different ways that we can
+more easily import or create users. The easiest way to do this involves
+another open-source project:
+<a class="reference external" href="https://github.com/jrgp/iris-admin">iris-admin</a>.</p>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">jrgp</span><span class="o">/</span><span class="n">iris</span><span class="o">-</span><span class="n">admin</span><span class="o">.</span><span class="n">git</span>
+<span class="n">virtualenv</span> <span class="n">env</span>
+<span class="o">.</span> <span class="n">env</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">activate</span>
+<span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">develop</span>
+<span class="o">.</span> <span class="n">env</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">activate</span>
+</pre></div>
+</div>
+<p>Then, modify the DB config in configs/config.dev.yaml to use the iris
+user/password we created earlier. We can then access the Iris admin UI
+from <code class="docutils literal"><span class="pre">http://localhost:16651</span></code>. This gives us a nifty UI that we can
+use to add, create, delete, and modify users.</p>
+</div>
+<div class="section" id="adding-authentication">
+<h2>Adding authentication<a class="headerlink" href="#adding-authentication" title="Permalink to this headline">¶</a></h2>
+<p>At LinkedIn, we use LDAP for authentication. We’ve provided an
+authentication module that leverages this, with example configuration
+values in configs/config.dev.yaml. In addition, in src/iris/ui/auth, we
+define several sample Authenticator classes, which define a constructor
+and the <code class="docutils literal"><span class="pre">authenticate(user,</span> <span class="pre">password)</span></code> method. Using this interface,
+custom authentication can be implemented with a variety of different
+providers.</p>
+</div>
+<div class="section" id="wrapping-up">
+<h2>Wrapping up<a class="headerlink" href="#wrapping-up" title="Permalink to this headline">¶</a></h2>
+<p>After all these steps, we&#8217;ve now got a setup of Iris that is
+development-ready. The examples in the <code class="docutils literal"><span class="pre">ops</span></code> directory should be a
+good starting point for building more production-ready setups, using
+nginx and uwsgi rather than gunicorn for better performance and allowing
+for easier deployment. More questions? Reach out to
+<a class="reference external" href="mailto:iris-oncall&#37;&#52;&#48;linkedin&#46;com">iris-oncall<span>&#64;</span>linkedin<span>&#46;</span>com</a> or open an issue on Github.</p>
+</div>
+</div>
+
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="admin_manual.html" class="btn btn-neutral float-right" title="Iris admin manual" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="user_manual.html" class="btn btn-neutral" title="Iris user manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, The Iris team.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.0.14',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
