@@ -29,6 +29,8 @@ class iris_twilio(object):
             CALL_SUPPORT: self.send_call,
         }
         self.timeout = config.get('timeout', 10)
+        self.say_endpoint = config.get('say_endpoint', '/api/v0/twilio/calls/say')
+        self.gather_endpoint = config.get('gather_endpoint', '/api/v0/twilio/calls/gather')
         push_config = config.get('push_notification', {})
         self.push_active = push_config.get('activated', False)
         if self.push_active:
@@ -115,12 +117,12 @@ class iris_twilio(object):
         if message_id:
             payload['message_id'] = message_id
             payload['instruction'] = plugin.get_phone_menu_text()
-            relay_cb_url = '%s/api/v0/twilio/calls/gather?%s' % (
-                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+            relay_cb_url = '%s%s?%s' % (
+                self.config['relay_base_url'], self.gather_endpoint, urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
         else:
-            relay_cb_url = '%s/api/v0/twilio/calls/say?%s' % (
-                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+            relay_cb_url = '%s%s?%s' % (
+                self.config['relay_base_url'], self.say_endpoint, urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
             )
 
         start = time.time()
