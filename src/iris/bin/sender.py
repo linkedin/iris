@@ -38,6 +38,7 @@ from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
 NEW_INCIDENTS = '''SELECT
     `incident`.`id` as `id`,
+    `incident`.`created` as `created`,
     `incident`.`plan_id` as `plan_id`,
     `incident`.`context` as `context`,
     `application`.`name` as `application`
@@ -142,6 +143,7 @@ UNSENT_MESSAGES_SQL = '''SELECT
     `plan`.`id` as `plan_id`,
     `incident`.`id` as `incident_id`,
     `incident`.`context` as `context`,
+    `incident`.`created` as `incident_created`,
     `plan_notification`.`template` as `template`,
     `dynamic_target`.`name` as `dynamic_target`
 FROM `message`
@@ -419,7 +421,7 @@ def escalate():
     cursor.execute(NEW_INCIDENTS)
 
     escalations = {}
-    for incident_id, plan_id, context, application in cursor:
+    for incident_id, created, plan_id, context, application in cursor:
         escalations[incident_id] = (plan_id, 1)
         # create tracking message if configured
         plan = cache.plans[plan_id]
@@ -435,6 +437,7 @@ def escalate():
                 'plan': plan['name'],
                 'plan_id': plan_id,
                 'application': application,
+                'incident_created': created,
             }
             if tracking_type == 'email':
                 tracking_message = {
