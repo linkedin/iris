@@ -50,9 +50,9 @@ turn off the ``ONLY_FULL_GROUP_BY`` MySQL mode.
 
 .. code:: sql
 
-    CREATE USER ‘iris’@’localhost’ IDENTIFIED BY ‘iris’
-    CREATE DATABASE iris
-    GRANT ALL ON iris.* TO iris@localhost
+    CREATE USER 'iris'@'localhost' IDENTIFIED BY 'iris';
+    CREATE DATABASE iris;
+    GRANT ALL ON iris.* TO iris@localhost;
     SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));
 
 Now let’s load the schema and some dummy data. Navigate to project root,
