@@ -121,6 +121,10 @@ vendors: []
 #  smtp_server: 'smtp1.example.com'
 #  smtp_gateway: 'smtp2.example.com'
 #  from: 'foouser@example.com'
+#  port: 25
+#  username: 'foobar'
+#  password: 'secretpass'
+
 ## If True, make a pool of persistent connections per each MX record for the given smtp_gateway
 ##  autoscale: False
 ##  tasks_per_mx: 4
