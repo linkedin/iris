@@ -18,7 +18,7 @@ First thing's first: clone the Iris repo:
 
 .. code:: sh
 
-    git clone git@github.com:linkedin/iris.git
+    git clone https://github.com/linkedin/iris.git
 
 Let's take a quick look through the source code.
  - ``ops`` - examples of deployment options with Docker, Kubernetes, etc
