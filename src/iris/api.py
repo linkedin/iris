@@ -223,6 +223,12 @@ JOIN `plan_notification` ON `message`.`plan_notification_id` = `plan_notificatio
 WHERE `message`.`incident_id` = %s
 ORDER BY `message`.`sent`'''
 
+single_incident_query_comments = '''
+SELECT `target`.`name` AS `author`, `comment`.`created`, `comment`.`content`
+FROM `comment` JOIN `target` ON `user_id` = `target`.`id`
+WHERE `comment`.`incident_id` = %s
+'''
+
 plan_columns = {
     'id': '`plan`.`id` as `id`',
     'name': '`plan`.`name` as `name`',
@@ -1642,6 +1648,9 @@ class Incident(object):
         if incident:
             cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
             incident['steps'] = cursor.fetchall()
+
+            cursor.execute(single_incident_query_comments, incident['id'])
+            incident['comments'] = cursor.fetchall()
             connection.close()
 
             incident['context'] = ujson.loads(incident['context'])
@@ -4241,6 +4250,51 @@ class Devices(object):
         resp.status = HTTP_201
 
 
+class Comments(object):
+    allow_read_no_auth = True
+
+    def on_post(self, req, resp, incident_id):
+        comment = ujson.loads(req.context['body'])
+        if not comment['content']:
+            raise HTTPBadRequest('Empty comment')
+        comment['incident_id'] = incident_id
+        comment['created'] = datetime.datetime.utcnow()
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                '''
+                INSERT INTO `comment` (`incident_id`, `user_id`, `created`, `content`)
+                VALUES
+                (%(incident_id)s,
+                (SELECT `id` FROM `user` JOIN `target` ON `user`.`target_id` = `target`.`id` WHERE `name` = %(author)s),
+                %(created)s,
+                %(content)s)
+                ''',
+                comment)
+        except Exception:
+            raise HTTPBadRequest('Failed to post comment')
+        else:
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+        resp.status = HTTP_201
+        resp.body = str(cursor.lastrowid)
+
+    def on_get(self, req, resp, incident_id):
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(
+            single_incident_query_comments,
+            incident_id)
+        resp.body = ujson.dumps(cursor)
+        cursor.close()
+        conn.close()
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -4272,6 +4326,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/incidents/{incident_id}', Incident())
     api.add_route('/v0/incidents', Incidents())
     api.add_route('/v0/incidents/claim', ClaimIncidents())
+    api.add_route('/v0/incidents/{incident_id}/comments', Comments())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())

@@ -1306,6 +1306,32 @@ table.dataTable thead .sorting_asc {
   padding: 5px;
 }
 
+#comment-body {
+  height: 100px;
+}
+
+.comment-display {
+  padding-left: 10px;
+}
+
+.comment-header {
+  margin-bottom: 3px;
+  font-size: 12px;
+  color: #777;
+}
+
+.comment-content{
+  padding-left: 10px;
+}
+
+.comment-actions {
+  margin-top: 10px;
+}
+
+#add-comment {
+  display: none;
+}
+
 #summary-info-modal .modal-content {
   width: 700px;
 }
