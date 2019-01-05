@@ -82,6 +82,39 @@
     </table>
     {{/if}}
   </div>
+  <div class="module">
+    <h4>Comments:</h4>
+    <hr>
+    <div class="comment-list">
+      {{#each comments}}
+        {{>comment}}
+      {{/each}}
+    </div>
+    {{#unless comments}}
+    <div class="no-comments">
+      <p>There are no comments yet on this incident.</p><hr>
+    </div>
+    {{/unless}}
+    <div class="clearfix">
+      <button type="button" id="show-comment" class="btn btn-default blue btn-sm">Add comment</button>
+    </div>
+    <div id="add-comment">
+      <label for="comment-body">Comment:</label>
+      <textarea id="comment-body" class="form-control"></textarea>
+      <div class="comment-actions">
+        <button type="button" id="comment-incident" class="btn btn-primary btn-sm">Add</button>
+        <button type="button" id="cancel-comment" class="btn btn-default blue btn-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+</script>
+
+<script id="comment-template" type="text/x-handlebars-template">
+  <div class="comment-display">
+      <p class="comment-header"><strong>{{author}}</strong> added a comment - {{convertToLocal created}}</p>
+      <p class="comment-content">{{content}}</p>
+  </div>
+  <hr>
 </script>
 {% endraw %}
 {% endblock %}

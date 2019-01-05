@@ -1423,6 +1423,12 @@ iris = {
       $page: $('.main'),
       id: null,
       claimIncidentBtn: '#claim-incident',
+      showAddCommentBtn: '#show-comment',
+      hideAddCommentBtn: '#cancel-comment',
+      addCommentBtn: '#comment-incident',
+      addCommentContainer: '#add-comment',
+      commentContainer: '.comment-list',
+      commentSource: $('#comment-template').html(),
       incidentSource: $('#incident-template').html(),
       messageTable: '#incident-messages-table',
       DataTable: null,
@@ -1438,11 +1444,46 @@ iris = {
     init: function(){
       var location = window.location.pathname.split('/'),
           path = this.data.id = location[location.length - 1];
+      Handlebars.registerPartial('comment', this.data.commentSource)
       this.getIncident(path);
     },
     events: function(){
       var data = this.data;
       data.$page.on('click', data.claimIncidentBtn, this.claimIncident.bind(this));
+      data.$page.on('click', data.showAddCommentBtn, this.showComment.bind(this));
+      data.$page.on('click', data.hideAddCommentBtn, this.hideComment.bind(this));
+      data.$page.on('click', data.addCommentBtn, this.addComment.bind(this))
+    },
+    showComment: function() {
+      $(this.data.addCommentContainer).show();
+      $(this.data.showAddCommentBtn).hide();
+      $('#comment-body').focus();
+    },
+    hideComment: function() {
+      $('#comment-body').val('');
+      $(this.data.addCommentContainer).hide();
+      $(this.data.showAddCommentBtn).show();
+    },
+    addComment: function() {
+      var self = this,
+          comment = {
+            author: window.appData.user,
+            content: $('#comment-body').val()
+          };
+      $.ajax({
+        url: self.data.url + self.data.id + '/comments',
+        data: JSON.stringify(comment),
+        method: 'POST',
+        contentType: 'application/json'
+      }).done(function() {
+        var template = Handlebars.compile(self.data.commentSource);
+        comment['created'] = Date.now() / 1000;
+        $(self.data.commentContainer).append(template(comment));
+        $('.no-comments').hide();
+        self.hideComment();
+      }).fail(function(){
+        iris.createAlert('Failed to post comment', 'danger', $(self.data.addCommentContainer))
+      })
     },
     getIncident: function(path){
       var self = this;
