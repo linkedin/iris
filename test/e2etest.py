@@ -3206,13 +3206,13 @@ def test_comment(sample_user, sample_team, sample_application_name, sample_templ
 
     # Post a few comments for the incident
     re = requests.post(base_url + 'incidents/%s/comments' % incident_id, headers=username_header(sample_user), json={
-            'author': sample_user,
-            'content': 'Hello world'
+        'author': sample_user,
+        'content': 'Hello world'
     })
     assert re.status_code == 201
     re = requests.post(base_url + 'incidents/%s/comments' % incident_id, headers=username_header(sample_user), json={
-            'author': sample_user,
-            'content': 'Goodbye world'
+        'author': sample_user,
+        'content': 'Goodbye world'
     })
     assert re.status_code == 201
     # Get incident info and verify comments

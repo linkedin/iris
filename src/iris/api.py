@@ -4257,6 +4257,8 @@ class Comments(object):
         comment = ujson.loads(req.context['body'])
         if not comment['content']:
             raise HTTPBadRequest('Empty comment')
+        if not acl_allowed(req, comment['author']):
+            raise HTTPForbidden('Comment author must match logged in user')
         comment['incident_id'] = incident_id
         comment['created'] = datetime.datetime.utcnow()
 
