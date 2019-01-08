@@ -57,7 +57,7 @@ setuptools.setup(
             'sphinx_rtd_theme',
             # test deps
             'mock==2.0.0',
-            'pytest==3.0.5',
+            'pytest==4.1.0',
             'pytest-mock==1.5.0',
             'pytest-cov',
             'flake8==3.5.0',
