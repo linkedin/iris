@@ -251,7 +251,6 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 else:
                     break
 
-
         # Archive+Kill all messages in these incidents
         while True:
 

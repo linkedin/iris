@@ -1466,24 +1466,29 @@ iris = {
     },
     addComment: function() {
       var self = this,
+          commentContainer = $(self.data.addCommentContainer),
           comment = {
             author: window.appData.user,
             content: $('#comment-body').val()
           };
-      $.ajax({
-        url: self.data.url + self.data.id + '/comments',
-        data: JSON.stringify(comment),
-        method: 'POST',
-        contentType: 'application/json'
-      }).done(function() {
-        var template = Handlebars.compile(self.data.commentSource);
-        comment['created'] = Date.now() / 1000;
-        $(self.data.commentContainer).append(template(comment));
-        $('.no-comments').hide();
-        self.hideComment();
-      }).fail(function(){
-        iris.createAlert('Failed to post comment', 'danger', $(self.data.addCommentContainer))
-      })
+      if (comment.content === '') {
+        iris.createAlert('Error: Empty comment body', 'danger', commentContainer)
+      } else {
+        $.ajax({
+          url: self.data.url + self.data.id + '/comments',
+          data: JSON.stringify(comment),
+          method: 'POST',
+          contentType: 'application/json'
+        }).done(function() {
+          var template = Handlebars.compile(self.data.commentSource);
+          comment['created'] = Date.now() / 1000;
+          $(self.data.commentContainer).append(template(comment));
+          $('.no-comments').hide();
+          self.hideComment();
+        }).fail(function(){
+          iris.createAlert('Failed to post comment', 'danger', commentContainer)
+        })
+      }
     },
     getIncident: function(path){
       var self = this;
