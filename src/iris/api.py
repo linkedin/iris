@@ -3228,7 +3228,7 @@ class ApplicationPlans(object):
             connection, plan_filters, plan_filter_types, req.params)
 
         query = '''SELECT %s
-                   FROM `plan_active` JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
+                   FROM `plan_active` LEFT JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
                    JOIN `plan_notification` ON `plan`.`id` = `plan_notification`.`plan_id`
                    JOIN `template` ON `plan_notification`.`template` = `template`.`name`
                    JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`

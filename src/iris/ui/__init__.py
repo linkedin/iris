@@ -26,6 +26,7 @@ assets_env = AssetsEnvironment(os.path.join(ui_root, 'static'), url='/static')
 
 assets_env.register('jquery_libs', Bundle('js/jquery-3.3.1.min.js', 'js/jquery.dataTables.min.js',
                                           'js/handlebars-4.0.12.min.js', 'js/hopscotch.min.js',
+                                          'js/marked.min.js',
                                           output='bundles/jquery.libs.js'))
 assets_env.register('bootstrap_libs', Bundle('js/bootstrap.min.js', 'js/typeahead.js',
                                              'js/bootstrap-datetimepicker.js', 'js/moment-timezone.js',

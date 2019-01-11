@@ -415,6 +415,7 @@ table.dataTable thead .sorting_asc {
 .plan-step {
   padding: 10px 20px;
   position: relative;
+  list-style-type: none;
 }
 
 .plan-step {
@@ -1330,6 +1331,20 @@ table.dataTable thead .sorting_asc {
 
 #add-comment {
   display: none;
+}
+
+#re-escalate-container label {
+  vertical-align: bottom;
+}
+
+.re-escalate-plan-container {
+  max-height: 600px;
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+#re-escalate-container {
+  margin-bottom: 10px;
 }
 
 #summary-info-modal .modal-content {
