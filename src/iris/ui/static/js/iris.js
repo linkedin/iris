@@ -690,7 +690,7 @@ iris = {
       this.updateSubmitModel();
 
       if (model && model.isValid) {
-        $button.addClass('disabled');
+        $button.prop('disabled', true);
         $.ajax({
           url: self.data.url,
           data: JSON.stringify(model),
@@ -703,7 +703,7 @@ iris = {
           }
         }).fail(function(response){
           var errorTxt = (response && response.responseJSON && response.responseJSON.description) ? response.responseJSON.title + ' - ' + response.responseJSON.description : 'Plan creation failed.';
-          $button.removeClass('disabled');
+          $button.prop('disabled', false);
           iris.createAlert('Error: ' + errorTxt);
         });
       }
@@ -1216,7 +1216,7 @@ iris = {
       this.updateSubmitModel();
 
       if (model && model.isValid) {
-        $button.addClass('disabled');
+        $button.prop('disabled', true);
         $.ajax({
           url: self.data.url,
           data: JSON.stringify(model),
@@ -1229,7 +1229,7 @@ iris = {
           }
         }).fail(function(response){
           var errorTxt = (response && response.responseJSON && response.responseJSON.error) ? response.responseJSON.error : 'Template creation failed.';
-          $button.removeClass('disabled');
+          $button.prop('disabled', false);
           iris.createAlert('Error: ' + errorTxt);
         });
       }
@@ -1394,7 +1394,7 @@ iris = {
           owner = $this.attr('data-action') === 'claim' ? window.appData.user : null,
           self = this,
           incidentId = $this.attr('data-id');
-      $this.addClass('disabled');
+      $this.prop('disabled', true);
       $.ajax({
         url: self.data.url + incidentId,
         data: JSON.stringify({
@@ -1413,7 +1413,7 @@ iris = {
       }).fail(function(){
         iris.createAlert('Failed to modify incident', 'danger');
       }).always(function(){
-        $this.removeClass('disabled');
+        $this.prop('disabled', false);
       });
     }
   },
@@ -1515,7 +1515,7 @@ iris = {
           owner = $this.attr('data-action') === 'claim' ? window.appData.user : null,
           self = this,
           incidentId = $this.attr('data-id');
-      $this.addClass('disabled');
+      $this.prop('disabled', true);
       $.ajax({
         url: self.data.url + incidentId,
         data: JSON.stringify({
@@ -1531,7 +1531,7 @@ iris = {
       }).fail(function(){
         iris.createAlert('Failed to modify incident', 'danger');
       }).always(function(){
-        $this.removeClass('disabled');
+        $this.prop('disabled', false);
       });
     }
   },
@@ -1710,7 +1710,7 @@ iris = {
         self.saveSetting();
       });
       this.data.$reprioritizationAddBtn.on('click', function(){
-        $(this).addClass('disabled');
+        $(this).prop('disabled', true);
         self.saveReprioritizationSettings();
       });
       this.data.$reprioritizationToggleBtn.on('click', function(){
@@ -1774,7 +1774,7 @@ iris = {
       }).fail(function(response){
         iris.createAlert('Failed to add reprioritization: ' + response.responseJSON.description, 'danger');
       }).always(function(){
-        self.data.$reprioritizationAddBtn.removeClass('disabled');
+        self.data.$reprioritizationAddBtn.prop('disabled', false);
       });
     },
     deleteReprioritizationSetting: function(src_mode) {
