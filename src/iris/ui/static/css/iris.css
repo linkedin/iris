@@ -841,9 +841,8 @@ table.dataTable thead .sorting_asc {
 }
 
 #tracking-notification .template-notification {
-  width: 516px;
-  height: 228px;
-  min-height: 200px;
+  min-width: 516px;
+  min-height: 228px;
 }
 
 #tracking-notification .template-notification .notification-body {
