@@ -103,6 +103,7 @@ provisioners:
       - sudo -Hu iris ln -s /home/iris/source/db /home/iris/db
       - sudo -Hu iris mkdir /home/iris/config
       - sudo -Hu iris cp /home/iris/source/configs/config.dev.yaml /home/iris/config/config.yaml
+      - sudo -Hu iris cp /home/iris/source/configs/healthcheck_path_status /tmp/status
       - sudo -Hu iris virtualenv /home/iris/env
       - sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && cd /home/iris/source && pip install ".[prometheus,kazoo]"'
 
