@@ -1422,6 +1422,14 @@ iris = {
       url: '/v0/incidents/',
       $page: $('.main'),
       id: null,
+      incident: null,
+      appPlanUrl: '/v0/applications/',
+      planTypeahead: 'input.typeahead',
+      showReescalateBtn: '#re-escalate-modal-btn',
+      reescalateModal: '#re-escalate-modal',
+      selectPlanBtn: '#re-escalate-plan-btn',
+      reescalateBtn: '#re-escalate-btn',
+      reescalatePlanContainer: '.re-escalate-plan-container',
       claimIncidentBtn: '#claim-incident',
       showAddCommentBtn: '#show-comment',
       hideAddCommentBtn: '#cancel-comment',
@@ -1443,16 +1451,22 @@ iris = {
     },
     init: function(){
       var location = window.location.pathname.split('/'),
-          path = this.data.id = location[location.length - 1];
-      Handlebars.registerPartial('comment', this.data.commentSource)
-      this.getIncident(path);
+          path = this.data.id = location[location.length - 1],
+          self = this;
+      Handlebars.registerPartial('comment', this.data.commentSource);
+      this.getIncident(path).done(function() {
+        self.events();
+      })
     },
     events: function(){
       var data = this.data;
       data.$page.on('click', data.claimIncidentBtn, this.claimIncident.bind(this));
       data.$page.on('click', data.showAddCommentBtn, this.showComment.bind(this));
       data.$page.on('click', data.hideAddCommentBtn, this.hideComment.bind(this));
-      data.$page.on('click', data.addCommentBtn, this.addComment.bind(this))
+      data.$page.on('click', data.addCommentBtn, this.addComment.bind(this));
+      data.$page.on('click', data.showReescalateBtn, this.reescalateModal.bind(this));
+      data.$page.on('click', data.selectPlanBtn, this.selectPlan.bind(this));
+      data.$page.on('click', data.reescalateBtn, this.reescalateIncident.bind(this));
     },
     showComment: function() {
       $(this.data.addCommentContainer).show();
@@ -1494,6 +1508,7 @@ iris = {
       var self = this;
 
       return $.getJSON(self.data.url + path).done(function(response){
+        self.data.incident = response;
         iris.changeTitle('Incident #' + response.id);
         $.getJSON('/v0/applications/' + response.application).done(function(application){
           if (application.context_template) {
@@ -1504,7 +1519,6 @@ iris = {
           self.data.$page.html(template(response));
           self.data.DataTable = $(self.data.messageTable).DataTable(self.data.dataTableOpts);
           iris.tables.bindArrowKeys(self.data.DataTable);
-          self.events();
         });
       }).fail(function(){
         iris.createAlert('Incident not found');
@@ -1533,6 +1547,164 @@ iris = {
       }).always(function(){
         $this.prop('disabled', false);
       });
+    },
+    reescalateModal: function() {
+      var $modal = $(this.data.reescalateModal),
+          self = this;
+          $field = $(self.data.planTypeahead);
+      $field.typeahead('destroy').each(function(){
+        var $this = $(this),
+            remoteUrl = self.data.appPlanUrl + self.data.incident.application + '/plans?name__contains=%QUERY';
+            results = new Bloodhound({
+              datumTokenizer: Bloodhound.tokenizers.obj.whitespace('value'),
+              queryTokenizer: Bloodhound.tokenizers.whitespace,
+              remote: {
+                url: remoteUrl,
+                wildcard: '%QUERY',
+              }
+            });
+        $this.typeahead(null, {
+          hint: true,
+          async: true,
+          highlight: true,
+          display: 'name',
+          source: results,
+        }).on('typeahead:select', function(e, plan){
+          self.previewPlan(plan);
+        }).on('input', function(e) {
+          $this.attr('value', e.target.value);
+        });
+      });
+      $modal.modal();
+    },
+    // Extra button to select re-escalation plan if plan name is typed fully
+    selectPlan: function() {
+      var planName = $('#re-escalate-typeahead').attr('value'),
+          self = this;
+
+      self.resetPlanPreview();
+      // Get plan details from name
+      $.ajax({
+        url: '/v0/plans',
+        data: {name: planName, active: 1},
+        method: 'GET',
+        contentType: 'application/json'
+      }).done(function(r) {
+        if (!r.length) {
+          iris.createAlert('No plan found for query: ' + planName, 'danger', $('.modal-body'));
+        } else {
+          self.previewPlan(r[0]);
+        }
+      }).fail(function() {
+        iris.createAlert('No plan found for query: ' + planName, 'danger', $('.modal-body'));
+      })
+    },
+    resetPlanPreview: function() {
+      $(this.data.reescalateBtn).prop('disabled', true);
+      $(this.data.reescalatePlanContainer).html('');
+    },
+    previewPlan: function(plan) {
+      var planContainer = $(this.data.reescalatePlanContainer),
+          planTemplate = Handlebars.compile($('#re-escalation-plan-template').html())
+          self = this;
+      // Get plan steps to preview re-escalation plan
+      $.ajax({
+        url: '/v0/plans/' + plan.id,
+        method: 'GET',
+      }).done(function(r) {
+        // Dynamic plans will have steps that define dynamic_index
+        // These can't be used for re-escalation
+        dynamic = r.steps.some(function(step){
+          return step.some(function(notification){
+            return notification.dynamic_index != undefined })
+          });
+        if (dynamic) {
+          self.resetPlanPreview();
+          iris.createAlert('Cannot re-escalate with dynamic plan: ' + plan.name, 'danger', $('.modal-body'))
+        } else {
+          iris.dismissAlerts();
+          planContainer.html(planTemplate(r));
+          $(self.data.reescalateBtn).prop('disabled', false);
+        }
+      }).fail(function(r) {
+        self.resetPlanPreview();
+        iris.createAlert('Failed to fetch plan details', 'danger', $('.modal-body'))
+      })
+    },
+    /* Re-ecalate an incident. This triggers the following actions:
+       1. Claim the incident if it is unclaimed
+       2. Re-raise the incident with the specified escalation plan
+       3. Comment on the original incident with a link to the new incident
+       4. Comment on the new incident with a link to the original
+       5. Navigate to the new incident page
+    */
+    reescalateIncident: function() {
+      var self = this,
+          $modal = $('.modal-body'),
+          plan = $('#re-escalate-typeahead').attr('value'),
+          claim;
+      // Claim incident if necessary
+      if (self.data.incident.active) {
+        claim = $.ajax({
+          url: self.data.url + self.data.incident.id,
+          data: JSON.stringify({
+            owner: window.appData.user
+          }),
+          method: 'POST',
+          contentType: 'application/json'
+        }).fail(function() {
+          iris.createAlert('Failed to claim original incident', 'danger', $modal);
+        })
+      } else {
+        claim = $.Deferred().resolve();
+      }
+      // Then, create a new incident
+      claim.then(function() {
+        return $.ajax({
+          url: '/v0/incidents',
+          data: JSON.stringify({
+            application: self.data.incident.application,
+            context: self.data.incident.context,
+            plan: plan
+          }),
+          method: 'POST',
+          contentType: 'application/json'
+        }).fail(function(){
+          iris.createAlert('Failed creating re-escalation incident', 'danger', $modal);
+        })
+      // Finally, post comments to new and original incidents
+      }).then(function(reescalateId){
+        var author = window.appData.user;
+        var comment = {
+          author: window.appData.user,
+          content: 'Incident re-escalated as [incident ' + reescalateId + '](/incidents/'
+            + reescalateId + ') by ' + author
+        }
+        var reescalationComment = {
+          author: window.appData.user,
+          content: 'Incident re-escalated from [incident ' + self.data.id + '](/incidents/'
+          + self.data.id + ') by ' + author
+        }
+        $.when(
+          $.ajax({
+            url: self.data.url + self.data.id + '/comments',
+            data: JSON.stringify(comment),
+            method: 'POST',
+            contentType: 'application/json'
+          }),
+          $.ajax({
+            url: self.data.url + reescalateId + '/comments',
+            data: JSON.stringify(reescalationComment),
+            method: 'POST',
+            contentType: 'application/json'
+          })
+        ).done(function() {
+          window.location = '/incidents/' + reescalateId;
+        }).fail(function(){
+          iris.createAlert('Failed to post re-escalation comments for re-escalation incident ' + reescalateId,
+            'danger', $modal);
+        })
+      })
     }
   },
   messages: {
@@ -2752,6 +2924,9 @@ iris = {
     }
     $('#iris-alert .alert-content').html(alertText);
   }, //end createAlert
+  dismissAlerts: function() {
+    $('#iris-alert').remove();
+  },
   typeahead: {
     data: {
       targetUrl: '/v0/targets/',
@@ -2889,6 +3064,12 @@ iris = {
     Handlebars.registerHelper('divide', function(val1, val2){
       return val1 / val2;
     });
+    Handlebars.registerHelper('add', function(val1, val2){
+      return val1 + val2;
+    });
+    Handlebars.registerHelper('markdown', function(val){
+      return new Handlebars.SafeString(marked(val, {sanitize: true}));
+    })
     Handlebars.registerHelper('prettyPrint', function(val){
       return typeof(val) === 'string' ? val : "{...}";
     });
