@@ -1570,6 +1570,7 @@ iris = {
           display: 'name',
           source: results,
         }).on('typeahead:select', function(e, plan){
+          $this.attr('value', plan.name);
           self.previewPlan(plan);
         }).on('input', function(e) {
           $this.attr('value', e.target.value);
