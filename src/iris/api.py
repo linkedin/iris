@@ -162,6 +162,7 @@ incident_columns = {
     'created': 'UNIX_TIMESTAMP(`incident`.`created`) as `created`',
     'owner': '`target`.`name` as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filters = {
@@ -175,6 +176,7 @@ incident_filters = {
     'created': '`incident`.`created`',
     'owner': '`target`.`name`',
     'current_step': '`incident`.`current_step`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filter_types = {
@@ -199,7 +201,8 @@ single_incident_query = '''SELECT `incident`.`id` as `id`,
     `target`.`name` as `owner`,
     `application`.`name` as `application`,
     `incident`.`current_step` as `current_step`,
-    `incident`.`active` as `active`
+    `incident`.`active` as `active`,
+    `incident`.`resolved` as `resolved`
 FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
@@ -1728,6 +1731,50 @@ class Incident(object):
                                  'owner': owner,
                                  'active': is_active})
 
+
+class Resolved(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp, incident_id):
+
+        try:
+            incident_id = int(incident_id)
+        except ValueError:
+            raise HTTPBadRequest('Invalid incident id')
+
+        incident_params = ujson.loads(req.context['body'])
+
+        try:
+            owner = incident_params['owner']
+        except KeyError:
+            raise HTTPBadRequest('"owner" field required')
+
+        if owner is not None:
+            if not acl_allowed(req, owner):
+                raise HTTPUnauthorized('Invalid caller for this app/user')
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid call: no matching owner')
+                # claim_incident will close the session
+        is_resolved, previous_owner = utils.resolve_incident(incident_id, owner)
+        if not owner:
+            owner = previous_owner
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'incident_id': incident_id,
+                                 'owner': owner,
+                                 'resolved': is_resolved})
 
 class ClaimIncidents(object):
     allow_read_no_auth = False
@@ -4329,6 +4376,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/incidents', Incidents())
     api.add_route('/v0/incidents/claim', ClaimIncidents())
     api.add_route('/v0/incidents/{incident_id}/comments', Comments())
+    api.add_route('/v0/incidents/{incident_id}/resolve', Resolved())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())

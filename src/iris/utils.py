@@ -311,6 +311,65 @@ def claim_incidents_from_batch_id(batch_id, owner):
     cursor.close()
     connection.close()
 
+def resolve_incident(incident_id, owner):
+    connection = db.engine.raw_connection()
+
+    cursor = connection.cursor()
+    cursor.execute('''
+      SELECT `target`.`name`
+      FROM `incident`
+      LEFT JOIN `target` ON `target`.`id` = `incident`.`owner_id`
+      WHERE `incident`.`id` = %s
+    ''', (incident_id, ))
+    result = cursor.fetchone()
+    previous_owner = result[0] if result else None
+    cursor.close()
+
+    resolved = 1 if owner else 0
+
+    # if incident is unclaimed claim it when marking it as resolved
+    if resolved == 1:
+        claim_incident(incident_id, owner)
+    else:
+        owner = previous_owner
+
+    now = datetime.datetime.utcnow()
+
+    max_retries = 3
+
+    for i in xrange(max_retries):
+        cursor = connection.cursor()
+        try:
+            cursor.execute('''UPDATE `incident`
+                               SET `incident`.`updated` = %(updated)s,
+                                   `incident`.`resolved` = %(resolved)s,
+                                   `incident`.`owner_id` = (SELECT `target`.`id` FROM `target` WHERE `target`.`name` = %(owner)s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+                               WHERE `incident`.`id` = %(incident_id)s''',
+                           {'incident_id': incident_id, 'resolved': resolved, 'owner': owner, 'updated': now})
+
+            connection.commit()
+            break
+        except Exception:
+            logger.exception('Failed running resolve query. (Try %s/%s)', i + 1, max_retries)
+        finally:
+            cursor.close()
+
+        sleep(.2)
+
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute('UPDATE `message` SET `resolved` = 1 WHERE `incident_id`= %s', (incident_id, ))
+        connection.commit()
+    except Exception:
+        logger.exception('Failed running query to set message for incident %s resolved', incident_id)
+    finally:
+        cursor.close()
+
+    connection.close()
+
+    return resolved == 1, previous_owner
+
 
 def msgpack_unpack_msg_from_socket(socket):
     unpacker = msgpack.Unpacker()

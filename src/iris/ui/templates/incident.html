@@ -27,6 +27,14 @@
       {{/isUser}}
       <button type="button" id="re-escalate-modal-btn" class="pull-right btn btn-default blue btn-sm">Re-escalate</button>
     </h3>
+      <h4>
+      {{#if resolved}} <i>Resolved</i> {{else}} Unresolved{{/if}}
+        {{#if resolved}}
+          <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unresolve">Mark Unresolved</button>
+        {{else}}
+          <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="resolve">Mark Resolved</button>
+        {{/if}}
+    </h4>
     <span class="light italic"><small>created at {{convertToLocal created}}</small></span>
     {{#if updated}}
       <span class="light">|</span>
