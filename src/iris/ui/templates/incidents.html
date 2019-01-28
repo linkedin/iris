@@ -125,6 +125,7 @@
       <td class="light created">Created On <i class="glyphicon glyphicon-sort"></i></td>
       <td class="light active">Active <i class="glyphicon glyphicon-sort"></i></td>
       <td class="light claim center">Claim <i class="glyphicon glyphicon-sort"></i></td>
+      <td class="light resolved">Resolved <i class="glyphicon glyphicon-sort"></i></td>
     </tr>
   </thead>
   <tbody>
@@ -164,6 +165,7 @@
           {{/if}}
         {{/isUser}}
         </td>
+        <td> {{#if resolved}} Resolved {{else}} Unresolved {{/if}}</td>
       </tr>
     {{/each}}
   </tbody>
