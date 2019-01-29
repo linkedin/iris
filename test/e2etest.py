@@ -1307,6 +1307,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'resolved': True}
 
+
 def test_post_dynamic_incident(sample_user, sample_team, sample_application_name, sample_template_name):
     data = {
         "creator": sample_user,
