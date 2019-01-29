@@ -1298,7 +1298,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid claim: no matching owner'
 
-    # Test reslovling
+    # Test resolvling
     re = requests.post(base_url + 'incidents/%d/resolve' % (incident_id, ), json={
         'owner': sample_user,
         'plan': sample_user + '-test-incident-post',

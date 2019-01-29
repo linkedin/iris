@@ -1572,8 +1572,6 @@ iris = {
         });
       }).fail(function(){
         iris.createAlert('Failed to modify incident', 'danger');
-      }).always(function(){
-        //$this.prop('disabled', false);
       });
     },
     reescalateModal: function() {
