@@ -1298,6 +1298,14 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid claim: no matching owner'
 
+    # Test reslovling
+    re = requests.post(base_url + 'incidents/%d/resolve' % (incident_id, ), json={
+        'owner': sample_user,
+        'plan': sample_user + '-test-incident-post',
+        'context': {},
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'resolved': True}
 
 def test_post_dynamic_incident(sample_user, sample_team, sample_application_name, sample_template_name):
     data = {

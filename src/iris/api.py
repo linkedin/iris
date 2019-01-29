@@ -1776,6 +1776,7 @@ class Resolved(object):
                                  'owner': owner,
                                  'resolved': is_resolved})
 
+
 class ClaimIncidents(object):
     allow_read_no_auth = False
 

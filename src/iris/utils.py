@@ -311,6 +311,7 @@ def claim_incidents_from_batch_id(batch_id, owner):
     cursor.close()
     connection.close()
 
+
 def resolve_incident(incident_id, owner):
     connection = db.engine.raw_connection()
 
