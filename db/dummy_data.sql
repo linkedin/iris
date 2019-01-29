@@ -68,9 +68,9 @@ UNLOCK TABLES;
 
 LOCK TABLES `incident` WRITE;
 INSERT INTO `incident` VALUES
-    (1,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0),
-    (2,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0),
-    (3,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0);
+    (1,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0),
+    (2,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0),
+    (3,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0);
 UNLOCK TABLES;
 
 LOCK TABLES `incident_emails` WRITE;
@@ -85,8 +85,8 @@ UNLOCK TABLES;
 LOCK TABLES `message` WRITE;
 INSERT INTO `message` VALUES
     (1,NULL,'2017-01-25 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',1,33,0,13),
-    (2,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',2,33,0,13),
-    (3,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',3,33,0,13);
+    (2,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',2,33,0,0,13),
+    (3,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',3,33,0,0,13);
 UNLOCK TABLES;
 
 LOCK TABLES `message_changelog` WRITE;
