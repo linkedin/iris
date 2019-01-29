@@ -84,7 +84,7 @@ UNLOCK TABLES;
 
 LOCK TABLES `message` WRITE;
 INSERT INTO `message` VALUES
-    (1,NULL,'2017-01-25 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',1,33,0,13),
+    (1,NULL,'2017-01-25 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',1,33,0,0,13),
     (2,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',2,33,0,0,13),
     (3,'10018616db1e4cceba3a9f69177c2343','2017-01-29 23:23:55','2017-01-25 23:24:55',8,1,'demo1@foo.bar',35,40,35,'email_subject','email_body',3,33,0,0,13);
 UNLOCK TABLES;
