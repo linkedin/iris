@@ -17,6 +17,7 @@ Service Integration
 .. toctree::
    nagios
    alertmanager
+   grafana
 
 
 Iris components
