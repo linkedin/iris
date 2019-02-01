@@ -25,6 +25,7 @@ from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 import falcon.uri
 import falcon
+import pyqrcode
 
 from collections import defaultdict
 from streql import equals
@@ -4388,6 +4389,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     init_webhooks(config, api)
 
+    create_qr_code(config)
+
     return api
 
 
@@ -4423,6 +4426,13 @@ def get_api(config):
     # Need to call this after all routes have been created
     app = ui.init(config, app)
     return app
+
+
+def create_qr_code(config):
+    qr_code_content = config['qr_base_url'] + ',' + config['qr_login_url']
+    qr_object = pyqrcode.create(qr_code_content)
+    # create qr code and save it as a svg image
+    qr_object.svg('src/iris/ui/static/images/iris-mobile-qr.svg', scale=8)
 
 
 def get_api_app():

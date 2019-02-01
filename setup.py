@@ -43,7 +43,8 @@ setuptools.setup(
         'setproctitle==1.1.8',
         'pyfcm==1.4.3',
         'oncallclient==1.0.0',
-        'idna==2.7'
+        'idna==2.7',
+        'pyqrcode==1.2.1'
     ],
     extras_require={
         'kazoo': ['kazoo==2.3.1'],

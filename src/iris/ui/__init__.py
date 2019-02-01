@@ -321,6 +321,19 @@ class User():
                                                                 applications=get_local_api(req, 'applications'))
 
 
+class Qr(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def __init__(self, qr_base_url, qr_login_url):
+        self.qr_base_url = qr_base_url
+        self.qr_login_url = qr_login_url
+
+    def on_get(self, req, resp):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('qr.html').render(base=self.qr_base_url, login=self.qr_login_url)
+
+
 class JinjaValidate():
     allow_read_no_auth = False
     frontend_route = True
@@ -399,6 +412,8 @@ def init(config, app):
     auth_module = config.get('auth', {'module': 'iris.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
+    qr_base_url = config['qr_base_url']
+    qr_login_url = config['qr_login_url']
 
     debug = config['server'].get('disable_auth', False) is True
     local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
@@ -422,6 +437,7 @@ def init(config, app):
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
+    app.add_route('/qr', Qr(qr_base_url, qr_login_url))
 
     # Configuring the beaker middleware mutilates the app object, so do it
     # at the end, after we've added all routes/sinks for the entire iris
