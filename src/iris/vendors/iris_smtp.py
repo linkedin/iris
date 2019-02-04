@@ -6,6 +6,7 @@ from iris.constants import EMAIL_SUPPORT, IM_SUPPORT
 from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
 import quopri
 import time
 import markdown
@@ -76,6 +77,7 @@ class iris_smtp(object):
         if incident_id:
             m['X-IRIS-INCIDENT-ID'] = str(incident_id)
 
+        m['Date'] = formatdate(localtime=True)
         m['from'] = from_address
         m['to'] = message['destination']
         if message.get('noreply'):
