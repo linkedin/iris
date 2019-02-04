@@ -12,6 +12,7 @@ import requests
 import importlib
 import logging
 import re
+import pyqrcode
 from iris.ui import auth
 from beaker.middleware import SessionMiddleware
 
@@ -101,6 +102,14 @@ def get_flash(req):
 # that makes use of window.appData is converted to use ajax for those values instead.
 def get_local_api(req, path):
     return requests.get('%s/v0/%s' % (local_api_url, path), cookies=req.cookies).json()
+
+
+def create_qr_code(qr_base_url, qr_login_url):
+    qr_code_content = qr_base_url + ',' + qr_login_url
+    qr_object = pyqrcode.create(qr_code_content)
+    # create qr code and save it as a svg image
+    qr_filename = ui_root + '/static/images/iris-mobile-qr.svg'
+    qr_object.svg(qr_filename, scale=8)
 
 
 # Credit to Werkzeug for implementation
@@ -414,6 +423,7 @@ def init(config, app):
     auth_manager = getattr(auth, 'Authenticator')(config)
     qr_base_url = config['qr_base_url']
     qr_login_url = config['qr_login_url']
+    create_qr_code(qr_base_url, qr_login_url)
 
     debug = config['server'].get('disable_auth', False) is True
     local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
