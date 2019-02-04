@@ -1,6 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
+import pytest
 from falcon import HTTPBadRequest
 
 
@@ -44,14 +45,12 @@ def test_parse_invalid_body():
             "tags": "",
         }],
         "imageUrl": "http://grafana.org/assets/img/blog/mixed_styles.png",
-        "message": "Someone is testing the alert notification within grafana.",
         "ruleId": 0,
         "ruleName": "Test notification",
         "ruleUrl": "https://grafana.org/",
         "state": "alerting",
         "title": "[Alerting] Test notification"
     }
-    try:
+
+    with pytest.raises(HTTPBadRequest):
         grafana_webhook.validate_post(fake_post)
-    except HTTPBadRequest:
-        pass
