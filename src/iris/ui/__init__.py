@@ -421,8 +421,8 @@ def init(config, app):
     auth_module = config.get('auth', {'module': 'iris.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
-    qr_base_url = config['qr_base_url']
-    qr_login_url = config['qr_login_url']
+    qr_base_url = config.get('qr_base_url')
+    qr_login_url = config.get('qr_login_url')
 
     debug = config['server'].get('disable_auth', False) is True
     local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
