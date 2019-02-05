@@ -423,7 +423,6 @@ def init(config, app):
     auth_manager = getattr(auth, 'Authenticator')(config)
     qr_base_url = config['qr_base_url']
     qr_login_url = config['qr_login_url']
-    create_qr_code(qr_base_url, qr_login_url)
 
     debug = config['server'].get('disable_auth', False) is True
     local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
@@ -447,7 +446,10 @@ def init(config, app):
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
-    app.add_route('/qr', Qr(qr_base_url, qr_login_url))
+
+    if(qr_base_url and qr_login_url):
+        create_qr_code(qr_base_url, qr_login_url)
+        app.add_route('/qr', Qr(qr_base_url, qr_login_url))
 
     # Configuring the beaker middleware mutilates the app object, so do it
     # at the end, after we've added all routes/sinks for the entire iris

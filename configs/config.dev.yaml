@@ -47,8 +47,9 @@ allowed_origins:
   - http://localhost:8080
 
 ## values for base url and login url to be consumed by the mobile app
-qr_base_url: https://localhost:16649/iris-relay
-qr_login_url: http://localhost:16649/iris-relay/saml/login/okta
+## set to Null to disable the qr endpoint
+qr_base_url: Null
+qr_login_url: Null
 
 ## Custom webhooks can be created and put in src/iris/webhooks.
 ## Refer to their class name in this array.
