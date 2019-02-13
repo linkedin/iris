@@ -242,17 +242,17 @@ UNLOCK TABLES;
 
 LOCK TABLES `template_variable` WRITE;
 INSERT INTO `template_variable` VALUES
-    (1,8,'fabric',0),
-    (2,8,'console_url',0),
-    (3,8,'filename',0),
-    (4,8,'name',0),
-    (5,8,'graph_image_url',0),
-    (7,8,'zones',0),
-    (8,8,'nodes',0),
-    (9,8,'metanodes',0),
-    (10,8,'notes',0),
-    (11,12,'description',0),
-    (12,12,'requester',0);
+    (1,8,'fabric',0, 0),
+    (2,8,'console_url',0, 0),
+    (3,8,'filename',0, 0),
+    (4,8,'name',0, 0),
+    (5,8,'graph_image_url',0, 0),
+    (7,8,'zones',0, 0),
+    (8,8,'nodes',0, 0),
+    (9,8,'metanodes',0, 0),
+    (10,8,'notes',0, 0),
+    (11,12,'description',0, 0),
+    (12,12,'requester',0, 0);
 UNLOCK TABLES;
 
 LOCK TABLES `twilio_delivery_status` WRITE;

@@ -162,6 +162,7 @@ incident_columns = {
     'created': 'UNIX_TIMESTAMP(`incident`.`created`) as `created`',
     'owner': '`target`.`name` as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
+    'title_variable_name': '`template_variable`.`name` as `title_variable_name`'
 }
 
 incident_filters = {
@@ -188,7 +189,8 @@ incident_filter_types = {
 incident_query = '''SELECT DISTINCT %s FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
-JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
+JOIN `application` ON `incident`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `template_variable` ON (`template_variable`.`application_id` = `application`.`id` AND `template_variable`.`title_variable` = 1)'''
 
 single_incident_query = '''SELECT `incident`.`id` as `id`,
     `incident`.`plan_id` as `plan_id`,
@@ -204,6 +206,7 @@ FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `template_variable` ON (`template_variable`.`application_id` = `application`.`id` AND `template_variable`.`title_variable` = 1)
 WHERE `incident`.`id` = %s'''
 
 single_incident_query_steps = '''SELECT `message`.`id` as `id`,
@@ -530,7 +533,7 @@ get_applications_query = '''SELECT
 FROM `application`
 WHERE `auth_only` is False'''
 
-get_vars_query = 'SELECT `name`, `required` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
+get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
 get_allowed_roles_query = '''SELECT `target_role`.`id`
                              FROM `target_role`
@@ -2447,10 +2450,13 @@ class Application(object):
         cursor.execute(get_vars_query, app['id'])
         app['variables'] = []
         app['required_variables'] = []
+        app['title_variable'] = None
         for row in cursor:
             app['variables'].append(row['name'])
             if row['required']:
                 app['required_variables'].append(row['name'])
+            if row['title_variable']:
+                app['title_variable'] = row['name']
 
         cursor.execute(get_default_application_modes_query, app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
@@ -2502,6 +2508,8 @@ class Application(object):
 
             if 'mobile_template' not in data:
                 raise HTTPBadRequest('mobile_template must be specified')
+            if 'title_variable' not in data:
+                raise HTTPBadRequest('title_variable must be specified')
 
             new_variables = data.get('variables')
             if not isinstance(new_variables, list):
@@ -2514,12 +2522,30 @@ class Application(object):
                     {'application_id': app['id']})
             }
 
+            title_variable = data.get('title_variable')
+            # if no variables are set then title variable will be null
+            if not new_variables:
+                title_variable = None
+            elif title_variable and title_variable not in new_variables:
+                raise HTTPBadRequest('title variable is invalid')
+
             kill_variables = existing_variables - new_variables
 
-            for variable in new_variables - existing_variables:
-                session.execute('''INSERT INTO `template_variable` (`application_id`, `name`)
-                                VALUES (:application_id, :variable)''',
-                                {'application_id': app['id'], 'variable': variable})
+            # insert new variables and update the value of title_variable for existing variables
+            for variable in new_variables:
+
+                title_val = 0
+                if variable == title_variable:
+                    title_val = 1
+
+                if variable not in existing_variables:
+                    session.execute('''INSERT INTO `template_variable` (`application_id`, `name`, `title_variable`)
+                                    VALUES (:application_id, :variable, :title_val)''',
+                                    {'application_id': app['id'], 'variable': variable, 'title_val': title_val})
+                else:
+                    session.execute('''UPDATE `template_variable` SET `title_variable` = :title_val WHERE
+                                    `application_id`= :application_id AND `name` = :variable''',
+                                    {'application_id': app['id'], 'variable': variable, 'title_val': title_val})
 
             if kill_variables:
                 session.execute('''DELETE FROM `template_variable`
@@ -3254,6 +3280,7 @@ class Applications(object):
         cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
         apps = cursor.fetchall()
         for app in apps:
+            app['title_variable'] = None
             cursor.execute(get_vars_query, app['id'])
             app['variables'] = []
             app['required_variables'] = []
@@ -3261,6 +3288,8 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
+                if row['title_variable'] == 1:
+                    app['title_variable'] = row['name']
 
             cursor.execute(get_default_application_modes_query, app['name'])
             app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
