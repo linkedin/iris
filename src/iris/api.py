@@ -577,9 +577,15 @@ get_application_owners_query = '''SELECT `target`.`name`
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
-def stream_incidents_with_context(cursor):
+def stream_incidents_with_context(cursor, title=False):
     for row in cursor:
         row['context'] = ujson.loads(row['context'])
+        if title:
+            title_variable_name = row['title_variable_name']
+            if title_variable_name:
+                row['title'] = row['context'][title_variable_name]
+            else:
+                row['title'] = None
         yield row
 
 
@@ -1432,7 +1438,10 @@ class Incidents(object):
         cursor.execute(query, sql_values)
 
         if 'context' in fields:
-            payload = ujson.dumps(stream_incidents_with_context(cursor))
+            if 'title_variable_name' in fields:
+                payload = ujson.dumps(stream_incidents_with_context(cursor, True))
+            else:
+                payload = ujson.dumps(stream_incidents_with_context(cursor, False))
         else:
             payload = ujson.dumps(cursor)
         connection.close()
