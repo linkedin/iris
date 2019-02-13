@@ -2508,8 +2508,6 @@ class Application(object):
 
             if 'mobile_template' not in data:
                 raise HTTPBadRequest('mobile_template must be specified')
-            if 'title_variable' not in data:
-                raise HTTPBadRequest('title_variable must be specified')
 
             new_variables = data.get('variables')
             if not isinstance(new_variables, list):
