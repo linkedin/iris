@@ -2530,25 +2530,27 @@ class Application(object):
             kill_variables = existing_variables - new_variables
 
             # insert new variables and update the value of title_variable for existing variables
-            for variable in new_variables:
-
-                title_val = 0
-                if variable == title_variable:
-                    title_val = 1
-
-                if variable not in existing_variables:
-                    session.execute('''INSERT INTO `template_variable` (`application_id`, `name`, `title_variable`)
-                                    VALUES (:application_id, :variable, :title_val)''',
-                                    {'application_id': app['id'], 'variable': variable, 'title_val': title_val})
-                else:
-                    session.execute('''UPDATE `template_variable` SET `title_variable` = :title_val WHERE
-                                    `application_id`= :application_id AND `name` = :variable''',
-                                    {'application_id': app['id'], 'variable': variable, 'title_val': title_val})
+            for variable in new_variables - existing_variables:
+                session.execute('''INSERT INTO `template_variable` (`application_id`, `name`)
+                                    VALUES (:application_id, :variable)''',
+                                {'application_id': app['id'], 'variable': variable})
 
             if kill_variables:
                 session.execute('''DELETE FROM `template_variable`
                                 WHERE `application_id` = :application_id AND `name` IN :variables''',
                                 {'application_id': app['id'], 'variables': tuple(kill_variables)})
+
+            # update value of title variable for application
+            if title_variable:
+                session.execute('''UPDATE `template_variable`
+                                SET `title_variable` = IF(`name` = :title_val, 1, 0)
+                                WHERE `application_id`= :application_id''',
+                                {'application_id': app['id'], 'title_val': title_variable})
+            else:
+                session.execute('''UPDATE `template_variable`
+                                SET `title_variable` = 0
+                                WHERE `application_id`= :application_id''',
+                                {'application_id': app['id']})
 
             # Only owners can (optionally) change owners
             new_owners = data.get('owners')
