@@ -581,7 +581,7 @@ def stream_incidents_with_context(cursor, title=False):
     for row in cursor:
         row['context'] = ujson.loads(row['context'])
         if title:
-            title_variable_name = row['title_variable_name']
+            title_variable_name = row.get('title_variable_name')
             if title_variable_name:
                 row['title'] = row['context'][title_variable_name]
             else:
