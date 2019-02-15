@@ -110,9 +110,18 @@
       {{/if}}
     </h3>
     <span class="light">Owners: {{#if owners}}{{#each owners}}<span class="label label-info">{{this}} {{#if @root.showEditOwners}}{{#ifCanShowDeleteUserButton this}}<i class="glyphicon glyphicon-remove remove-owner" data-owner="{{this}}"></i>{{/ifCanShowDeleteUserButton}}{{/if}}</span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
-    {{#if @root.showEditOwners}}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br>
+    {{#if @root.showEditOwners}}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br> 
     <span class="light">Variables: {{#if variables}}{{#each variables}}<span class="label label-info">{{this}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{this}}"></i></span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
-    <form id="add-variable-form"><input type="text" class="form-control border-bottom input-sm" placeholder="Add variable" id="add-variable-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form><br>
+    <form id="add-variable-form"><input type="text" class="form-control border-bottom input-sm" placeholder="Add variable" id="add-variable-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>
+    <br>
+    {{#if @root.isInViewMode}}
+    <span class="light">Incident title variable: {{#if title_variable}}<span class="label label-info">{{title_variable}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{title_variable}}"></i></span>{{else}}<i>none</i>{{/if}}</span>
+    {{else}}
+    <span class="light">Incident title variable: {{#if variables}}<select id="title-variable-select">{{#each variables}}<option value="{{this}}">{{this}}</option>{{/each}}<option value='null'>NONE</option></select>{{else}}<i>None</i>{{/if}}</span>
+    {{/if}}
+    <br>
+
+
     <div class="light" id="supported-modes-checkboxes">Supported modes:
       {{#each @root.modes}}
         <label><input type="checkbox" name="supported_modes" value="{{this}}" {{#ifIn this @root.supported_modes}}checked{{/ifIn}} {{#if @root.isInViewMode}}disabled{{else}}{{#ifNot @root.allowEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>

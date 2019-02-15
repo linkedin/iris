@@ -543,6 +543,7 @@ CREATE TABLE `template_variable` (
   `application_id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL,
   `required` tinyint(1) NOT NULL DEFAULT '0',
+  `title_variable` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ix_template_variable_application_id` (`application_id`),
   CONSTRAINT `template_variable_ibfk_1` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
