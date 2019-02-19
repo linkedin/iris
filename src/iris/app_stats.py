@@ -172,7 +172,8 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                                 ORDER BY time_to_claim) as time_to_claim
                                                         WHERE (SELECT @row_id := @row_id + 1)
                                                         BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
-        'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE'
+        'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE',
+        'total_high_priority': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND (priority_id = 8 OR priority_id = 17)'
     }
 
     stats = {}
