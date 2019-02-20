@@ -41,7 +41,11 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                                           FROM `twilio_retry` JOIN `message` ON `message`.`id` = `twilio_retry`.`message_id`
                                           WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
                                           AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                          AND `application_id` = %(application_id)s'''
+                                          AND `application_id` = %(application_id)s''',
+        'high_priority_incidents_last_2_weeks': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
+                                                          FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
+                                                          WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
+                                                          GROUP BY incident.application_id'''
     }
     cursor.execute('SELECT `name` FROM `mode`')
     modes = [row[0] for row in cursor]
@@ -173,8 +177,7 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         WHERE (SELECT @row_id := @row_id + 1)
                                                         BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
         'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE',
-        'total_high_priority_incidents_last_2_weeks': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))',
-        'high_priority_incidents_last_2_weeks_by_app': 'SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) FROM incident JOIN application ON application.id = incident.application_id JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent")) GROUP BY incident.application_id'
+        'total_high_priority_incidents_last_2_weeks': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
     }
 
     stats = {}
@@ -185,23 +188,11 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
     for key in fields:
         start = time.time()
         cursor.execute(queries[key])
-        result = None
-        # high_priority_incidents_last_2_weeks result is series of key value pairs, needs special handling
-        if key == 'high_priority_incidents_last_2_weeks_by_app':
-            results = cursor.fetchall()
-            if results:
-                values = {}
-                for k, v in results:
-                    values[k] = v
-                result = values
-            else:
-                result = None
+        result = cursor.fetchone()
+        if result:
+            result = result[-1]
         else:
-            result = cursor.fetchone()
-            if result:
-                result = result[-1]
-            else:
-                result = None
+            result = None
         logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
         stats[key] = result
 
