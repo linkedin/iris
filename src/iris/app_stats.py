@@ -173,7 +173,8 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         WHERE (SELECT @row_id := @row_id + 1)
                                                         BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
         'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE',
-        'high_priority_incidents_last_2_weeks': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
+        'total_high_priority_incidents_last_2_weeks': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))',
+        'high_priority_incidents_last_2_weeks_by_app': 'SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) FROM incident JOIN application ON application.id = incident.application_id JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent")) GROUP BY incident.application_id'
     }
 
     stats = {}
@@ -184,11 +185,23 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
     for key in fields:
         start = time.time()
         cursor.execute(queries[key])
-        result = cursor.fetchone()
-        if result:
-            result = result[-1]
+        result = None
+        # high_priority_incidents_last_2_weeks result is series of key value pairs, needs special handling
+        if key == 'high_priority_incidents_last_2_weeks_by_app':
+            results = cursor.fetchall()
+            if results:
+                values = {}
+                for k, v in results:
+                    values[k] = v
+                result = values
+            else:
+                result = None
         else:
-            result = None
+            result = cursor.fetchone()
+            if result:
+                result = result[-1]
+            else:
+                result = None
         logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
         stats[key] = result
 
