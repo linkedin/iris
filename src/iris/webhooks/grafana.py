@@ -14,8 +14,9 @@ class grafana(object):
     allow_read_no_auth = False
 
     def validate_post(self, body):
-        if not all(k in body for k in("ruleName", "state", "message")):
-            raise HTTPBadRequest('missing ruleName, state and/or message attributes')
+        if not all(k in body for k in("ruleName", "state")):
+            logger.warn('missing ruleName and/or state attributes')
+            raise HTTPBadRequest('missing ruleName and/of state attributes')
 
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
