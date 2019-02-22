@@ -45,10 +45,10 @@ def test_parse_invalid_body():
             "tags": "",
         }],
         "imageUrl": "http://grafana.org/assets/img/blog/mixed_styles.png",
+        "message": "Someone is testing the alert notification within grafana.",
         "ruleId": 0,
         "ruleName": "Test notification",
         "ruleUrl": "https://grafana.org/",
-        "state": "alerting",
         "title": "[Alerting] Test notification"
     }
 
