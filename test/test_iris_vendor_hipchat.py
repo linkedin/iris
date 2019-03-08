@@ -13,7 +13,7 @@ def test_message_construction_for_incident():
     fake_msg = {
         'application': 'grafana',
         'incident_id': 123,
-        'body': u'test body',
+        'body': 'test body',
         'message_id': 456,
         'destination': '@user1',
     }
@@ -30,7 +30,7 @@ def test_destination_parsing_for_incident():
     fake_msg = {
         'application': 'grafana',
         'incident_id': 123,
-        'body': u'test body',
+        'body': 'test body',
         'message_id': 456,
     }
     destination = '1234;testtoken;@user1'
@@ -59,7 +59,7 @@ def test_destination_parsing_defaults_for_incident():
     fake_msg = {
         'application': 'grafana',
         'incident_id': 123,
-        'body': u'test body',
+        'body': 'test body',
         'message_id': 456,
     }
     destination = 'user_missing_@'

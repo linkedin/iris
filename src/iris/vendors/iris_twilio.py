@@ -9,7 +9,7 @@ from twilio.rest.resources import Connection
 from iris import db
 from sqlalchemy.exc import IntegrityError
 import time
-import urllib
+import urllib.parse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class iris_twilio(object):
 
         for key in ('subject', 'body'):
             value = message.get(key)
-            if not isinstance(value, basestring):
+            if not isinstance(value, str):
                 continue
             value = value.strip()
             if value:
@@ -118,11 +118,11 @@ class iris_twilio(object):
             payload['message_id'] = message_id
             payload['instruction'] = plugin.get_phone_menu_text()
             relay_cb_url = '%s%s?%s' % (
-                self.config['relay_base_url'], self.gather_endpoint, urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+                self.config['relay_base_url'], self.gather_endpoint, urllib.parse.urlencode({k: str(v).encode('utf-8') for k, v in payload.items()})
             )
         else:
             relay_cb_url = '%s%s?%s' % (
-                self.config['relay_base_url'], self.say_endpoint, urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+                self.config['relay_base_url'], self.say_endpoint, urllib.parse.urlencode({k: str(v).encode('utf-8') for k, v in payload.items()})
             )
 
         start = time.time()

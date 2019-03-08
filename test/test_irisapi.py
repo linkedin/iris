@@ -31,12 +31,12 @@ class TestCommand(falcon.testing.TestCase):
 
 class TestHealthcheck(falcon.testing.TestCase):
     def test_healthcheck(self):
-        with patch('__builtin__.open', mock_open(read_data='GOOD')) as m:
+        with patch('iris.api.open', mock_open(read_data='GOOD')) as m:
             self.api.add_route('/healthcheck', Healthcheck('healthcheck_path'))
             result = self.simulate_get(path='/healthcheck')
             m.assert_called_once_with('healthcheck_path')
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'GOOD')
+        self.assertEqual(result.content, b'GOOD')
 
 
 class TestAuth(falcon.testing.TestCase):
@@ -57,32 +57,32 @@ class TestAuth(falcon.testing.TestCase):
 
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test query string
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar?baz=123', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar', query_string='baz=123', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test trailng slash
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar/', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar/', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test no auth header
         result = self.simulate_get(path='/foo/bar')
@@ -97,7 +97,7 @@ class TestAuth(falcon.testing.TestCase):
         dummy.allow_read_no_auth = True
         result = self.simulate_get(path='/foo/bar')
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
     def test_secondary_auth(self):
         iris.cache.applications = {'app': {'key': 'asdf', 'secondary_key': 'key'}}
@@ -108,32 +108,32 @@ class TestAuth(falcon.testing.TestCase):
 
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test query string
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar?baz=123', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar', query_string='baz=123', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test trailng slash
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar/', '')
-        HMAC = hmac.new('key', text, hashlib.sha512)
-        digest = base64.urlsafe_b64encode(HMAC.digest())
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
         auth = 'hmac app:%s' % digest
         result = self.simulate_get(path='/foo/bar/', headers={'Authorization': auth})
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')
 
         # Test no auth header
         result = self.simulate_get(path='/foo/bar')
@@ -148,4 +148,4 @@ class TestAuth(falcon.testing.TestCase):
         dummy.allow_read_no_auth = True
         result = self.simulate_get(path='/foo/bar')
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, 'Hello world')
+        self.assertEqual(result.content, b'Hello world')

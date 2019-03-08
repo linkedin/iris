@@ -276,7 +276,7 @@ class Login():
                                                                  last_flash=get_flash(req))
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             username = form_body['username']
@@ -348,7 +348,7 @@ class JinjaValidate():
     frontend_route = True
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             template_subject = form_body['templateSubject']

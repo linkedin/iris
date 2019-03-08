@@ -93,10 +93,10 @@ class ApplicationQuota(object):
             new_rates = {}
 
             for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in self.get_new_rules():
-                new_rates[application] = (hard_limit, soft_limit, hard_duration / 60, soft_duration / 60, wait_time, plan_name, (target_name, target_role))
+                new_rates[application] = (hard_limit, soft_limit, hard_duration // 60, soft_duration // 60, wait_time, plan_name, (target_name, target_role))
 
-            old_keys = self.rates.viewkeys()
-            new_keys = new_rates.viewkeys()
+            old_keys = self.rates.keys()
+            new_keys = new_rates.keys()
 
             # Remove old application entries
             for key in old_keys - new_keys:
@@ -158,7 +158,7 @@ class ApplicationQuota(object):
 
         hard_usage_pct = 0
         if hard_limit > 0:
-            hard_usage_pct = (hard_quota_usage / hard_limit) * 100
+            hard_usage_pct = (hard_quota_usage // hard_limit) * 100
         metrics.set('app_%s_quota_hard_usage_pct' % application, hard_usage_pct)
 
         if hard_quota_usage > hard_limit:
@@ -172,7 +172,7 @@ class ApplicationQuota(object):
 
         soft_usage_pct = 0
         if soft_limit > 0:
-            soft_usage_pct = (soft_quota_usage / soft_limit) * 100
+            soft_usage_pct = (soft_quota_usage // soft_limit) * 100
         metrics.set('app_%s_quota_soft_usage_pct' % application, soft_usage_pct)
 
         if soft_quota_usage > soft_limit:

@@ -15,8 +15,8 @@ def load_config_file(path=None):
     ''' Get config from path to file, defaulting to cli arg. This can easily be monkey patched. '''
     if not path:
         if len(sys.argv) <= 1:
-            print 'ERROR: missing config file.'
-            print 'usage: %s API_CONFIG_FILE' % sys.argv[0]
+            print('ERROR: missing config file.')
+            print('usage: %s API_CONFIG_FILE' % sys.argv[0])
             sys.exit(1)
         path = sys.argv[1]
 

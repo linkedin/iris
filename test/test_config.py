@@ -11,7 +11,7 @@ def test_load_config(mocker):
     mocker.patch.dict(os.environ, {'IRIS_CFG_DB_USER': 'iris_dev'})
 
     with NamedTemporaryFile() as temp_config:
-        temp_config.write('''
+        temp_config.write(b'''
 db:
   conn:
     kwargs:

@@ -171,9 +171,9 @@ class Gmail(object):
         """
         self.connect()
         if not body:
-            kwargs = dict({
+            kwargs = dict(list({
                 'sender': self.config.get('sub')
-            }.items() + kwargs.items())
+            }.items()) + list(kwargs.items()))
             body = self.create_message(**kwargs)
         ret = {}
         try:

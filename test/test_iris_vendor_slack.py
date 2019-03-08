@@ -17,7 +17,7 @@ def test_atttachments_construction_for_incident():
     fake_msg = {
         'application': 'grafana',
         'incident_id': 123,
-        'body': u'test body',
+        'body': 'test body',
         'message_id': 456,
         'destination': 'user1'
     }

@@ -1,8 +1,5 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
-
-from __future__ import absolute_import
-
 from gevent import spawn, sleep, socket
 
 import msgpack
@@ -16,7 +13,7 @@ import datetime
 import logging
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
-from urlparse import parse_qs
+from urllib.parse import parse_qs
 import ujson
 from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
@@ -662,7 +659,7 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         4. (optional) transform escaped value through filter_escaped_value_transforms[col](value)
     '''
     where = []
-    for key, values in kwargs.iteritems():
+    for key, values in kwargs.items():
         col, _, op = key.partition('__')
         # Skip columns that don't exist
         if col not in filters:
@@ -670,7 +667,7 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         col_type = filter_types.get(col, str)
         # Format strings because Falcon splits on ',' but not on '%2C'
         # TODO: Get rid of this by setting request options on Falcon 1.1
-        if isinstance(values, basestring):
+        if isinstance(values, str):
             values = values.split(',')
         for val in values:
             try:
@@ -804,7 +801,7 @@ class AuthMiddleware(object):
         qs = req.env['QUERY_STRING']
         if qs:
             path = path + '?' + qs
-        body = req.context['body']
+        body = req.context['body'].decode('utf-8')
         auth = req.get_header('AUTHORIZATION')
         if auth and auth.startswith('hmac '):
             username_header = req.get_header('X-IRIS-USERNAME')
@@ -825,9 +822,9 @@ class AuthMiddleware(object):
                         text = '%s %s %s %s %s' % (window, method, path, body, username_header)
                     else:
                         text = '%s %s %s %s' % (window, method, path, body)
-                    HMAC = hmac.new(api_key, text, hashlib.sha512)
+                    HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                     digest = base64.urlsafe_b64encode(HMAC.digest())
-                    if equals(client_digest, digest):
+                    if equals(client_digest.encode('utf-8'), digest):
                         req.context['app'] = app
                         if username_header:
                             req.context['username'] = username_header
@@ -838,9 +835,9 @@ class AuthMiddleware(object):
                             text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
                         else:
                             text = '%s %s %s %s' % (window - 1, method, path, body)
-                        HMAC = hmac.new(api_key, text, hashlib.sha512)
+                        HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                         digest = base64.urlsafe_b64encode(HMAC.digest())
-                        if equals(client_digest, digest):
+                        if equals(client_digest.encode('utf-8'), digest):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
@@ -2023,13 +2020,13 @@ class Notifications(object):
         # message body, which happens if both body and template are not
         # specified, or if we don't have email_html
         if 'template' in message:
-            if not isinstance(message['template'], basestring):
+            if not isinstance(message['template'], str):
                 raise HTTPBadRequest('template needs to be a string')
         elif 'body' in message:
-            if not isinstance(message['body'], basestring):
+            if not isinstance(message['body'], str):
                 raise HTTPBadRequest('body needs to be a string')
         elif 'email_html' in message:
-            if not isinstance(message['email_html'], basestring):
+            if not isinstance(message['email_html'], str):
                 raise HTTPBadRequest('email_html needs to be a string')
             # Handle the edge-case where someone is only specifying email_html
             # and not the others. Avoid KeyError's later on in sender
@@ -2207,8 +2204,8 @@ class Templates(object):
             content = template_params.pop('content')
             contents = []
             template_env = SandboxedEnvironment(autoescape=True)
-            for _application, modes in content.iteritems():
-                for _mode, _content in modes.iteritems():
+            for _application, modes in content.items():
+                for _mode, _content in modes.items():
                     _content['mode'] = _mode
                     _content['application'] = _application
                     try:
@@ -2292,7 +2289,7 @@ class UserModes(object):
 
             # Configure priority -> mode for a single application
             if app is not None:
-                for p, m in mode_params.iteritems():
+                for p, m in mode_params.items():
                     if m != 'default':
                         session.execute(insert_target_application_modes_query,
                                         {'name': username, 'priority': p, 'mode': m, 'app': app})
@@ -2304,8 +2301,8 @@ class UserModes(object):
 
             # Configure priority -> mode for multiple applications in one call (avoid MySQL deadlocks)
             elif multiple_apps is not None:
-                for app, app_modes in multiple_apps.iteritems():
-                    for p, m in app_modes.iteritems():
+                for app, app_modes in multiple_apps.items():
+                    for p, m in app_modes.items():
                         if m != 'default':
                             session.execute(insert_target_application_modes_query,
                                             {'name': username, 'priority': p, 'mode': m, 'app': app})
@@ -2314,7 +2311,7 @@ class UserModes(object):
                                             {'name': username, 'priority': p, 'app': app})
 
                 # Also configure global defaults in the same call if they're specified
-                for p in mode_params.viewkeys() & modes.viewkeys():
+                for p in mode_params.keys() & modes.keys():
                     m = mode_params[p]
                     if m != 'default':
                         session.execute(insert_user_modes_query,
@@ -2326,7 +2323,7 @@ class UserModes(object):
             # Configure user's global priority -> mode which covers all
             # applications that don't have defaults set
             else:
-                for p, m in mode_params.iteritems():
+                for p, m in mode_params.items():
                     if m != 'default':
                         session.execute(insert_user_modes_query,
                                         {'name': username, 'priority': p, 'mode': m})
@@ -2675,8 +2672,8 @@ class Application(object):
                        JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
                        WHERE `default_application_mode`.`application_id` = :application_id''',
                     {'application_id': app['id']})}
-                kill_priorities = existing_priorities - default_modes.viewkeys()
-                for priority, mode in default_modes.iteritems():
+                kill_priorities = existing_priorities - default_modes.keys()
+                for priority, mode in default_modes.items():
                     # If we disabled this mode for this app in the code block
                     # above, avoid the expected integrity error here by bailing
                     # early
@@ -2786,7 +2783,7 @@ class ApplicationQuota(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
 
-        if data.viewkeys() != required_quota_keys:
+        if data.keys() != required_quota_keys:
             raise HTTPBadRequest('Missing required keys in post body')
 
         try:
@@ -3102,7 +3099,7 @@ class ApplicationEmailIncidents(object):
                     {'app_name': app_name, 'email_addresses': email_addresses})
 
                 # Configure new/existing ones
-                for email_address, plan_name in email_to_plans.iteritems():
+                for email_address, plan_name in email_to_plans.items():
                     # If this plan does not have steps that support this app, block this
                     app_template_count = session.execute('''
                         SELECT EXISTS (
@@ -3254,7 +3251,7 @@ class ApplicationPlans(object):
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
-            fields = plan_columns.keys()
+            fields = list(plan_columns.keys())
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
@@ -3605,7 +3602,7 @@ class ResponseMixin(object):
 
     def create_email_message(self, application, dest, subject, body):
         if application not in cache.applications:
-            return False, 'Application "%s" not found in %s.' % (application, cache.applications.keys())
+            return False, 'Application "%s" not found in %s.' % (application, list(cache.applications.keys()))
 
         app = cache.applications[application]
 
@@ -3671,12 +3668,12 @@ class ResponseMixin(object):
         with db.guarded_session() as session:
             is_batch = False
             is_claim_all = False
-            if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
+            if isinstance(msg_id, int) or (isinstance(msg_id, str) and msg_id.isdigit()):
                 # FIXME: return error if message not found for id
                 app = get_app_from_msg_id(session, msg_id)
                 validate_app(app)
                 self.create_response(msg_id, source, content)
-            elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
+            elif isinstance(msg_id, str) and uuid4hex.match(msg_id):
                 # msg id is not pure digit, might be a batch id
                 sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
                 results = session.execute(sql, {'batch_id': msg_id})
@@ -3705,7 +3702,7 @@ class ResponseMixin(object):
                     apps_to_message[msg_app].append(mid)
 
             # Case where we want to give back a custom message as there was nothing to claim
-            elif msg_id is None and isinstance(content, basestring):
+            elif msg_id is None and isinstance(content, str):
                 session.close()
                 return '', content
             else:
@@ -3717,20 +3714,20 @@ class ResponseMixin(object):
             try:
                 plugin_output = {
                     app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
-                    for app, msg_ids in apps_to_message.iteritems()
+                    for app, msg_ids in apps_to_message.items()
                 }
             except Exception as e:
                 logger.exception(
                     'Failed to handle %s response for mode %s for apps %s during claim all',
-                    content, mode, apps_to_message.keys())
+                    content, mode, list(apps_to_message.keys()))
                 raise HTTPBadRequest('Failed to handle response',
                                      'failed to handle response: %s' % str(e))
 
             if len(plugin_output) > 1:
                 return plugin_output, '\n'.join('%s: %s' % (app, output)
-                                                for app, output in plugin_output.iteritems())
+                                                for app, output in plugin_output.items())
             else:
-                return plugin_output, '\n'.join(plugin_output.itervalues())
+                return plugin_output, '\n'.join(plugin_output.values())
 
         else:
             try:
@@ -3755,7 +3752,7 @@ class ResponseEmail(ResponseMixin):
             raise HTTPBadRequest('Missing source', msg)
         to = email_headers.get('To', [])
         # 'To' will either be string of single recipient or list of several
-        if isinstance(to, basestring):
+        if isinstance(to, str):
             to = [to]
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
@@ -3824,7 +3821,7 @@ class ResponseEmail(ResponseMixin):
                     session.close()
                     resp.status = HTTP_204
                     # Pass the new incident id back through a header so we can test this
-                    resp.set_header('X-IRIS-INCIDENT', incident_id)
+                    resp.set_header('X-IRIS-INCIDENT', str(incident_id))
                     return
 
                 session.close()
@@ -3845,7 +3842,7 @@ class ResponseEmail(ResponseMixin):
         # When processing a claim all scenario, the first item returned by handle_user_response
         # will be a dict mapping the app to its plugin output.
         if isinstance(app, dict):
-            for app_name, app_response in app.iteritems():
+            for app_name, app_response in app.items():
                 app_response = '%s: %s' % (app_name, app_response)
                 success, re = self.create_email_message(
                     app_name, source, 'Re: %s' % subject, app_response)
@@ -3892,14 +3889,14 @@ class ResponseTwilioCalls(ResponseMixin):
         post_dict = parse_qs(req.context['body'])
 
         msg_id = req.get_param('message_id', required=True)
-        if 'Digits' not in post_dict:
+        if b'Digits' not in post_dict:
             raise HTTPBadRequest('Digits argument not found')
         # For phone call callbacks, To argument is the target and From is the
         # twilio number
-        if 'To' not in post_dict:
+        if b'To' not in post_dict:
             raise HTTPBadRequest('To argument not found')
-        digits = post_dict['Digits'][0]
-        source = post_dict['To'][0]
+        digits = post_dict[b'Digits'][0].decode('utf-8')
+        source = post_dict[b'To'][0].decode('utf-8')
 
         try:
             _, response = self.handle_user_response('call', msg_id, source, digits)
@@ -3914,13 +3911,13 @@ class ResponseTwilioCalls(ResponseMixin):
 class ResponseTwilioMessages(ResponseMixin):
     def on_post(self, req, resp):
         post_dict = parse_qs(req.context['body'])
-        if 'Body' not in post_dict:
+        if b'Body' not in post_dict:
             raise HTTPBadRequest('SMS body not found', 'Missing Body argument in post body')
 
-        if 'From' not in post_dict:
+        if b'From' not in post_dict:
             raise HTTPBadRequest('From argument not found', 'Missing From in post body')
-        source = post_dict['From'][0]
-        body = post_dict['Body'][0]
+        source = post_dict[b'From'][0].decode('utf-8')
+        body = post_dict[b'Body'][0].decode('utf-8')
         try:
             msg_id, content = utils.parse_response(body.strip(), 'sms', source)
         except (ValueError, IndexError):
@@ -3963,7 +3960,7 @@ class TwilioDeliveryUpdate(object):
     allow_read_no_auth = False
 
     def on_post(self, req, resp):
-        post_dict = falcon.uri.parse_query_string(req.context['body'])
+        post_dict = falcon.uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         sid = post_dict.get('MessageSid', post_dict.get('CallSid'))
         status = post_dict.get('MessageStatus', post_dict.get('CallStatus'))
@@ -3977,7 +3974,7 @@ class TwilioDeliveryUpdate(object):
         cursor = connection.cursor()
         try:
             max_retries = 3
-            for i in xrange(max_retries):
+            for i in range(max_retries):
                 try:
                     affected = cursor.execute(
                         '''UPDATE `twilio_delivery_status`

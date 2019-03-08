@@ -53,7 +53,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
     query_data = {'application_id': app['id']}
     stats = {}
 
-    fields = queries.viewkeys()
+    fields = queries.keys()
     if fields_filter:
         fields &= set(fields_filter)
     for key in fields:
@@ -98,7 +98,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
     logger.info('App Stats (%s) mode status query took %s seconds', app['name'], round(time.time() - start, 2))
 
     for mode, status, count in cursor:
-        if isinstance(status, basestring) and status.isdigit():
+        if isinstance(status, str) and status.isdigit():
             status = int(status)
         mode_status[mode][status] = count
 
@@ -181,7 +181,7 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
     }
 
     stats = {}
-    fields = queries.viewkeys()
+    fields = queries.keys()
     if fields_filter:
         fields &= set(fields_filter)
 

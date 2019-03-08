@@ -387,7 +387,7 @@ def deactivate():
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(1, max_retries + 1):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(GET_INACTIVE_IDS_SQL)
             ids = tuple(r[0] for r in cursor)
@@ -499,7 +499,7 @@ def escalate():
         else:
             escalations[n['incident_id']] = (n['plan_id'], n['current_step'] + 1)
 
-    for incident_id, (plan_id, step) in escalations.iteritems():
+    for incident_id, (plan_id, step) in escalations.items():
         plan = cache.plans[plan_id]
         steps = plan['steps'].get(step, [])
         if steps:
@@ -535,7 +535,7 @@ def aggregate(now):
     all_actives = {r[0] for r in cursor}
     cursor.close()
     connection.close()
-    for key in queues.keys():
+    for key in list(queues.keys()):
         aggregation_window = cache.plans[key[0]]['aggregation_window']
         if now - sent.get(key, 0) >= aggregation_window:
             aggregated_message_ids = queues[key]
@@ -561,7 +561,7 @@ def aggregate(now):
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now
-    inactive_message_ids = messages.viewkeys() - all_actives
+    inactive_message_ids = messages.keys() - all_actives
     logger.info('[x] dropped %s inactive messages from claimed incidents, %s remain',
                 len(inactive_message_ids), len(messages))
 
@@ -650,13 +650,13 @@ def fetch_and_prepare_message():
         # does this message trigger aggregation?
         window = plan_aggregate_windows.setdefault(key, defaultdict(int))
 
-        for bucket in window.keys():
+        for bucket in list(window.keys()):
             if now - bucket > plan['threshold_window']:
                 del window[bucket]
 
         window[now] += 1
 
-        if sum(window.itervalues()) > plan['threshold_count']:
+        if sum(window.values()) > plan['threshold_count']:
             # too many messages for the aggregation key - enqueue
 
             # add message id to aggregation queue
@@ -918,7 +918,7 @@ def mark_message_as_sent(message):
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(1, max_retries + 1):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(sql, params)
             connection.commit()
@@ -954,7 +954,7 @@ def mark_message_as_sent(message):
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(1, max_retries + 1):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
             connection.commit()
@@ -1258,12 +1258,12 @@ def maintain_workers(config):
         # Remove all smtp vendor objects so they don't get initialized unnecessarily
         config['vendors'] = [vendor for vendor in config['vendors'] if vendor['type'] != 'iris_smtp']
 
-    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
+    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in iter(workers_per_mode.items())))
 
     # Make sure all the counts and distributions for "normal" workers are proper, including email if we're not doing MX record
     # autoscaling
 
-    for mode, worker_count in workers_per_mode.iteritems():
+    for mode, worker_count in workers_per_mode.items():
         mode_tasks = worker_tasks[mode]
         if mode_tasks:
             for task in mode_tasks:
@@ -1273,7 +1273,7 @@ def maintain_workers(config):
                     task.update({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
                     metrics.incr('workers_respawn_cnt')
         else:
-            for x in xrange(worker_count):
+            for x in range(worker_count):
                 kill_set = gevent.event.Event()
                 mode_tasks.append({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
 
@@ -1284,7 +1284,7 @@ def maintain_workers(config):
         tasks_to_kill = []
 
         # Adjust worker count
-        for mx, correct_worker_count in email_smtp_workers.iteritems():
+        for mx, correct_worker_count in email_smtp_workers.items():
             mx_workers = autoscale_email_worker_tasks[mx]
             current_task_count = len(mx_workers)
 
@@ -1305,7 +1305,7 @@ def maintain_workers(config):
                 worker_config = copy.deepcopy(config)
                 worker_config['vendors'] = [email_vendor_config]
 
-                for x in xrange(new_task_count):
+                for x in range(new_task_count):
                     kill_set = gevent.event.Event()
                     mx_workers.append({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
 
@@ -1313,14 +1313,14 @@ def maintain_workers(config):
             elif current_task_count > correct_worker_count:
                 kill_task_count = current_task_count - correct_worker_count
                 logger.info('Auto scaling MX record %s DOWN %d tasks', mx, kill_task_count)
-                for x in xrange(kill_task_count):
+                for x in range(kill_task_count):
                     try:
                         tasks_to_kill.append(mx_workers.pop())
                     except IndexError:
                         break
 
         # Kill MX records no longer in use
-        kill_mx = autoscale_email_worker_tasks.viewkeys() - email_smtp_workers.viewkeys()
+        kill_mx = autoscale_email_worker_tasks.keys() - email_smtp_workers.keys()
         for mx in kill_mx:
             workers = autoscale_email_worker_tasks[mx]
             if workers:
@@ -1329,7 +1329,7 @@ def maintain_workers(config):
             del autoscale_email_worker_tasks[mx]
 
         # Make sure all existing workers are alive
-        for mx, mx_tasks in autoscale_email_worker_tasks.iteritems():
+        for mx, mx_tasks in autoscale_email_worker_tasks.items():
             email_vendor_config = copy.deepcopy(email_vendor)
             email_vendor_config['smtp_server'] = mx
             email_vendor_config.pop('smtp_gateway', None)
@@ -1419,21 +1419,21 @@ def sender_shutdown():
     # Stop sender RPC server
     rpc.shutdown()
 
-    for tasks in worker_tasks.itervalues():
+    for tasks in worker_tasks.values():
         for task in tasks:
             task['kill_set'].set()
 
-    for tasks in autoscale_email_worker_tasks.itervalues():
+    for tasks in autoscale_email_worker_tasks.values():
         for task in tasks:
             task['kill_set'].set()
 
     logger.info('Waiting for sender workers to shut down')
 
-    for tasks in worker_tasks.itervalues():
+    for tasks in worker_tasks.values():
         for task in tasks:
             task['greenlet'].join()
 
-    for tasks in autoscale_email_worker_tasks.itervalues():
+    for tasks in autoscale_email_worker_tasks.values():
         for task in tasks:
             task['greenlet'].join()
 
@@ -1478,7 +1478,7 @@ def init_sender(config):
 
     process_title = config['sender'].get('process_title')
 
-    if process_title and isinstance(process_title, basestring):
+    if process_title and isinstance(process_title, str):
         setproctitle.setproctitle(process_title)
         logger.info('Changing process name to %s', process_title)
 
@@ -1617,7 +1617,7 @@ def main():
             metrics.incr('task_failure')
             send_task = spawn(send)
 
-        for mode, send_queue in per_mode_send_queues.iteritems():
+        for mode, send_queue in per_mode_send_queues.items():
 
             # Set metric for size of worker queue
             metrics.set('send_queue_%s_size' % mode, len(send_queue))
