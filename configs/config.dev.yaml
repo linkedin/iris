@@ -55,7 +55,8 @@ qr_login_url: Null
 ## Refer to their class name in this array.
 ## The webhook will be available at /v0/webhooks/$name and requires being called with
 ## ?application=xxx&key=xxx
-#webhooks: []
+webhooks:
+  - alertmanager
 
 #####################
 ### Iris-sender

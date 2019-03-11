@@ -39,7 +39,7 @@ def test_twilio_notification_call_generate(mocker):
         if_machine='Continue',
         url=relay_base_url + (
             '/api/v0/twilio/calls/say?content=Hello.+World&'
-            'source=iris-sender&loop=3'),
+            'loop=3&source=iris-sender'),
         status_callback=relay_base_url + '/api/v0/twilio/status'
     )
 
@@ -75,7 +75,7 @@ def test_twilio_incident_call_generate(mocker):
         if_machine='Continue',
         url=relay_base_url + (
             '/api/v0/twilio/calls/gather?content=Hello.+World&'
-            'source=iris-sender&instruction=Press+1+to+pay&'
-            'message_id=1&loop=3'),
+            'loop=3&source=iris-sender&'
+            'message_id=1&instruction=Press+1+to+pay'),
         status_callback=relay_base_url + '/api/v0/twilio/status'
     )

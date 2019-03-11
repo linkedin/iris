@@ -425,7 +425,7 @@ def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_nu
         'message_id': fake_batch_id,
     }, data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
+    assert re.content.decode('utf-8') == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
 
 def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
@@ -486,7 +486,7 @@ def test_api_response_batch_sms(fake_batch_id, sample_phone):
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
+    assert re.content.decode('utf-8') == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
     data = base_body.copy()
     data['Body'] = '%s claim arg1 arg2' % '*(fasdf'
@@ -835,7 +835,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
     assert re.status_code == 204
 
     data = {
-        'body': u'I\u0131d claim',
+        'body': 'I\u0131d claim',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},
@@ -847,7 +847,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
 
 def test_plan_routing():
     re = requests.get(base_url + 'plans/TESTDOOOOT')
-    assert re.content == ""
+    assert re.content == b""
     assert re.status_code == 404
 
 
@@ -918,8 +918,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     # Test post to plans endpoint (create plan)
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
-    new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
+    plan_id = re.content.strip().decode('utf-8')
+    new_data = requests.get(base_url + 'plans/' + plan_id).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
     assert new_data['description'] == data['description']
@@ -936,7 +936,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     # Test post to plan endpoint (mark active/inactive)
     re = requests.post(base_url + 'plans/' + plan_id, json={'active': 0})
     assert re.status_code == 200
-    assert re.content == '0'
+    assert re.content == b'0'
 
     # Malformed requests
     re = requests.post(base_url + 'plans/' + plan_id, json={})
@@ -952,7 +952,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
 
     re = requests.post(base_url + 'plans/' + plan_id, json={'active': 1})
     assert re.status_code == 200
-    assert re.content == '1'
+    assert re.content == b'1'
 
     # Test get plan endpoint (plan search)
     re = requests.get(base_url + 'plans?active=1&name__contains=%s-test-foo' % sample_user)
@@ -1064,7 +1064,7 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
     # Test post to plans endpoint (create plan)
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
@@ -1132,7 +1132,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     # Test creating and deleting by ID
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     re = requests.get(base_url + 'plans/%s' % plan_id)
@@ -1147,7 +1147,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     # Test creating and deleting by name
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     re = requests.get(base_url + 'plans/%s' % plan_id)
@@ -1165,7 +1165,7 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
 
     re = requests.post(base_url + 'plans', json=data_cant_kill, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     assert create_incident_with_message(sample_application_name, data_cant_kill['name'], sample_user, 'email')
@@ -1271,7 +1271,7 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
     # Test claiming incident
@@ -1342,7 +1342,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
     # Claim
@@ -1403,7 +1403,7 @@ def test_post_incident_change_application(sample_user, sample_application_name, 
     }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
     assert re.json()['application'] == sample_application_name
 
@@ -1569,7 +1569,7 @@ def test_api_get_nested_context(sample_user, sample_team, sample_template_name, 
     assert re.status_code == 201
     iid = re.content.strip()
 
-    re = requests.get(base_url + 'incidents/' + iid)
+    re = requests.get(base_url + 'incidents/' + iid.decode('utf-8'))
     assert re.status_code == 200
     assert re.json()['context']['nodes'] == ctx['nodes']
 
@@ -1673,7 +1673,7 @@ def test_get_invalid_incident(iris_incidents):
 
     re = requests.get(base_url + 'incidents?id=job')
     assert re.status_code == 400
-    assert 'id should be <type \'int\'>' in re.content
+    assert b'id should be <class \'int\'>' in re.content
 
 
 def test_post_user_modes(sample_user):
@@ -2144,7 +2144,7 @@ def test_get_user(sample_user, sample_email, sample_admin_user):
     re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
-    assert data.viewkeys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
+    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
 
@@ -2158,7 +2158,7 @@ def test_healthcheck():
         f.write('GOOD')
     re = requests.get(server + 'healthcheck')
     assert re.status_code == 200
-    assert re.content == 'GOOD'
+    assert re.content == b'GOOD'
 
 
 def test_stats():
@@ -2173,7 +2173,7 @@ def test_stats():
 
     re = requests.get(base_url + 'stats?fields=total_active_users&fields=total_plans')
     assert re.status_code == 200
-    assert re.json().viewkeys() == {'total_active_users', 'total_plans'}
+    assert re.json().keys() == {'total_active_users', 'total_plans'}
 
     re = requests.get(base_url + 'stats?fields=fakefield')
     assert re.status_code == 200
@@ -2702,7 +2702,7 @@ def test_view_app_key(sample_application_name, sample_admin_user):
 
     re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
     assert re.status_code == 200
-    assert re.json().viewkeys() == {'key'}
+    assert re.json().keys() == {'key'}
 
 
 def test_change_app_key(sample_application_name, sample_admin_user):
@@ -3201,7 +3201,7 @@ def test_comment(sample_user, sample_team, sample_application_name, sample_templ
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
     # Post a few comments for the incident

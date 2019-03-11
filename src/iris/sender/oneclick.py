@@ -3,7 +3,7 @@
 
 import hmac
 import hashlib
-import urllib
+import urllib.parse
 import base64
 
 oneclick_email_markup = '''
@@ -27,6 +27,7 @@ oneclick_email_markup = '''
 
 def generate_oneclick_url(config, data):
     keys = ('msg_id', 'email_address', 'cmd')  # Order here needs to match order in iris-relay
-    HMAC = hmac.new(config['gmail_one_click_url_key'], ' '.join(str(data[key]) for key in keys), hashlib.sha512)
+    HMAC = hmac.new(config['gmail_one_click_url_key'].encode('utf-8'),
+                    (' '.join(str(data[key]) for key in keys).encode('utf-8')), hashlib.sha512)
     data['token'] = base64.urlsafe_b64encode(HMAC.digest())
-    return config['gmail_one_click_url_endpoint'] + '?' + urllib.urlencode(data)
+    return config['gmail_one_click_url_endpoint'] + '?' + urllib.parse.urlencode(data)

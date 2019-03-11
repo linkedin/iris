@@ -1,8 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
-
 from collections import deque
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
@@ -56,7 +54,7 @@ class Cache():
             connection = self.engine.raw_connection()
             cursor = connection.cursor()
             cursor.execute(self.active, [tuple(self.data)])
-            for key in self.data.viewkeys() - {row[0] for row in cursor}:
+            for key in self.data.keys() - {row[0] for row in cursor}:
                 del self.data[key]
             cursor.close()
             connection.close()
@@ -169,8 +167,8 @@ class Templates():
 
         active = {item['id']: item['name'] for item in templates_response}
 
-        new_active_ids = active.viewkeys()
-        old_active_ids = self.active.viewkeys()
+        new_active_ids = active.keys()
+        old_active_ids = self.active.keys()
 
         old_ids = old_active_ids - new_active_ids
         new_ids = new_active_ids - old_active_ids
@@ -220,7 +218,7 @@ class Plans():
             if plan['tracking_template']:
                 tracking_template = plan['tracking_template']
                 if plan['tracking_type'] == 'email':
-                    for application, application_templates in tracking_template.iteritems():
+                    for application, application_templates in tracking_template.items():
                         try:
                             tracking_template[application] = {
                                 'email_subject': self.template_env.from_string(application_templates['email_subject']),
@@ -233,7 +231,7 @@ class Plans():
                             logger.exception('[-] error parsing Plan template for %s: %s', key, application)
                             continue
                 else:
-                    for application, application_templates in tracking_template.iteritems():
+                    for application, application_templates in tracking_template.items():
                         try:
                             tracking_template[application] = {
                                 'body': self.template_env.from_string(application_templates['body']),
@@ -259,8 +257,8 @@ class Plans():
 
         active = {item['id']: item['name'] for item in plans_response}
 
-        new_active_ids = active.viewkeys()
-        old_active_ids = self.active.viewkeys()
+        new_active_ids = active.keys()
+        old_active_ids = self.active.keys()
 
         old_ids = old_active_ids - new_active_ids
         new_ids = new_active_ids - old_active_ids
@@ -311,8 +309,8 @@ class TargetReprioritization(object):
             cursor.close()
             connection.close()
 
-            current = rates.viewkeys()
-            old = self.rates.viewkeys()
+            current = rates.keys()
+            old = self.rates.keys()
 
             # purge old rate entries
             for key in old - current:

@@ -164,7 +164,7 @@ def relay(message, iris_client):
         # of the created incident; otherwise, the header will not exist or it will be a textual
         # error message.
         incident_header = req.headers.get('X-IRIS-INCIDENT')
-        if isinstance(incident_header, basestring) and incident_header.isdigit():
+        if isinstance(incident_header, str) and incident_header.isdigit():
             metrics.incr('incident_created_count')
 
     else:

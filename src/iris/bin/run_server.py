@@ -11,6 +11,7 @@ import gunicorn.app.base
 from gunicorn.six import iteritems
 import iris
 import iris.config
+import imp
 
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
@@ -28,8 +29,8 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
     def load(self):
         import iris
-        reload(iris)
-        reload(iris.config)
+        imp.reload(iris)
+        imp.reload(iris.config)
         config = iris.config.load_config(sys.argv[1])
 
         import iris.api

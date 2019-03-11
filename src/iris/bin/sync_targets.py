@@ -187,13 +187,13 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             continue
         contacts[row.mode] = row.destination
 
-    iris_usernames = iris_users.viewkeys()
+    iris_usernames = iris_users.keys()
 
     # users from the oncall endpoints and config files
     metrics.set('users_found', len(oncall_users))
     metrics.set('teams_found', len(oncall_team_names))
     oncall_users.update(get_predefined_users(config))
-    oncall_usernames = oncall_users.viewkeys()
+    oncall_usernames = oncall_users.keys()
 
     # set of users not presently in iris
     users_to_insert = oncall_usernames - iris_usernames
@@ -225,7 +225,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             logger.exception('Failed to add user %s' % username)
             continue
         metrics.incr('users_added')
-        for key, value in oncall_users[username].iteritems():
+        for key, value in oncall_users[username].items():
             if value and key in modes:
                 logger.info('%s: %s -> %s' % (username, key, value))
                 engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))

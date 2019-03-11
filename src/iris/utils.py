@@ -3,7 +3,7 @@
 
 # -*- coding:utf-8 -*-
 
-from __future__ import absolute_import
+
 from phonenumbers import (format_number as pn_format_number, parse as pn_parse,
                           PhoneNumberFormat)
 from gevent import sleep
@@ -209,7 +209,7 @@ def claim_incident(incident_id, owner):
 
     max_retries = 3
 
-    for i in xrange(max_retries):
+    for i in range(max_retries):
         cursor = connection.cursor()
         try:
             cursor.execute('''UPDATE `incident`
@@ -313,14 +313,14 @@ def claim_incidents_from_batch_id(batch_id, owner):
 
 
 def msgpack_unpack_msg_from_socket(socket):
-    unpacker = msgpack.Unpacker()
+    unpacker = msgpack.Unpacker(encoding='utf-8')
     while True:
         buf = socket.recv(1024)
         if not buf:
             break
         unpacker.feed(buf)
         try:
-            item = unpacker.next()
+            item = next(unpacker)
         except StopIteration:
             pass
         else:
@@ -329,8 +329,8 @@ def msgpack_unpack_msg_from_socket(socket):
 
 def sanitize_unicode_dict(d):
     '''Properly decode unicode strings in d to avoid breaking jinja2 renderer'''
-    for key, value in d.iteritems():
-        if isinstance(value, basestring):
+    for key, value in d.items():
+        if isinstance(value, bytes):
             try:
                 d[key] = value.decode('utf-8')
             except UnicodeError:

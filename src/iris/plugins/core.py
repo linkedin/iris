@@ -3,7 +3,6 @@
 
 # -*- coding:utf-8 -*-
 
-from __future__ import absolute_import
 from .. import utils
 import logging
 logger = logging.getLogger(__name__)
@@ -34,7 +33,7 @@ class IrisPlugin(object):
     def get_phone_menu_text(cls):
         if cls.phone_response_menu:
             return ' '.join([item['title'] for (_, item) in
-                            cls.phone_response_menu.iteritems()])
+                            cls.phone_response_menu.items()])
         else:
             return ''
 

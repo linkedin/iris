@@ -41,7 +41,7 @@ stats_reset = {
 
 
 def set_global_stats(stats, connection, cursor):
-    for stat, val in stats.iteritems():
+    for stat, val in stats.items():
         if val is not None:
             cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
                               VALUES (%s, %s, NOW())
@@ -51,7 +51,7 @@ def set_global_stats(stats, connection, cursor):
 
 
 def set_app_stats(app, stats, connection, cursor):
-    for stat, val in stats.iteritems():
+    for stat, val in stats.items():
         if val is not None:
             cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
                               VALUES (%s, %s, %s, NOW())

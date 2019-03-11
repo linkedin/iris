@@ -44,16 +44,16 @@ class IrisVendorManager():
             for mode in vendor_cls.supports:
                 vendor_instance = vendor_cls(copy.deepcopy(vendor_config))
                 vendor_instances[mode].append(vendor_instance)
-                for application_name, application_cls in applications.iteritems():
+                for application_name, application_cls in applications.items():
                     app_vendor_instances[application_name][mode].append(application_cls(vendor_instance))
 
-        for mode, instances in vendor_instances.iteritems():
+        for mode, instances in vendor_instances.items():
             random.shuffle(instances)
             self.all_vendor_instances += instances
             self.vendors_iter[mode] = itertools.cycle(instances)
 
-        for application_name, modes in app_vendor_instances.iteritems():
-            for mode_name, instances in modes.iteritems():
+        for application_name, modes in app_vendor_instances.items():
+            for mode_name, instances in modes.items():
                 random.shuffle(instances)
                 self.app_specific_vendors_iter[application_name][mode_name] = itertools.cycle(instances)
 

@@ -1,8 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
-
 from kazoo.client import KazooClient, KazooState
 from kazoo.handlers.gevent import SequentialGeventHandler
 from kazoo.recipe.party import Party

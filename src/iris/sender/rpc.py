@@ -1,8 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
-
 import os
 from gevent import Timeout, socket
 from gevent.server import StreamServer
@@ -116,7 +114,7 @@ def handle_api_notification_request(socket, address, req):
             # fill in dummy iris meta data
             notification['context']['iris'] = {}
     elif 'email_html' in notification:
-        if not isinstance(notification['email_html'], basestring):
+        if not isinstance(notification['email_html'], str):
             logger.warn('Dropping OOB message with invalid email_html from app %s: %s',
                         notification['application'], notification['email_html'])
             reject_api_request(socket, address, 'INVALID email_html')
