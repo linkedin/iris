@@ -3,7 +3,6 @@
 
 
 def test_twilio_message_generate(mocker):
-    mocker.patch('twilio.rest.resources.Connection')
     from iris.vendors.iris_twilio import iris_twilio
     twilio = iris_twilio({})
     assert twilio.generate_message_text({}) == ''
@@ -14,7 +13,6 @@ def test_twilio_message_generate(mocker):
 
 
 def test_twilio_notification_call_generate(mocker):
-    mocker.patch('twilio.rest.resources.Connection')
     mocker.patch('iris.vendors.iris_twilio.find_plugin')
     from iris.vendors.iris_twilio import iris_twilio
     relay_base_url = 'http://foo/relay'
@@ -45,7 +43,6 @@ def test_twilio_notification_call_generate(mocker):
 
 
 def test_twilio_incident_call_generate(mocker):
-    mocker.patch('twilio.rest.resources.Connection')
     mock_plugin = mocker.MagicMock()
     mock_plugin.get_phone_menu_text.return_value = 'Press 1 to pay'
     mocker.patch('iris.vendors.iris_twilio.find_plugin').return_value = mock_plugin
