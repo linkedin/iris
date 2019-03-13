@@ -17,7 +17,7 @@ setuptools.setup(
         'streql==3.0.2',
         'dnspython==1.16.0',
         'phonenumbers==7.4.1',
-        'twilio==4.5.0',
+        'twilio==6.25.0',
         'google-api-python-client==1.4.2',
         'oauth2client==1.4.12',
         'slackclient==0.16',
