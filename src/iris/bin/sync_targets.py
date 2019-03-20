@@ -72,7 +72,7 @@ if pidfile:
 
 
 def normalize_phone_number(num):
-    return format_number(parse(num.decode('utf-8'), 'US'),
+    return format_number(parse(num, 'US'),
                          PhoneNumberFormat.INTERNATIONAL)
 
 
@@ -297,7 +297,7 @@ def get_ldap_lists(l, search_strings, parent_list=None):
     req_ctrl = SimplePagedResultsControl(True, size=ldap_pagination_size, cookie='')
 
     if parent_list:
-        filterstr = search_strings['get_all_sub_lists_filter'] % escape_filter_chars(parent_list)
+        filterstr = search_strings['get_all_sub_lists_filter'] % escape_filter_chars(parent_list.decode('utf-8'))
     else:
         filterstr = search_strings['get_all_lists_filter']
 
@@ -336,7 +336,7 @@ def get_ldap_list_membership(l, search_strings, list_name):
                              ldap.SCOPE_SUBTREE,
                              serverctrls=[req_ctrl],
                              attrlist=[search_strings['user_mail_field']],
-                             filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
+                             filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name.decode('utf-8'))
                              )
         rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
 
