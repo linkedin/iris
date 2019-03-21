@@ -1380,7 +1380,7 @@ class Plans(object):
                             session.execute(insert_plan_step_query, step)
                     except IntegrityError:
                         raise HTTPBadRequest('Invalid plan',
-                                             'Target not found for step %s' % index)
+                                             'Invalid data for step %s' % index)
 
                 if only_optional_flag:
                     raise HTTPBadRequest('Invalid plan', 'You must have at least one non-optional notification per step. Step %s has none.' % index)
