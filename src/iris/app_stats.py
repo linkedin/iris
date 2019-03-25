@@ -42,9 +42,9 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                                           WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
                                           AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
                                           AND `application_id` = %(application_id)s''',
-        'high_priority_incidents_last_2_weeks': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
+        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
                                                           FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
-                                                          WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
+                                                          WHERE incident.created > NOW() - INTERVAL 1 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
                                                           GROUP BY incident.application_id'''
     }
     cursor.execute('SELECT `name` FROM `mode`')
@@ -177,7 +177,7 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         WHERE (SELECT @row_id := @row_id + 1)
                                                         BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
         'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE',
-        'total_high_priority_incidents_last_2_weeks': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 2 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
+        'total_high_priority_incidents_last_week': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 1 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
     }
 
     stats = {}
