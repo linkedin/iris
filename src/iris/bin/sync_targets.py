@@ -297,7 +297,7 @@ def get_ldap_lists(l, search_strings, parent_list=None):
     req_ctrl = SimplePagedResultsControl(True, size=ldap_pagination_size, cookie='')
 
     if parent_list:
-        filterstr = search_strings['get_all_sub_lists_filter'] % escape_filter_chars(parent_list.decode('utf-8'))
+        filterstr = search_strings['get_all_sub_lists_filter'] % escape_filter_chars(parent_list)
     else:
         filterstr = search_strings['get_all_lists_filter']
 
@@ -309,7 +309,16 @@ def get_ldap_lists(l, search_strings, parent_list=None):
                              filterstr=filterstr)
         rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
 
-        results |= {(data[search_strings['list_cn_field']][0], data[search_strings['list_name_field']][0]) for (dn, data) in rdata}
+        for (dn, data) in rdata:
+            cn_field = data[search_strings['list_cn_field']][0]
+            name_field = data[search_strings['list_name_field']][0]
+
+            if isinstance(cn_field, bytes):
+                cn_field = cn_field.decode('utf-8')
+            if isinstance(name_field, bytes):
+                name_field = name_field.decode('utf-8')
+
+            results |= {(cn_field, name_field)}
 
         pctrls = [c for c in serverctrls
                   if c.controlType == SimplePagedResultsControl.controlType]
@@ -336,11 +345,15 @@ def get_ldap_list_membership(l, search_strings, list_name):
                              ldap.SCOPE_SUBTREE,
                              serverctrls=[req_ctrl],
                              attrlist=[search_strings['user_mail_field']],
-                             filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name.decode('utf-8'))
+                             filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
                              )
         rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
 
-        results |= {data[1].get(search_strings['user_mail_field'], [None])[0] for data in rdata}
+        for data in rdata:
+            member = data[1].get(search_strings['user_mail_field'], [None])[0]
+            if isinstance(member, bytes):
+                member = member.decode('utf-8')
+            results |= {member}
 
         pctrls = [c for c in serverctrls
                   if c.controlType == SimplePagedResultsControl.controlType]
