@@ -320,7 +320,7 @@ CREATE TABLE `oncall_team` (
   `name` varchar(255) NOT NULL,
   `oncall_team_id` bigint(20) NOT NULL,
   PRIMARY KEY (`target_id`),
-  CONSTRAINT `oncall_team_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `oncall_team_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
