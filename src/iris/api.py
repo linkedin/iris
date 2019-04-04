@@ -1400,6 +1400,58 @@ class Incidents(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
+        '''
+        Search for incidents. Returns a list of incidents matching specified parameters.
+        Valid parameters are listed below:
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            GET /v0/incidents?owner=jdoe&created__gt=1487466146&fields=id,owner  HTTP/1.1
+            Host: example.com
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "id": 123,
+                    "owner": "jdoe"
+                },
+                {
+                    "id": 124,
+                    "owner": "jdoe"
+                }
+            ]
+
+        :statuscode 400: Too much data requested; more filters are required
+        :statuscode 200: Successful query
+
+        *Allowed filter parameters:*
+
+        - id: Incident id (int)
+        - created: Incident creation time, in seconds since Unix epoch (int)
+        - owner: Username of person who claimed the incident (string)
+        - updated: Time when incident was last updated (e.g. claimed), in seconds since epoch (int)
+        - active: Incident status. Incidents are active if unclaimed, and inactive if they are
+          claimed or finished with their escalation plan (0 or 1 for inactive/active, respectively)
+        - context: JSON string representing the incident context data
+        - application: Application that created this incident (string)
+        - plan: Escalation plan name (string)
+        - plan_id: Escalation plan id (int)
+
+        This endpoint also allows specification of a limit via another query parameter, which limits
+        results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
+        or a filter will be rejected. To specify which incident attribute should be included in the output, the "fields"
+        query parameter can be used. The fields parameter takes the value of a comma-separated list of attributes
+        (e.g. id,owner), and the API will only include these incident fields in the output. If no "fields" value is
+        specified, all fields will be returned.
+        '''
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
         if not fields:
