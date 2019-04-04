@@ -670,7 +670,7 @@ def main():
 
         # Do ldap mailing list sync *after* we do the normal sync, to ensure we have the users
         # which will be in ldap already populated.
-        if not ldap_lists:
+        if ldap_lists:
             list_run_start = time.time()
             sync_ldap_lists(ldap_lists, engine)
             logger.info('Ldap mailing list sync took %.2f seconds', time.time() - list_run_start)
