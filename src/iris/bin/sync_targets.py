@@ -126,8 +126,6 @@ def prune_target(engine, target_name, target_type):
         return
 
 
-
-
 def fetch_teams_from_oncall(oncall):
     try:
         return oncall.get('%steams?fields=name&active=1&get_id=1' % oncall.url).json()
@@ -178,8 +176,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     oncall_team_response = list(zip(*fetch_teams_from_oncall(oncall)))
     oncall_team_names = oncall_team_response[0]
     oncall_team_ids = oncall_team_response[1]
-    oncall_response_dict_name_key = dict(zip(oncall_team_names,oncall_team_ids))
-    oncall_response_dict_id_key = dict(zip(oncall_team_ids,oncall_team_names))
+    oncall_response_dict_name_key = dict(zip(oncall_team_names, oncall_team_ids))
+    oncall_response_dict_id_key = dict(zip(oncall_team_ids, oncall_team_names))
 
     if not oncall_team_names:
         logger.warning('We do not have a list of team names')
@@ -282,7 +280,6 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
 # sync teams between iris and oncall
 
-
     # iris_oncall_team_ids (team_ids in the oncall_team table)
     # iris_oncall_team_names (names in the oncall_team table)
     # oncall_team_ids (team_ids from oncall api call)
@@ -312,17 +309,17 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 # rename all mismatching target names
     iris_oncall_team_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `oncall_team_id` FROM `oncall_team`''')}
     possibly_mismatched_names = iris_team_names - oncall_team_names
-    
+
     # find teams in the iris database whose names have changed
     for name in possibly_mismatched_names:
         if iris_oncall_team_name_id_dict.get(name) in oncall_team_ids:
-        # rename team to new name
+            # rename team to new name
             target_id_to_rename = iris_target_name_id_dict[name]
             # get the oncall response name using the oncall_team team_id
             new_name = oncall_response_dict_id_key[iris_oncall_team_name_id_dict[name]]
-            logger.info('Renaming team %s to %s' % (name,new_name))
-            engine.execute('''UPDATE `oncall_team` SET `name` = %s WHERE `target_id` = %s''', (new_name,target_id_to_rename))
-            engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name,target_id_to_rename))
+            logger.info('Renaming team %s to %s' % (name, new_name))
+            engine.execute('''UPDATE `oncall_team` SET `name` = %s WHERE `target_id` = %s''', (new_name, target_id_to_rename))
+            engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
 
 # create new entries for new teams
 
@@ -344,7 +341,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             logger.exception('Error inserting team %s: %s' % (t, e))
             metrics.incr('teams_failed_to_add')
             continue
-        
+
         # add team to oncall_team table
         logger.info('Inserting new team into oncall_team %s' % t)
         if new_target_id:
