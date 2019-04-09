@@ -280,23 +280,23 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
 # sync teams between iris and oncall
 
-    # iris_oncall_team_ids (team_ids in the oncall_team table)
-    # iris_oncall_team_names (names in the oncall_team table)
+    # iris_db_oncall_team_ids (team_ids in the oncall_team table)
+    # iris_db_oncall_team_names (names in the oncall_team table)
     # oncall_team_ids (team_ids from oncall api call)
     # oncall_team_names (names from oncall api call)
     # oncall_response_dict_name_key (key value pairs of oncall team names and ids from api call)
     # oncall_response_dict_id_key same as above but key value inverted
     # iris_team_names (names from target table)
     # iris_target_name_id_dict dictionary of target name -> target_id mappings
-    # iris_oncall_team_name_id_dict dictionary of oncall name -> oncall team_id mappings
+    # iris_db_oncall_team_name_id_dict dictionary of oncall name -> oncall team_id mappings
 
 # get all incoming names that match a target check if that target has an entry in oncall table if not make one
 
-    iris_oncall_team_names = {name for (name, ) in session.execute('SELECT `name` FROM `oncall_team`')}
+    iris_db_oncall_team_names = {name for (name, ) in session.execute('SELECT `name` FROM `oncall_team`')}
     iris_target_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `id` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
 
     # up to date target names that don't have an entry in the oncall_team table yet
-    matching_target_names_no_oncall_entry = iris_team_names.intersection(oncall_team_names) - iris_oncall_team_names
+    matching_target_names_no_oncall_entry = iris_team_names.intersection(oncall_team_names) - iris_db_oncall_team_names
 
     for t in matching_target_names_no_oncall_entry:
         logger.info('Inserting existing team into oncall_team %s' % t)
@@ -307,16 +307,16 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             continue
 
 # rename all mismatching target names
-    iris_oncall_team_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `oncall_team_id` FROM `oncall_team`''')}
+    iris_db_oncall_team_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `oncall_team_id` FROM `oncall_team`''')}
     possibly_mismatched_names = iris_team_names - oncall_team_names
 
     # find teams in the iris database whose names have changed
     for name in possibly_mismatched_names:
-        if iris_oncall_team_name_id_dict.get(name) in oncall_team_ids:
+        if iris_db_oncall_team_name_id_dict.get(name) in oncall_team_ids:
             # rename team to new name
             target_id_to_rename = iris_target_name_id_dict[name]
             # get the oncall response name using the oncall_team team_id
-            new_name = oncall_response_dict_id_key[iris_oncall_team_name_id_dict[name]]
+            new_name = oncall_response_dict_id_key[iris_db_oncall_team_name_id_dict[name]]
             logger.info('Renaming team %s to %s' % (name, new_name))
             engine.execute('''UPDATE `oncall_team` SET `name` = %s WHERE `target_id` = %s''', (new_name, target_id_to_rename))
             engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
@@ -324,8 +324,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 # create new entries for new teams
 
     # if the team_id doesn't exist in oncall_team at this point then it is a new team.
-    iris_oncall_team_ids = {oncall_team_id for (oncall_team_id, ) in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team`''')}
-    new_team_ids = oncall_team_ids - iris_oncall_team_ids
+    iris_db_oncall_team_ids = {oncall_team_id for (oncall_team_id, ) in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team`''')}
+    new_team_ids = oncall_team_ids - iris_db_oncall_team_ids
     logger.info('Teams to insert (%d)' % len(new_team_ids))
 
     for team_id in new_team_ids:
