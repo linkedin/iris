@@ -15,6 +15,7 @@ import re
 import pyqrcode
 from iris.ui import auth
 from beaker.middleware import SessionMiddleware
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ default_route = '/incidents'
 
 
 jinja2_env.globals['default_route'] = default_route
+jinja2_env.globals['current_year'] = datetime.now().year
 
 
 def build_assets():
