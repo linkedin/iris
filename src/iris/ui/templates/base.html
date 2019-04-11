@@ -56,7 +56,7 @@
     <div class="container-fluid"> <!-- content wrapper -->
       {% block content %}{% endblock %}
       <ul class="footer" data-page="{{path}}">
-        <li>Iris &copy; LinkedIn 2017</li>
+        <li>Iris &copy; LinkedIn {{current_year}}</li>
         {{ extra_footer_items|safe }}
         <li><a href="/stats">Stats</a></li>
       </ul>
