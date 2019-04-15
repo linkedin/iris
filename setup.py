@@ -29,7 +29,7 @@ setuptools.setup(
         'requests==2.20.0',
         'PyMySQL==0.9.3',
         'SQLAlchemy==1.3.0',
-        'Jinja2==2.10',
+        'Jinja2==2.10.1',
         'importlib==1.0.3',
         'Markdown==2.4.1',
         'click==6.6',
