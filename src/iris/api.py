@@ -1,6 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
-from gevent import spawn, sleep, socket
+from gevent import spawn, sleep, socket, Timeout
 
 import msgpack
 import time
@@ -1949,8 +1949,9 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, zk_hosts, default_sender_addr):
+    def __init__(self, zk_hosts, default_sender_addr, timeout):
         self.default_sender_addr = default_sender_addr
+        self.timeout = timeout
         if zk_hosts:
             from iris.coordinator.kazoo import Coordinator
             self.coordinator = Coordinator(zk_hosts=zk_hosts,
@@ -2094,7 +2095,9 @@ class Notifications(object):
 
         # If we're using ZK, try that to get master
         if self.coordinator:
-            sender_addr = self.coordinator.get_current_master()
+            sender_addr = None
+            with Timeout(self.timeout, False):
+                sender_addr = self.coordinator.get_current_master()
             if sender_addr:
                 logger.info('Relaying message to current master sender: %s', sender_addr)
             else:
@@ -4421,7 +4424,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
     api.add_route('/v0/messages', Messages())
 
-    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr))
+    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config.get('zookeeper_timeout', 1)))
 
     api.add_route('/v0/targets/{target_type}', Target())
     api.add_route('/v0/targets', Targets())
