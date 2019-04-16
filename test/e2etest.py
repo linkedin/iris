@@ -1094,10 +1094,6 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
 
 
 def test_delete_plan(sample_user, sample_team, sample_template_name, sample_application_name):
-    re = requests.delete(base_url + 'plans/plan')
-    assert re.status_code == 401
-    assert re.json()['title'] == 'You must be a logged in user to delete unused plans'
-
     re = requests.delete(base_url + 'plans/fake-plan-name-12345', headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'No plan matched'
