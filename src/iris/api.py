@@ -994,9 +994,6 @@ class Plan(object):
         resp.body = ujson.dumps(active)
 
     def on_delete(self, req, resp, plan_id):
-        if not req.context['username']:
-            raise HTTPUnauthorized('You must be a logged in user to delete unused plans')
-
         if plan_id.isdigit():
             query = '''SELECT EXISTS(SELECT 1 FROM `plan` WHERE `id` = %s)'''
             plan_name = None
@@ -1063,8 +1060,6 @@ class Plan(object):
 
         connection.commit()
         connection.close()
-
-        logger.info('%s deleted plan %s', req.context['username'], plan_name)
 
         resp.status = HTTP_200
         resp.body = '[]'
