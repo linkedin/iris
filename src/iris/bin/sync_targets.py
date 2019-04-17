@@ -104,7 +104,7 @@ def prune_target(engine, target_name, target_type):
 
     if target_type == 'team':
         try:
-            engine.execute('''DELETE FROM `oncall_team` WHERE `name` = %s ''', target_name)
+            engine.execute('''DELETE FROM `oncall_team` WHERE `target_id` = (SELECT `target`.`id` FROM `target` JOIN `target_type` ON `target`.`type_id` = `target_type`.`id` WHERE `target_type`.`name` = %s AND `target`.`name` = %s)''', target_type, target_name)
             logger.info('Deleted inactive oncall team %s', target_name)
         except SQLAlchemyError as e:
             logger.error('Deleting oncall team %s failed: %s', target_name, e)
@@ -172,8 +172,13 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         logger.warning('No users found. Bailing.')
         return
 
-    # get teams from oncall-api and separate the list of touples into two lists of name and ids
-    oncall_team_response = list(zip(*fetch_teams_from_oncall(oncall)))
+    # get teams from oncall-api and separate the list of tuples into two lists of name and ids
+    oncall_teams_api_response = fetch_teams_from_oncall(oncall)
+    if not oncall_teams_api_response:
+        logger.warning('No teams found. Bailing.')
+        return
+
+    oncall_team_response = list(zip(*oncall_teams_api_response))
     oncall_team_names = oncall_team_response[0]
     oncall_team_ids = oncall_team_response[1]
     oncall_response_dict_name_key = dict(zip(oncall_team_names, oncall_team_ids))
@@ -217,20 +222,20 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     users_to_mark_inactive = iris_usernames - oncall_usernames
 
     # get objects needed for insertion
-    target_types = {name: id for name, id in session.execute('SELECT `name`, `id` FROM `target_type`')}  # 'team' and 'user'
-    modes = {name: id for name, id in session.execute('SELECT `name`, `id` FROM `mode`')}
+    target_types = {name: target_id for name, target_id in session.execute('SELECT `name`, `id` FROM `target_type`')}  # 'team' and 'user'
+    modes = {name: mode_id for name, mode_id in session.execute('SELECT `name`, `id` FROM `mode`')}
     iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
     target_add_sql = 'INSERT INTO `target` (`name`, `type_id`) VALUES (%s, %s) ON DUPLICATE KEY UPDATE `active` = TRUE'
-    oncall_add_sql = 'INSERT INTO `oncall_team` (`target_id`, `name`, `oncall_team_id`) VALUES (%s, %s, %s)'
+    oncall_add_sql = 'INSERT INTO `oncall_team` (`target_id`, `oncall_team_id`) VALUES (%s, %s)'
     user_add_sql = 'INSERT IGNORE INTO `user` (`target_id`) VALUES (%s)'
     target_contact_add_sql = '''INSERT INTO `target_contact` (`target_id`, `mode_id`, `destination`)
                                 VALUES (%s, %s, %s)
                                 ON DUPLICATE KEY UPDATE `destination` = %s'''
 
     # insert users that need to be
-    logger.info('Users to insert (%d)' % len(users_to_insert))
+    logger.info('Users to insert (%d)', len(users_to_insert))
     for username in users_to_insert:
-        logger.info('Inserting %s' % username)
+        logger.info('Inserting %s', username)
         try:
             target_id = engine.execute(target_add_sql, (username, target_types['user'])).lastrowid
             engine.execute(user_add_sql, (target_id, ))
@@ -242,7 +247,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         metrics.incr('users_added')
         for key, value in oncall_users[username].items():
             if value and key in modes:
-                logger.info('%s: %s -> %s' % (username, key, value))
+                logger.info('%s: %s -> %s', username, key, value)
                 engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
 
     # update users that need to be
@@ -250,7 +255,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     contact_insert_sql = 'INSERT INTO target_contact (target_id, mode_id, destination) VALUES ((SELECT id FROM target WHERE name = %s), %s, %s)'
     contact_delete_sql = 'DELETE FROM target_contact WHERE target_id = (SELECT id FROM target WHERE name = %s) AND mode_id = %s'
 
-    logger.info('Users to update (%d)' % len(users_to_update))
+    logger.info('Users to update (%d)', len(users_to_update))
     for username in users_to_update:
         try:
             db_contacts = iris_users[username]
@@ -259,29 +264,28 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 if mode in oncall_contacts and oncall_contacts[mode]:
                     if mode in db_contacts:
                         if oncall_contacts[mode] != db_contacts[mode]:
-                            logger.info('%s: updating %s' % (username, mode))
+                            logger.info('%s: updating %s', username, mode)
                             metrics.incr('user_contacts_updated')
                             engine.execute(contact_update_sql, (oncall_contacts[mode], username, modes[mode]))
                     else:
-                        logger.info('%s: adding %s' % (username, mode))
+                        logger.info('%s: adding %s', username, mode)
                         metrics.incr('user_contacts_updated')
                         engine.execute(contact_insert_sql, (username, modes[mode], oncall_contacts[mode]))
                 elif mode in db_contacts:
-                    logger.info('%s: deleting %s' % (username, mode))
+                    logger.info('%s: deleting %s', username, mode)
                     metrics.incr('user_contacts_updated')
                     engine.execute(contact_delete_sql, (username, modes[mode]))
                 else:
-                    logger.debug('%s: missing %s' % (username, mode))
+                    logger.debug('%s: missing %s', username, mode)
         except SQLAlchemyError as e:
             metrics.incr('users_failed_to_update')
             metrics.incr('sql_errors')
-            logger.exception('Failed to update user %s' % username)
+            logger.exception('Failed to update user %s', username)
             continue
 
 # sync teams between iris and oncall
 
     # iris_db_oncall_team_ids (team_ids in the oncall_team table)
-    # iris_db_oncall_team_names (names in the oncall_team table)
     # oncall_team_ids (team_ids from oncall api call)
     # oncall_team_names (names from oncall api call)
     # oncall_response_dict_name_key (key value pairs of oncall team names and ids from api call)
@@ -291,23 +295,26 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # iris_db_oncall_team_name_id_dict dictionary of oncall name -> oncall team_id mappings
 
 # get all incoming names that match a target check if that target has an entry in oncall table if not make one
+    iris_target_name_id_dict = {name: target_id for name, target_id in engine.execute('''SELECT `name`, `id` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
 
-    iris_db_oncall_team_names = {name for (name, ) in session.execute('SELECT `name` FROM `oncall_team`')}
-    iris_target_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `id` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
+    matching_target_names = iris_team_names.intersection(oncall_team_names)
+    if matching_target_names:
+        existing_up_to_date_oncall_teams = {name for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})}
+        
+        # up to date target names that don't have an entry in the oncall_team table yet
+        matching_target_names_no_oncall_entry = matching_target_names - existing_up_to_date_oncall_teams
 
-    # up to date target names that don't have an entry in the oncall_team table yet
-    matching_target_names_no_oncall_entry = iris_team_names.intersection(oncall_team_names) - iris_db_oncall_team_names
-
-    for t in matching_target_names_no_oncall_entry:
-        logger.info('Inserting existing team into oncall_team %s' % t)
-        try:
-            engine.execute(oncall_add_sql, (iris_target_name_id_dict[t], t, oncall_response_dict_name_key[t]))
-        except SQLAlchemyError as e:
-            logger.exception('Error inserting oncall_team %s: %s' % (t, e))
-            continue
+        for t in matching_target_names_no_oncall_entry:
+            logger.info('Inserting existing team into oncall_team %s', t)
+            try:
+                engine.execute(oncall_add_sql, (iris_target_name_id_dict[t], oncall_response_dict_name_key[t]))
+            except SQLAlchemyError as e:
+                logger.exception('Error inserting oncall_team %s: %s', t, e)
+                continue
 
 # rename all mismatching target names
-    iris_db_oncall_team_name_id_dict = {name: id for name, id in engine.execute('''SELECT `name`, `oncall_team_id` FROM `oncall_team`''')}
+
+    iris_db_oncall_team_name_id_dict = {name: team_id for name, team_id in engine.execute('''SELECT target.name, oncall_team.oncall_team_id FROM `target` JOIN `oncall_team` ON oncall_team.target_id = target.id''')}
     possibly_mismatched_names = iris_team_names - oncall_team_names
 
     # find teams in the iris database whose names have changed
@@ -317,8 +324,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             target_id_to_rename = iris_target_name_id_dict[name]
             # get the oncall response name using the oncall_team team_id
             new_name = oncall_response_dict_id_key[iris_db_oncall_team_name_id_dict[name]]
-            logger.info('Renaming team %s to %s' % (name, new_name))
-            engine.execute('''UPDATE `oncall_team` SET `name` = %s WHERE `target_id` = %s''', (new_name, target_id_to_rename))
+            logger.info('Renaming team %s to %s', name, new_name)
             engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
 
 # create new entries for new teams
@@ -333,22 +339,22 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         new_target_id = None
 
         # add team to target table
-        logger.info('Inserting %s' % t)
+        logger.info('Inserting %s', t)
         try:
             new_target_id = engine.execute(target_add_sql, (t, target_types['team'])).lastrowid
             metrics.incr('teams_added')
         except SQLAlchemyError as e:
-            logger.exception('Error inserting team %s: %s' % (t, e))
+            logger.exception('Error inserting team %s: %s', t, e)
             metrics.incr('teams_failed_to_add')
             continue
 
         # add team to oncall_team table
-        logger.info('Inserting new team into oncall_team %s' % t)
         if new_target_id:
+            logger.info('Inserting new team into oncall_team %s', t)
             try:
-                engine.execute(oncall_add_sql, (new_target_id, t, oncall_response_dict_name_key[t]))
+                engine.execute(oncall_add_sql, (new_target_id, team_id))
             except SQLAlchemyError as e:
-                logger.exception('Error inserting oncall_team %s: %s' % (t, e))
+                logger.exception('Error inserting oncall_team %s: %s', t, e)
                 continue
 
     session.commit()

@@ -317,7 +317,6 @@ DROP TABLE IF EXISTS `oncall_team`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `oncall_team` (
   `target_id` bigint(20) NOT NULL,
-  `name` varchar(255) NOT NULL,
   `oncall_team_id` bigint(20) NOT NULL,
   PRIMARY KEY (`target_id`),
   CONSTRAINT `oncall_team_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
