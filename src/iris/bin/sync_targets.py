@@ -299,8 +299,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
     matching_target_names = iris_team_names.intersection(oncall_team_names)
     if matching_target_names:
-        existing_up_to_date_oncall_teams = {name for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})}
-        
+        existing_up_to_date_oncall_teams = {name for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})} 
         # up to date target names that don't have an entry in the oncall_team table yet
         matching_target_names_no_oncall_entry = matching_target_names - existing_up_to_date_oncall_teams
 
