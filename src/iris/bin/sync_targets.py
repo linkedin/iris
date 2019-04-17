@@ -6,6 +6,7 @@ monkey.patch_all()  # NOQA
 
 import logging
 import os
+import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
@@ -318,13 +319,31 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     iris_db_oncall_team_ids = {oncall_team_id for (oncall_team_id, ) in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team`''')}
     matching_oncall_ids = oncall_team_ids.intersection(iris_db_oncall_team_ids)
 
+    name_swaps = {}
+
     # find teams in the iris database whose names have changed
     for oncall_id in matching_oncall_ids:
+
         current_name = iris_db_oncall_team_id_name_dict[oncall_id]
         new_name = oncall_response_dict_id_key[oncall_id]
         if current_name != new_name:
-            target_id_to_rename = iris_target_name_id_dict[current_name]
-            logger.info('Renaming team %s to %s', current_name, new_name)
+            # handle edge case of teams swapping names
+            if not iris_target_name_id_dict.get(new_name, None):
+                target_id_to_rename = iris_target_name_id_dict[current_name]
+                logger.info('Renaming team %s to %s', current_name, new_name)
+                engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+            else:
+                # there is a team swap so rename to a random name to prevent a violation of unique target name constraint
+                new_name = str(uuid.uuid4())
+                target_id_to_rename = iris_target_name_id_dict[current_name]
+                name_swaps[oncall_id] = target_id_to_rename
+                logger.info('Renaming team %s to %s', current_name, new_name)
+                engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+
+    # go back and rename name_swaps to correct value
+    for oncall_id, target_id_to_rename in name_swaps.items():
+        new_name = oncall_response_dict_id_key[oncall_id]
+        if current_name != new_name:
             engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
 
 

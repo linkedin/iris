@@ -65,14 +65,14 @@ def test_rename_team(mocker):
     assert iris_oncall_team_ids == {10001, 10002, 10003}
     assert {'demo_team', 'foo_team', 'bar_team'} == iris_team_names
 
-    # rename demo_team and foo_team
-    mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = [["demo_team_renamed", 10001], ["foo_team_renamed", 10002], ["bar_team", 10003]]
+    # rename demo_team and foo_team also test swap edgecase
+    mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = [["foo_team", 10001], ["foo_team_renamed", 10002], ["bar_team", 10003]]
     sync_from_oncall(dummy_configs, engine)
 
     iris_oncall_team_ids = {oncall_team_id for (oncall_team_id, ) in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team`''')}
     iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` IN  (SELECT id FROM `target_type` WHERE `name` = "team")''')}
     assert iris_oncall_team_ids == {10001, 10002, 10003}
-    assert iris_team_names == {'demo_team_renamed', 'foo_team_renamed', 'bar_team'}
+    assert iris_team_names == {'foo_team_renamed', 'foo_team', 'bar_team'}
 
 
 def test_delete_team(mocker):
