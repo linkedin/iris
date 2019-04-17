@@ -343,8 +343,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # go back and rename name_swaps to correct value
     for oncall_id, target_id_to_rename in name_swaps.items():
         new_name = oncall_response_dict_id_key[oncall_id]
-        if current_name != new_name:
-            engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+        engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
 
 
 # create new entries for new teams
