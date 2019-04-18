@@ -252,9 +252,9 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
 
     # update users that need to be
-    contact_update_sql = 'UPDATE target_contact SET destination = %s WHERE target_id = (SELECT id FROM target WHERE name = %s) AND mode_id = %s'
-    contact_insert_sql = 'INSERT INTO target_contact (target_id, mode_id, destination) VALUES ((SELECT id FROM target WHERE name = %s), %s, %s)'
-    contact_delete_sql = 'DELETE FROM target_contact WHERE target_id = (SELECT id FROM target WHERE name = %s) AND mode_id = %s'
+    contact_update_sql = 'UPDATE target_contact SET destination = %s WHERE target_id = (SELECT id FROM target WHERE name = %s AND target_type = %s) AND mode_id = %s'
+    contact_insert_sql = 'INSERT INTO target_contact (target_id, mode_id, destination) VALUES ((SELECT id FROM target WHERE name = %s AND target_type = %s), %s, %s)'
+    contact_delete_sql = 'DELETE FROM target_contact WHERE target_id = (SELECT id FROM target WHERE name = %s AND target_type = %s) AND mode_id = %s'
 
     logger.info('Users to update (%d)', len(users_to_update))
     for username in users_to_update:
@@ -267,15 +267,15 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                         if oncall_contacts[mode] != db_contacts[mode]:
                             logger.info('%s: updating %s', username, mode)
                             metrics.incr('user_contacts_updated')
-                            engine.execute(contact_update_sql, (oncall_contacts[mode], username, modes[mode]))
+                            engine.execute(contact_update_sql, (oncall_contacts[mode], username, target_types['user'], modes[mode]))
                     else:
                         logger.info('%s: adding %s', username, mode)
                         metrics.incr('user_contacts_updated')
-                        engine.execute(contact_insert_sql, (username, modes[mode], oncall_contacts[mode]))
+                        engine.execute(contact_insert_sql, (username, target_types['user'], modes[mode], oncall_contacts[mode]))
                 elif mode in db_contacts:
                     logger.info('%s: deleting %s', username, mode)
                     metrics.incr('user_contacts_updated')
-                    engine.execute(contact_delete_sql, (username, modes[mode]))
+                    engine.execute(contact_delete_sql, (username, target_types['user'], modes[mode]))
                 else:
                     logger.debug('%s: missing %s', username, mode)
         except SQLAlchemyError as e:
