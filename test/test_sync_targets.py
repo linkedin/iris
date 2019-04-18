@@ -31,7 +31,7 @@ def test_create_oncall_team_table(mocker):
     '''Test initialization of oncall_team table'''
 
     sample_oncall_teams_response = [["demo_team", 10001], ["foo_team", 10002], ["bar_team", 10003]]
-    sample_oncall_users_response = {"abc": {"sms": "+1 999-999-9991", "slack": "abc", "call": "+1 999-999-9992", "email": "abc@domain.com"}, "demo": {"sms": "+1 999-999-9993", "slack": "demo", "call": "+1 999-999-9994", "email": "foo@domain.com"}}
+    sample_oncall_users_response = {"abc": {"sms": "+1 223-456-7891", "slack": "abc", "call": "+1 223-456-7891", "email": "abc@domain.com"}, "demo": {"sms": "+1 223-456-7890", "slack": "demo", "call": "+1 223-456-7890", "email": "demo@domain.com"}, "foo": {"sms": "+1 223-456-7892", "slack": "foo", "call": "+1 223-456-7892", "email": "foo@domain.com"}}
 
     mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = sample_oncall_teams_response
     mocker.patch('iris.bin.sync_targets.fetch_users_from_oncall').return_value = sample_oncall_users_response
@@ -51,7 +51,7 @@ def test_rename_team(mocker):
     '''Test renaming of a team'''
 
     sample_oncall_teams_response = [["demo_team", 10001], ["foo_team", 10002], ["bar_team", 10003]]
-    sample_oncall_users_response = {"abc": {"sms": "+1 999-999-9991", "slack": "abc", "call": "+1 999-999-9992", "email": "abc@domain.com"}, "demo": {"sms": "+1 999-999-9993", "slack": "demo", "call": "+1 999-999-9994", "email": "foo@domain.com"}}
+    sample_oncall_users_response = {"abc": {"sms": "+1 223-456-7891", "slack": "abc", "call": "+1 223-456-7891", "email": "abc@domain.com"}, "demo": {"sms": "+1 223-456-7890", "slack": "demo", "call": "+1 223-456-7890", "email": "demo@domain.com"}, "foo": {"sms": "+1 223-456-7892", "slack": "foo", "call": "+1 223-456-7892", "email": "foo@domain.com"}}
 
     mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = sample_oncall_teams_response
     mocker.patch('iris.bin.sync_targets.fetch_users_from_oncall').return_value = sample_oncall_users_response
@@ -79,7 +79,7 @@ def test_delete_team(mocker):
     '''Test deletion of a team'''
 
     sample_oncall_teams_response = [["demo_team", 10001], ["foo_team", 10002], ["bar_team", 10003]]
-    sample_oncall_users_response = {"abc": {"sms": "+1 999-999-9991", "slack": "abc", "call": "+1 999-999-9992", "email": "abc@domain.com"}, "demo": {"sms": "+1 999-999-9993", "slack": "demo", "call": "+1 999-999-9994", "email": "foo@domain.com"}}
+    sample_oncall_users_response = {"abc": {"sms": "+1 223-456-7891", "slack": "abc", "call": "+1 223-456-7891", "email": "abc@domain.com"}, "demo": {"sms": "+1 223-456-7890", "slack": "demo", "call": "+1 223-456-7890", "email": "demo@domain.com"}, "foo": {"sms": "+1 223-456-7892", "slack": "foo", "call": "+1 223-456-7892", "email": "foo@domain.com"}}
 
     mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = sample_oncall_teams_response
     mocker.patch('iris.bin.sync_targets.fetch_users_from_oncall').return_value = sample_oncall_users_response
@@ -107,7 +107,7 @@ def test_empty_oncall_response(mocker):
     '''Test handling of an empty response from oncall'''
 
     sample_oncall_teams_response = [["demo_team", 10001], ["foo_team", 10002], ["bar_team", 10003]]
-    sample_oncall_users_response = {"abc": {"sms": "+1 999-999-9991", "slack": "abc", "call": "+1 999-999-9992", "email": "abc@domain.com"}, "demo": {"sms": "+1 999-999-9993", "slack": "demo", "call": "+1 999-999-9994", "email": "foo@domain.com"}}
+    sample_oncall_users_response = {"abc": {"sms": "+1 223-456-7891", "slack": "abc", "call": "+1 223-456-7891", "email": "abc@domain.com"}, "demo": {"sms": "+1 223-456-7890", "slack": "demo", "call": "+1 223-456-7890", "email": "demo@domain.com"}, "foo": {"sms": "+1 223-456-7892", "slack": "foo", "call": "+1 223-456-7892", "email": "foo@domain.com"}}
 
     mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = sample_oncall_teams_response
     mocker.patch('iris.bin.sync_targets.fetch_users_from_oncall').return_value = sample_oncall_users_response
@@ -124,7 +124,7 @@ def test_empty_oncall_response(mocker):
 
     # recieve empty response from oncall
     sample_oncall_teams_response = []
-    sample_oncall_users_response = {"abc": {"sms": "+1 999-999-9991", "slack": "abc", "call": "+1 999-999-9992", "email": "abc@domain.com"}, "demo": {"sms": "+1 999-999-9993", "slack": "demo", "call": "+1 999-999-9994", "email": "foo@domain.com"}}
+    sample_oncall_users_response = {"abc": {"sms": "+1 223-456-7891", "slack": "abc", "call": "+1 223-456-7891", "email": "abc@domain.com"}, "demo": {"sms": "+1 223-456-7890", "slack": "demo", "call": "+1 223-456-7890", "email": "demo@domain.com"}, "foo": {"sms": "+1 223-456-7892", "slack": "foo", "call": "+1 223-456-7892", "email": "foo@domain.com"}}
 
     mocker.patch('iris.bin.sync_targets.fetch_teams_from_oncall').return_value = sample_oncall_teams_response
     mocker.patch('iris.bin.sync_targets.fetch_users_from_oncall').return_value = sample_oncall_users_response
