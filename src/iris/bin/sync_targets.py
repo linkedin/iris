@@ -252,9 +252,9 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
 
     # update users that need to be
-    contact_update_sql = 'UPDATE target_contact SET destination = %s WHERE target_id = (SELECT id FROM target WHERE name = %s AND target_type = %s) AND mode_id = %s'
-    contact_insert_sql = 'INSERT INTO target_contact (target_id, mode_id, destination) VALUES ((SELECT id FROM target WHERE name = %s AND target_type = %s), %s, %s)'
-    contact_delete_sql = 'DELETE FROM target_contact WHERE target_id = (SELECT id FROM target WHERE name = %s AND target_type = %s) AND mode_id = %s'
+    contact_update_sql = 'UPDATE target_contact SET destination = %s WHERE target_id = (SELECT id FROM target WHERE name = %s AND type_id = %s) AND mode_id = %s'
+    contact_insert_sql = 'INSERT INTO target_contact (target_id, mode_id, destination) VALUES ((SELECT id FROM target WHERE name = %s AND type_id = %s), %s, %s)'
+    contact_delete_sql = 'DELETE FROM target_contact WHERE target_id = (SELECT id FROM target WHERE name = %s AND type_id = %s) AND mode_id = %s'
 
     logger.info('Users to update (%d)', len(users_to_update))
     for username in users_to_update:
