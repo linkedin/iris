@@ -763,7 +763,7 @@ CREATE TABLE `application_stats` (
   `statistic` VARCHAR(255) NOT NULL,
   `value` FLOAT NOT NULL,
   `timestamp` DATETIME NOT NULL,
-  PRIMARY KEY (`application_id`, `statistic`),
+  PRIMARY KEY (`application_id`, `statistic`, `timestamp`),
   CONSTRAINT `application_stats_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -773,7 +773,7 @@ CREATE TABLE `global_stats` (
   `statistic` VARCHAR(255) NOT NULL,
   `value` FLOAT NOT NULL,
   `timestamp` DATETIME NOT NULL,
-  PRIMARY KEY (`statistic`)
+  PRIMARY KEY (`statistic`, `timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 DROP TABLE IF EXISTS `comment`;

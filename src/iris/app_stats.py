@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
 
@@ -41,12 +42,16 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                                           FROM `twilio_retry` JOIN `message` ON `message`.`id` = `twilio_retry`.`message_id`
                                           WHERE `sent` > (CURRENT_DATE - INTERVAL 29 DAY)
                                           AND `sent` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                          AND `application_id` = %(application_id)s''',
-        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
-                                                          FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
-                                                          WHERE incident.created > NOW() - INTERVAL 1 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
-                                                          GROUP BY incident.application_id'''
+                                          AND `application_id` = %(application_id)s'''
+        
     }
+
+    high_priority_query = '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
+                                                        FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
+                                                        WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
+                                                        GROUP BY incident.application_id'''
+
+
     cursor.execute('SELECT `name` FROM `mode`')
     modes = [row[0] for row in cursor]
 
@@ -66,6 +71,25 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
             result = None
         logger.info('App Stats (%s) query %s took %s seconds', app['name'], key, round(time.time() - start, 2))
         stats[key] = result
+
+    weekly_stats = {}
+    for delta in range(0,7):
+        
+        now = datetime.now() - timedelta(weeks=delta)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        query_data = {'application_id': app['id'], 'date_variable': formatted_date}
+
+        cursor.execute(high_priority_query, query_data)
+        result = cursor.fetchone()
+        if result:
+            result = result[-1]
+        else:
+            result = 0
+        weekly_stats[formatted_date] = result
+
+    stats['high_priority_incidents_last_7_weeks'] = weekly_stats
+
+        
 
     mode_status = defaultdict(lambda: defaultdict(int))
 
@@ -150,17 +174,17 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
         'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
         'pct_incidents_claimed_last_month': '''SELECT ROUND(
                                                 (SELECT COUNT(*) FROM `incident`
-                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                WHERE `created` > (%(date_variable)s - INTERVAL 29 DAY)
+                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
                                                 AND `active` = FALSE
                                                 AND NOT isnull(`owner_id`)) /
                                                 (SELECT COUNT(*) FROM `incident`
-                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
+                                                WHERE `created` > (%(date_variable)s - INTERVAL 29 DAY)
+                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)) * 100, 2)''',
         'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
                                                                             FROM `incident`
-                                                                            WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                            AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                            WHERE `created` > (%(date_variable)s - INTERVAL 29 DAY)
+                                                                            AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
                                                                             AND `active` = FALSE
                                                                             AND NOT ISNULL(`owner_id`)
                                                                             AND NOT ISNULL(`updated`)),
@@ -168,8 +192,8 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         (SELECT CEIL(AVG(time_to_claim)) as median
                                                         FROM (SELECT `updated` - `created` as time_to_claim
                                                                 FROM `incident`
-                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
+                                                                WHERE `created` > (%(date_variable)s - INTERVAL 29 DAY)
+                                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
                                                                 AND `active` = FALSE
                                                                 AND NOT ISNULL(`owner_id`)
                                                                 AND NOT ISNULL(`updated`)
@@ -177,23 +201,30 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         WHERE (SELECT @row_id := @row_id + 1)
                                                         BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
         'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE',
-        'total_high_priority_incidents_last_week': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > NOW() - INTERVAL 1 WEEK AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
+        'total_high_priority_incidents_last_week': 'SELECT COUNT(DISTINCT incident.id) FROM incident JOIN message ON message.incident_id = incident.id WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))'
     }
 
-    stats = {}
+    stats = []
     fields = queries.keys()
     if fields_filter:
         fields &= set(fields_filter)
 
-    for key in fields:
-        start = time.time()
-        cursor.execute(queries[key])
-        result = cursor.fetchone()
-        if result:
-            result = result[-1]
-        else:
-            result = None
-        logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
-        stats[key] = result
-
+    for delta in range(0,7):
+        weekly_stats = {}
+        now = datetime.now() - timedelta(weeks=delta)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        print(formatted_date)
+        
+        for key in fields:
+            start = time.time()
+            cursor.execute(queries[key], {'date_variable': formatted_date})
+            result = cursor.fetchone()
+            if result:
+                result = result[-1]
+            else:
+                result = None
+            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
+            weekly_stats[key] = result
+        weekly_stats['timestamp'] = formatted_date
+        stats.append(weekly_stats)
     return stats

@@ -41,17 +41,30 @@ stats_reset = {
 
 
 def set_global_stats(stats, connection, cursor):
-    for stat, val in stats.items():
-        if val is not None:
-            cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
-                              VALUES (%s, %s, NOW())
-                              ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
-                           (stat, val, val))
-            connection.commit()
+    # delete outdated stats
+    cursor.execute('''DELETE FROM `global_stats`''')
+    for stats_for_week in stats:
+        print (stats_for_week)
+        for stat, val in stats_for_week.items():
+            print(stat,val)
+            if val is not None:
+                if stat == 'timestamp':
+                    continue
+                stats_date = stats_for_week.get('timestamp')
+                print(stats_date)
+                cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
+                                VALUES (%s, %s, %s)
+                                ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                            (stat, val, stats_date, val, stats_date))
+    connection.commit()
 
 
 def set_app_stats(app, stats, connection, cursor):
+
     for stat, val in stats.items():
+        # handle high priority special case afterwards
+        if stat == 'high_priority_incidents_last_7_weeks':
+            continue
         if val is not None:
             cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
                               VALUES (%s, %s, %s, NOW())
@@ -59,12 +72,21 @@ def set_app_stats(app, stats, connection, cursor):
                            (app['id'], stat, val, val))
             connection.commit()
 
+    for timestamp, val in stats.get('high_priority_incidents_last_7_weeks').items():
+        cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
+                              VALUES (%s, %s, %s, %s)
+                              ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                           (app['id'], 'high_priority_incident_weekly', val, timestamp, val, timestamp))
+
+
 
 def stats_task():
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
     cursor.execute('SELECT `id`, `name` FROM `application`')
     applications = [{'id': row[0], 'name': row[1]} for row in cursor]
+    # clean up old app stats 
+    cursor.execute('''DELETE FROM `application_stats`''')
     for app in applications:
         try:
             stats = app_stats.calculate_app_stats(app, connection, cursor)
@@ -87,12 +109,14 @@ def main():
     config = load_config()
     metrics.init(config, 'iris-application-stats', stats_reset)
     app_stats_settings = config.get('app-stats', {})
-    run_interval = int(app_stats_settings['run_interval'])
+    # run_interval = int(app_stats_settings['run_interval'])
     spawn(metrics.emit_forever)
-
     db.init(config)
     while True:
         logger.info('Starting app stats calculation loop')
         stats_task()
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
+
+if __name__ == '__main__':
+    main()
