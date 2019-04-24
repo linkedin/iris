@@ -4243,11 +4243,22 @@ class Stats(object):
             stats = app_stats.calculate_global_stats(connection, cursor, fields_filter=fields_filter)
 
         else:
-            cursor.execute('SELECT `statistic`, `value` FROM `global_stats`')
+            cursor.execute('SELECT `statistic`, `value`, `timestamp` FROM `global_stats`')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving global stats from db')
                 raise HTTPInternalServerError('Error retrieving global stats from db')
-            stats = {row[0]: row[1] for row in cursor}
+            
+            stats = {}
+            
+            for row in cursor:
+                # {statistic : {timestamp: value, timestamp: value}}
+                if stats.get(row[0]):
+                    stats[row[0]][row[2]] = row[1]
+                else:
+                    stats[row[0]] = {}
+                    stats[row[0]][row[2]] = row[1]
+
+        cursor.execute('SELECT MAX(`timestamp`) FROM `global_stats`')
 
         cursor.close()
         connection.close()
@@ -4279,18 +4290,21 @@ class ApplicationStats(object):
         if self.real_time:
             stats = app_stats.calculate_app_stats(app, connection, cursor, fields_filter=fields_filter)
         else:
-            cursor.execute('''SELECT `statistic`, `value` FROM `application_stats` WHERE `statistic` != "high_priority_incident_weekly" AND `application_id` = %s''',
+            cursor.execute('''SELECT `statistic`, `value`, `timestamp` FROM `application_stats` WHERE `application_id` = %s''',
                            app['id'])
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving app stats from db')
                 raise HTTPInternalServerError('Error retrieving app stats from db')
 
-            stats = {row[0]: row[1] for row in cursor}
-
-            cursor.execute('''SELECT `timestamp`, `value` FROM `application_stats` WHERE `statistic` = "high_priority_incident_weekly" AND `application_id` = %s''',
-                           app['id'])
-
-            stats['high_priority_incidents_last_7_weeks'] = {row[0]: row[1] for row in cursor}
+            stats = {}
+            
+            for row in cursor:
+                # {statistic : {timestamp: value, timestamp: value}}
+                if stats.get(row[0]):
+                    stats[row[0]][row[2]] = row[1]
+                else:
+                    stats[row[0]] = {}
+                    stats[row[0]][row[2]] = row[1]
 
         cursor.close()
         connection.close()
