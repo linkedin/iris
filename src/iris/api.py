@@ -4247,9 +4247,9 @@ class Stats(object):
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving global stats from db')
                 raise HTTPInternalServerError('Error retrieving global stats from db')
-            
+
             stats = {}
-            
+
             for row in cursor:
                 # {statistic : {timestamp: value, timestamp: value}}
                 if stats.get(row[0]):
@@ -4257,8 +4257,6 @@ class Stats(object):
                 else:
                     stats[row[0]] = {}
                     stats[row[0]][row[2]] = row[1]
-
-        cursor.execute('SELECT MAX(`timestamp`) FROM `global_stats`')
 
         cursor.close()
         connection.close()
@@ -4277,15 +4275,21 @@ class ApplicationStats(object):
         self.real_time = False
 
     def on_get(self, req, resp, app_name):
-        app = cache.applications.get(app_name)
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        app_query = get_applications_query + " AND `application`.`name` = %s"
+        cursor.execute(app_query, app_name)
+        app = cursor.fetchone()
         if not app:
-            raise HTTPNotFound()
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Application %s not found' % app_name)
+        cursor.close()
 
         fields_filter = req.get_param_as_list('fields')
         if fields_filter:
             fields_filter = set(fields_filter)
 
-        connection = db.engine.raw_connection()
         cursor = connection.cursor()
         if self.real_time:
             stats = app_stats.calculate_app_stats(app, connection, cursor, fields_filter=fields_filter)
@@ -4297,7 +4301,7 @@ class ApplicationStats(object):
                 raise HTTPInternalServerError('Error retrieving app stats from db')
 
             stats = {}
-            
+
             for row in cursor:
                 # {statistic : {timestamp: value, timestamp: value}}
                 if stats.get(row[0]):
