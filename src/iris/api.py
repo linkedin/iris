@@ -4246,6 +4246,8 @@ class Stats(object):
             cursor.execute('SELECT `statistic`, `value`, `timestamp` FROM `global_stats`')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving global stats from db')
+                cursor.close()
+                connection.close()
                 raise HTTPInternalServerError('Error retrieving global stats from db')
 
             stats = {}
@@ -4281,9 +4283,13 @@ class HighPriorityIncidents(object):
         if self.real_time:
             stats = app_stats.calculate_high_priority_incidents(connection, cursor)
         else:
-            cursor.execute('SELECT timestamp, name, value FROM application_stats JOIN application on application_stats.application_id = application.id WHERE statistic = "high_priority_incidents_last_week" ORDER BY value DESC')
+            cursor.execute('''SELECT timestamp, name, value FROM application_stats 
+                JOIN application on application_stats.application_id = application.id 
+                WHERE statistic = "high_priority_incidents_last_week" ORDER BY value DESC''')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving hpi stats from db')
+                cursor.close()
+                connection.close()
                 raise HTTPInternalServerError('Error retrieving stats from db')
 
             for timestamp, app_name, value in cursor:
@@ -4338,6 +4344,8 @@ class ApplicationStats(object):
                            app['id'])
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving app stats from db')
+                cursor.close()
+                connection.close()
                 raise HTTPInternalServerError('Error retrieving app stats from db')
 
             stats = {}
