@@ -91,11 +91,10 @@ def stats_task():
 def main():
     config = load_config()
     metrics.init(config, 'iris-application-stats', stats_reset)
-    # app_stats_settings = config.get('app-stats', {})
-    # run_interval = int(app_stats_settings['run_interval'])
+    app_stats_settings = config.get('app-stats', {})
+    run_interval = int(app_stats_settings['run_interval'])
     spawn(metrics.emit_forever)
     db.init(config)
-    run_interval = 300
     while True:
         logger.info('Starting app stats calculation loop')
         stats_task()

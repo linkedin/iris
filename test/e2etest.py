@@ -2159,8 +2159,7 @@ def test_healthcheck():
 
 def test_stats():
     re = requests.get(base_url + 'stats')
-    # there are no stats so server returns error
-    assert re.status_code == 500
+    assert re.status_code == 200
 
 
 def test_app_stats(sample_application_name):
@@ -2168,8 +2167,7 @@ def test_app_stats(sample_application_name):
     assert re.status_code == 400
 
     re = requests.get(base_url + 'applications/%s/stats' % sample_application_name)
-    # there are no stats so server returns error
-    assert re.status_code == 500
+    assert re.status_code == 200
 
 
 def test_post_invalid_notification(sample_user, sample_application_name):

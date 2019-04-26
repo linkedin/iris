@@ -2820,7 +2820,6 @@ iris = {
       }
     },
     init: function() {
-      $('#stats-header').text("High priority incidents per week");
       iris.changeTitle('HPI Stats');
       iris.tables.filterTable.call(this);
     },

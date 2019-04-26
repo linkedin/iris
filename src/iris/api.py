@@ -4287,11 +4287,13 @@ class HighPriorityIncidents(object):
                 raise HTTPInternalServerError('Error retrieving stats from db')
 
             for timestamp, app_name, value in cursor:
+                # {timestamp: [{app_name: value}, {app_name: value}], timestamp: [{app_name: value}, {app_name: value}]}
                 if stats.get(timestamp):
+                    # 0 value not filtered at sql query because we still want all timestamp rows in front end even if they are empty
                     if value > 0:
                         stats[timestamp].append({app_name: value})
                 else:
-                    # use list so we can store order by incident count
+                    # use list so we can store ordered by incident count
                     stats[timestamp] = []
                     if value > 0:
                         stats[timestamp].append({app_name: value})

@@ -200,7 +200,8 @@ def calculate_high_priority_incidents(connection, cursor):
         row_count = cursor.execute(high_priority_query, {'date_variable': formatted_date})
         if row_count > 0:
             for app_name, count in cursor:
-                stats[formatted_date].append({app_name:count})
+                # {timestamp: [{app_name: value}], timestamp: [{app_name: value}]}
+                stats[formatted_date].append({app_name: count})
 
     return stats
 
@@ -216,17 +217,17 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
         'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
         'pct_incidents_claimed_last_week': '''SELECT ROUND(
                                                 (SELECT COUNT(*) FROM `incident`
-                                                WHERE `created` > (%(date_variable)s - INTERVAL 8 DAY)
-                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
+                                                WHERE `created` > (%(date_variable)s - INTERVAL 1 WEEK)
+                                                AND `created` < (%(date_variable)s)
                                                 AND `active` = FALSE
                                                 AND NOT isnull(`owner_id`)) /
                                                 (SELECT COUNT(*) FROM `incident`
-                                                WHERE `created` > (%(date_variable)s - INTERVAL 8 DAY)
-                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)) * 100, 2)''',
+                                                WHERE `created` > (%(date_variable)s - INTERVAL 1 WEEK)
+                                                AND `created` < (%(date_variable)s)) * 100, 2)''',
         'median_seconds_to_claim_last_week': '''SELECT @incident_count := (SELECT count(*)
                                                                             FROM `incident`
-                                                                            WHERE `created` > (%(date_variable)s - INTERVAL 8 DAY)
-                                                                            AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
+                                                                            WHERE `created` > (%(date_variable)s - INTERVAL 1 WEEK)
+                                                                            AND `created` < (%(date_variable)s)
                                                                             AND `active` = FALSE
                                                                             AND NOT ISNULL(`owner_id`)
                                                                             AND NOT ISNULL(`updated`)),
@@ -234,8 +235,8 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                                                         (SELECT CEIL(AVG(time_to_claim)) as median
                                                         FROM (SELECT `updated` - `created` as time_to_claim
                                                                 FROM `incident`
-                                                                WHERE `created` > (%(date_variable)s - INTERVAL 8 DAY)
-                                                                AND `created` < (%(date_variable)s - INTERVAL 1 DAY)
+                                                                WHERE `created` > (%(date_variable)s - INTERVAL 1 WEEK)
+                                                                AND `created` < (%(date_variable)s)
                                                                 AND `active` = FALSE
                                                                 AND NOT ISNULL(`owner_id`)
                                                                 AND NOT ISNULL(`updated`)
