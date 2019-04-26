@@ -4283,8 +4283,8 @@ class HighPriorityIncidents(object):
         if self.real_time:
             stats = app_stats.calculate_high_priority_incidents(connection, cursor)
         else:
-            cursor.execute('''SELECT timestamp, name, value FROM application_stats 
-                JOIN application on application_stats.application_id = application.id 
+            cursor.execute('''SELECT timestamp, name, value FROM application_stats
+                JOIN application on application_stats.application_id = application.id
                 WHERE statistic = "high_priority_incidents_last_week" ORDER BY value DESC''')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving hpi stats from db')
