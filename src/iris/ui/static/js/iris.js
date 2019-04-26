@@ -2772,7 +2772,7 @@ iris = {
   stat: {
     data: {
       url: '/v0/applications/',
-      $page: $('.main'),
+      $page: $('.stats'),
       $table: $('#stats-table'),
       application: null,
       tableTemplate: $('#stats-table-template').html(),
@@ -2791,7 +2791,7 @@ iris = {
           application = decodeURIComponent(location[location.length - 1]); 
 
       iris.changeTitle('App Stats');
-      $('#app-stats-header').text("App Stats: " + application);
+      $('#stats-header').text("App Stats: " + application);
       this.data.application = application;
       iris.tables.filterTable.call(this);
     },
@@ -2803,6 +2803,34 @@ iris = {
       });
     }
   }, // End iris.appStats
+  hpistats: {
+    data: {
+      url: '/v0/highpriorityincidentstats',
+      $page: $('.stats'),
+      $table: $('#stats-table'),
+      tableTemplate: $('#stats-table-template').html(),
+      DataTable: null,
+      dataTableOpts: {
+        orderClasses: false,
+        order: [[0, 'asc']],
+        columns: [
+          null,
+          null
+        ]
+      }
+    },
+    init: function() {
+      $('#stats-header').text("High priority incidents per week");
+      iris.changeTitle('HPI Stats');
+      iris.tables.filterTable.call(this);
+    },
+    events: function() {},
+    getData: function(params) {
+      return $.getJSON(this.data.url).fail(function(){
+        iris.createAlert('No stats found');
+      });
+    }
+  }, // End iris.hpistats
   tables: {
     filterTable: function(e){
       if (e) {

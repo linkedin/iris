@@ -49,7 +49,7 @@ def set_global_stats(stats, connection, cursor):
             cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
                             VALUES (%s, %s, %s)
                             ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
-                        (stat, val, timestamp, val, timestamp))
+                           (stat, val, timestamp, val, timestamp))
     connection.commit()
 
 
@@ -59,15 +59,16 @@ def set_app_stats(app, stats, connection, cursor):
             cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
                             VALUES (%s, %s, %s, %s)
                             ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
-                        (app['id'], stat, val, timestamp, val, timestamp))
+                           (app['id'], stat, val, timestamp, val, timestamp))
     connection.commit()
+
 
 def stats_task():
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
     cursor.execute('SELECT `id`, `name` FROM `application`')
     applications = [{'id': row[0], 'name': row[1]} for row in cursor]
-    # clean up old app stats 
+    # clean up old app stats
     cursor.execute('''DELETE FROM `application_stats`''')
     for app in applications:
         try:
@@ -90,7 +91,7 @@ def stats_task():
 def main():
     config = load_config()
     metrics.init(config, 'iris-application-stats', stats_reset)
-    app_stats_settings = config.get('app-stats', {})
+    # app_stats_settings = config.get('app-stats', {})
     # run_interval = int(app_stats_settings['run_interval'])
     spawn(metrics.emit_forever)
     db.init(config)
@@ -100,6 +101,7 @@ def main():
         stats_task()
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
+
 
 if __name__ == '__main__':
     main()

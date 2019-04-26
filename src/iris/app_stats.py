@@ -44,18 +44,12 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                                           AND `sent` < %(date_variable)s
                                           AND `application_id` = %(application_id)s''',
 
-        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
-                                                        FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
+        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) as incident_count
+                                                        FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id AND application.id = incident.application_id
                                                         WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
-                                                        GROUP BY incident.application_id'''
-        
+                                                        GROUP BY incident.application_id ORDER BY incident_count DESC'''
+
     }
-
-    high_priority_query = '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id)
-                                                        FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id
-                                                        WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
-                                                        GROUP BY incident.application_id'''
-
 
     cursor.execute('SELECT `name` FROM `mode`')
     modes = [row[0] for row in cursor]
@@ -64,7 +58,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
     if fields_filter:
         fields &= set(fields_filter)
 
-    for delta in range(0,7):
+    for delta in range(0, 7):
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
         query_data = {'application_id': app['id'], 'date_variable': formatted_date}
@@ -77,7 +71,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                 result = result[-1]
             if result is None:
                 result = -1
-            
+
             logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
 
             # {statistic : {timestamp: value, timestamp: value}}
@@ -86,8 +80,6 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
             else:
                 stats[key] = {}
                 stats[key][formatted_date] = result
-        
-
 
     mode_status = defaultdict(lambda: defaultdict(int))
 
@@ -106,9 +98,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
         }
     }
 
-    
-
-    for delta in range(0,7):
+    for delta in range(0, 7):
         start = time.time()
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
@@ -167,7 +157,7 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                             AND `application_id` = %(application_id)s
                             GROUP BY `mode_id`) `counts`
                         JOIN `mode` ON `mode`.`id` = `counts`.`mode_id`''',
-                    query_data)
+                       query_data)
 
         for row in cursor:
             key = 'total_%s_sent_last_week' % row[0]
@@ -178,7 +168,6 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
             else:
                 stats[key] = {}
                 stats[key][formatted_date] = result
-
 
         # Zero out modes that don't show up in the count
         for mode in modes:
@@ -193,6 +182,25 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
         for timestamp, value in nested_dict.items():
             if value is None:
                 stats[stat][timestamp] = -1
+
+    return stats
+
+
+def calculate_high_priority_incidents(connection, cursor):
+
+    high_priority_query = '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) AS incident_count FROM incident JOIN application ON application.id = incident.application_id JOIN message ON message.incident_id = incident.id WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN ( SELECT id FROM priority WHERE name IN ('high', 'urgent') ) GROUP BY incident.application_id ORDER BY incident_count DESC'''
+
+    stats = {}
+
+    for delta in range(0, 7):
+        now = datetime.utcnow() - timedelta(weeks=delta)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        stats[formatted_date] = []
+
+        row_count = cursor.execute(high_priority_query, {'date_variable': formatted_date})
+        if row_count > 0:
+            for app_name, count in cursor:
+                stats[formatted_date].append({app_name:count})
 
     return stats
 
@@ -243,7 +251,7 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
     if fields_filter:
         fields &= set(fields_filter)
 
-    for delta in range(0,7):
+    for delta in range(0, 7):
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -255,7 +263,7 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
                 result = result[-1]
             if result is None:
                 result = -1
-            
+
             logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
 
             # {statistic : {timestamp: value, timestamp: value}}

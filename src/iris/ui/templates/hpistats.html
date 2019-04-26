@@ -16,6 +16,7 @@
           <tr>
              <th><h3>{{@key}}</h3></th>
              <td>
+             {{#each .}}
              <tbody>
               {{#each .}}
                     <tr>
@@ -25,6 +26,7 @@
               {{/each}}
              </td>
              </tbody>
+             {{/each}}
           </tr>
     {{/each}}
   </tbody>
