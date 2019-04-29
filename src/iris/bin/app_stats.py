@@ -6,6 +6,7 @@ monkey.patch_all()  # NOQA
 
 import logging
 import os
+from datetime import datetime
 
 from iris import db, metrics, app_stats
 from iris.api import load_config
@@ -44,22 +45,30 @@ def set_global_stats(stats, connection, cursor):
     # delete outdated stats
     cursor.execute('''DELETE FROM `global_stats`''')
 
-    for stat in stats.keys():
-        for timestamp, val in stats[stat].items():
-            cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
-                            VALUES (%s, %s, %s)
-                            ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
-                           (stat, val, timestamp, val, timestamp))
+    # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+    for stat, entry_list in stats.items():
+        for stat_entry in entry_list:
+            for timestamp, val in stat_entry.items():
+                # format timestamp into datetime to store in mysql
+                timestamp = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
+                                VALUES (%s, %s, %s)
+                                ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                               (stat, val, timestamp, val, timestamp))
     connection.commit()
 
 
 def set_app_stats(app, stats, connection, cursor):
-    for stat in stats.keys():
-        for timestamp, val in stats[stat].items():
-            cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
-                            VALUES (%s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
-                           (app['id'], stat, val, timestamp, val, timestamp))
+    # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+    for stat, entry_list in stats.items():
+        for stat_entry in entry_list:
+            for timestamp, val in stat_entry.items():
+                # format timestamp into datetime to store in mysql
+                timestamp = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
+                                VALUES (%s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                               (app['id'], stat, val, timestamp, val, timestamp))
     connection.commit()
 
 

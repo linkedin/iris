@@ -4243,7 +4243,7 @@ class Stats(object):
             stats = app_stats.calculate_global_stats(connection, cursor, fields_filter=fields_filter)
 
         else:
-            cursor.execute('SELECT `statistic`, `value`, `timestamp` FROM `global_stats`')
+            cursor.execute('SELECT `statistic`, `value`, UNIX_TIMESTAMP(`timestamp`) FROM `global_stats` ORDER BY `timestamp` DESC')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving global stats from db')
                 cursor.close()
@@ -4253,12 +4253,12 @@ class Stats(object):
             stats = {}
 
             for row in cursor:
-                # {statistic : {timestamp: value, timestamp: value}}
+                # format: {statistic : [{timestamp: value}, {timestamp: value}]}
                 if stats.get(row[0]):
-                    stats[row[0]][row[2]] = row[1]
+                    stats[row[0]].append({row[2]: row[1]})
                 else:
-                    stats[row[0]] = {}
-                    stats[row[0]][row[2]] = row[1]
+                    stats[row[0]] = []
+                    stats[row[0]].append({row[2]: row[1]})
 
         cursor.close()
         connection.close()
@@ -4283,9 +4283,9 @@ class HighPriorityIncidents(object):
         if self.real_time:
             stats = app_stats.calculate_high_priority_incidents(connection, cursor)
         else:
-            cursor.execute('''SELECT timestamp, name, value FROM application_stats
+            cursor.execute('''SELECT UNIX_TIMESTAMP(timestamp), name, value FROM application_stats
                 JOIN application on application_stats.application_id = application.id
-                WHERE statistic = "high_priority_incidents_last_week" ORDER BY value DESC''')
+                WHERE statistic = "high_priority_incidents_last_week" ORDER BY timestamp DESC, value DESC''')
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving hpi stats from db')
                 cursor.close()
@@ -4293,22 +4293,26 @@ class HighPriorityIncidents(object):
                 raise HTTPInternalServerError('Error retrieving stats from db')
 
             for timestamp, app_name, value in cursor:
-                # {timestamp: [{app_name: value}, {app_name: value}], timestamp: [{app_name: value}, {app_name: value}]}
-                if stats.get(timestamp):
+                # stats format {timestamp: [{app_name: value}, {app_name: value}], timestamp: [{app_name: value}, {app_name: value}]}
+                if timestamp in stats:
                     # 0 value not filtered at sql query because we still want all timestamp rows in front end even if they are empty
-                    if value > 0:
+                    if value:
                         stats[timestamp].append({app_name: value})
                 else:
                     # use list so we can store ordered by incident count
                     stats[timestamp] = []
-                    if value > 0:
+                    if value:
                         stats[timestamp].append({app_name: value})
 
         cursor.close()
         connection.close()
 
+        time_sorted_stats = []
+        for key, value in stats.items():
+            time_sorted_stats.append({key: value})
+
         resp.status = HTTP_200
-        resp.body = ujson.dumps(stats, sort_keys=True)
+        resp.body = ujson.dumps(time_sorted_stats, sort_keys=True)
 
 
 class ApplicationStats(object):
@@ -4340,7 +4344,7 @@ class ApplicationStats(object):
         if self.real_time:
             stats = app_stats.calculate_app_stats(app, connection, cursor, fields_filter=fields_filter)
         else:
-            cursor.execute('''SELECT `statistic`, `value`, `timestamp` FROM `application_stats` WHERE `application_id` = %s''',
+            cursor.execute('''SELECT `statistic`, `value`, UNIX_TIMESTAMP(`timestamp`) FROM `application_stats` WHERE `application_id` = %s ORDER BY `timestamp` DESC''',
                            app['id'])
             if cursor.rowcount == 0:
                 logger.exception('Error retrieving app stats from db')
@@ -4351,12 +4355,12 @@ class ApplicationStats(object):
             stats = {}
 
             for row in cursor:
-                # {statistic : {timestamp: value, timestamp: value}}
+                # format: {statistic : [{timestamp: value}, {timestamp: value}]}
                 if stats.get(row[0]):
-                    stats[row[0]][row[2]] = row[1]
+                    stats[row[0]].append({row[2]: row[1]})
                 else:
-                    stats[row[0]] = {}
-                    stats[row[0]][row[2]] = row[1]
+                    stats[row[0]] = []
+                    stats[row[0]].append({row[2]: row[1]})
 
         cursor.close()
         connection.close()

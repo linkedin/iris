@@ -12,9 +12,10 @@
 {% raw %}
 <script id="stats-table-template" type="text/x-handlebars-template">
   <tbody>
+  {{#each .}}
     {{#each .}}
           <tr>
-             <th><h3>{{@key}}</h3></th>
+             <th><h3>{{unixToDate @key}}</h3></th>
              <td>
              {{#each .}}
              <tbody>
@@ -28,6 +29,7 @@
              </tbody>
              {{/each}}
           </tr>
+    {{/each}}
     {{/each}}
   </tbody>
 </script>

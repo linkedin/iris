@@ -761,7 +761,7 @@ DROP TABLE IF EXISTS `application_stats`;
 CREATE TABLE `application_stats` (
   `application_id` INT(11) NOT NULL,
   `statistic` VARCHAR(255) NOT NULL,
-  `value` FLOAT NOT NULL,
+  `value` FLOAT,
   `timestamp` DATETIME NOT NULL,
   PRIMARY KEY (`application_id`, `statistic`, `timestamp`),
   CONSTRAINT `application_stats_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
@@ -771,7 +771,7 @@ CREATE TABLE `application_stats` (
 DROP TABLE IF EXISTS `global_stats`;
 CREATE TABLE `global_stats` (
   `statistic` VARCHAR(255) NOT NULL,
-  `value` FLOAT NOT NULL,
+  `value` FLOAT,
   `timestamp` DATETIME NOT NULL,
   PRIMARY KEY (`statistic`, `timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

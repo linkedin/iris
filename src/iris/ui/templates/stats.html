@@ -18,10 +18,12 @@
              <td>
              <tbody>
               {{#each .}}
+              {{#each .}}
                     <tr>
-                      <th>{{@key}}</th>
+                      <th>{{unixToDate @key}}</th>
                       <td class="stat-value">{{this}}</td>
                     </tr>
+              {{/each}}
               {{/each}}
              </td>
              </tbody>

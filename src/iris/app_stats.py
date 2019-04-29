@@ -51,36 +51,6 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
 
     }
 
-    cursor.execute('SELECT `name` FROM `mode`')
-    modes = [row[0] for row in cursor]
-    stats = {}
-    fields = queries.keys()
-    if fields_filter:
-        fields &= set(fields_filter)
-
-    for delta in range(0, 7):
-        now = datetime.utcnow() - timedelta(weeks=delta)
-        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-        query_data = {'application_id': app['id'], 'date_variable': formatted_date}
-
-        for key in fields:
-            start = time.time()
-            cursor.execute(queries[key], query_data)
-            result = cursor.fetchone()
-            if result:
-                result = result[-1]
-            if result is None:
-                result = -1
-
-            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
-
-            # {statistic : {timestamp: value, timestamp: value}}
-            if stats.get(key):
-                stats[key][formatted_date] = result
-            else:
-                stats[key] = {}
-                stats[key][formatted_date] = result
-
     mode_status = defaultdict(lambda: defaultdict(int))
 
     mode_stats_types = {
@@ -98,10 +68,39 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
         }
     }
 
+    cursor.execute('SELECT `name` FROM `mode`')
+    modes = [row[0] for row in cursor]
+    stats = {}
+    fields = queries.keys()
+    if fields_filter:
+        fields &= set(fields_filter)
+
     for delta in range(0, 7):
-        start = time.time()
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        # 604800 seconds in a week, shift date by delta number of weeks
+        unix_date = int(time.time()) - (delta * 604800)
+        query_data = {'application_id': app['id'], 'date_variable': formatted_date}
+
+        for key in fields:
+            start = time.time()
+            cursor.execute(queries[key], query_data)
+            result = cursor.fetchone()
+            if result:
+                result = result[-1]
+
+            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
+
+            # {statistic : {timestamp: value, timestamp: value}}
+            if stats.get(key):
+                stats[key].append({unix_date: result})
+            else:
+                stats[key] = []
+                stats[key].append({unix_date: result})
+
+        start = time.time()
+        # 604800 seconds in a week, shift date by delta number of weeks
+        unix_date = int(time.time()) - (delta * 604800)
         query_data = {'application_id': app['id'], 'date_variable': formatted_date}
 
         cursor.execute('''SELECT `mode`.`name`, COALESCE(`generic_message_sent_status`.`status`, `twilio_delivery_status`.`status`) AS thisStatus,
@@ -136,17 +135,17 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
 
             key = 'pct_%s_success_last_week' % mode
             if stats.get(key):
-                stats['pct_%s_success_last_week' % mode][formatted_date] = success_pct
-                stats['pct_%s_fail_last_week' % mode][formatted_date] = fail_pct
-                stats['pct_%s_other_last_week' % mode][formatted_date] = other_pct
+                stats['pct_%s_success_last_week' % mode].append({unix_date: success_pct})
+                stats['pct_%s_fail_last_week' % mode].append({unix_date: fail_pct})
+                stats['pct_%s_other_last_week' % mode].append({unix_date: other_pct})
             else:
-                stats['pct_%s_success_last_week' % mode] = {}
-                stats['pct_%s_fail_last_week' % mode] = {}
-                stats['pct_%s_other_last_week' % mode] = {}
+                stats['pct_%s_success_last_week' % mode] = []
+                stats['pct_%s_fail_last_week' % mode] = []
+                stats['pct_%s_other_last_week' % mode] = []
 
-                stats['pct_%s_success_last_week' % mode][formatted_date] = success_pct
-                stats['pct_%s_fail_last_week' % mode][formatted_date] = fail_pct
-                stats['pct_%s_other_last_week' % mode][formatted_date] = other_pct
+                stats['pct_%s_success_last_week' % mode].append({unix_date: success_pct})
+                stats['pct_%s_fail_last_week' % mode].append({unix_date: fail_pct})
+                stats['pct_%s_other_last_week' % mode].append({unix_date: other_pct})
 
         # Get counts of messages sent per mode
         cursor.execute('''SELECT `mode`.`name`, `msg_count` FROM
@@ -164,44 +163,45 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
             result = row[1]
 
             if stats.get(key):
-                stats[key][formatted_date] = result
+                stats[key].appennd({unix_date: result})
             else:
-                stats[key] = {}
-                stats[key][formatted_date] = result
+                stats[key] = []
+                stats[key].appennd({unix_date: result})
 
         # Zero out modes that don't show up in the count
         for mode in modes:
             count_stat = 'total_%s_sent_last_week' % mode
             if count_stat not in stats:
-                stats[count_stat] = {}
-                stats[count_stat][formatted_date] = 0
-            elif formatted_date not in stats[count_stat]:
-                stats[count_stat][formatted_date] = 0
-
-    for stat, nested_dict in stats.items():
-        for timestamp, value in nested_dict.items():
-            if value is None:
-                stats[stat][timestamp] = -1
+                stats[count_stat] = []
+                stats[count_stat].append({unix_date: 0})
+            elif unix_date not in stats[count_stat]:
+                stats[count_stat].append({unix_date: 0})
 
     return stats
 
 
 def calculate_high_priority_incidents(connection, cursor):
 
-    high_priority_query = '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) AS incident_count FROM incident JOIN application ON application.id = incident.application_id JOIN message ON message.incident_id = incident.id WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN ( SELECT id FROM priority WHERE name IN ('high', 'urgent') ) GROUP BY incident.application_id ORDER BY incident_count DESC'''
+    high_priority_query = '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) AS incident_count
+        FROM incident JOIN application ON application.id = incident.application_id
+        JOIN message ON message.incident_id = incident.id WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK
+        AND incident.created < %(date_variable)s
+        AND priority_id IN ( SELECT id FROM priority WHERE name IN ('high', 'urgent') )
+        GROUP BY incident.application_id ORDER BY incident_count DESC'''
 
     stats = {}
 
     for delta in range(0, 7):
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
-        stats[formatted_date] = []
+        # 604800 seconds in a week, shift date by delta number of weeks
+        unix_date = int(time.time()) - (delta * 604800)
+        stats[unix_date] = []
 
         row_count = cursor.execute(high_priority_query, {'date_variable': formatted_date})
         if row_count > 0:
             for app_name, count in cursor:
-                # {timestamp: [{app_name: value}], timestamp: [{app_name: value}]}
-                stats[formatted_date].append({app_name: count})
+                stats[unix_date].append({app_name: count})
 
     return stats
 
@@ -253,8 +253,11 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
         fields &= set(fields_filter)
 
     for delta in range(0, 7):
+
         now = datetime.utcnow() - timedelta(weeks=delta)
         formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        # 604800 seconds in a week, shift date by delta number of weeks
+        unix_date = int(time.time()) - (delta * 604800)
 
         for key in fields:
             start = time.time()
@@ -262,16 +265,14 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
             result = cursor.fetchone()
             if result:
                 result = result[-1]
-            if result is None:
-                result = -1
 
             logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
 
-            # {statistic : {timestamp: value, timestamp: value}}
-            if stats.get(key):
-                stats[key][formatted_date] = result
+            # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+            if key in stats:
+                stats[key].append({unix_date: result})
             else:
-                stats[key] = {}
-                stats[key][formatted_date] = result
+                stats[key] = []
+                stats[key].append({unix_date: result})
 
     return stats
