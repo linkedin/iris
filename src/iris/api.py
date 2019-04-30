@@ -4254,7 +4254,7 @@ class Stats(object):
 
             for row in cursor:
                 # format: {statistic : [{timestamp: value}, {timestamp: value}]}
-                if stats.get(row[0]):
+                if row[0] in stats:
                     stats[row[0]].append({row[2]: row[1]})
                 else:
                     stats[row[0]] = []
@@ -4361,7 +4361,7 @@ class ApplicationStats(object):
 
             for row in cursor:
                 # format: {statistic : [{timestamp: value}, {timestamp: value}]}
-                if stats.get(row[0]):
+                if row[0] in stats:
                     stats[row[0]].append({row[2]: row[1]})
                 else:
                     stats[row[0]] = []

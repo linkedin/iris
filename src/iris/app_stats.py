@@ -99,9 +99,6 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                 stats[key].append({unix_date: result})
 
         start = time.time()
-        # 604800 seconds in a week, shift date by delta number of weeks
-        unix_date = int(time.time()) - (delta * 604800)
-        query_data = {'application_id': app['id'], 'date_variable': formatted_date}
 
         cursor.execute('''SELECT `mode`.`name`, COALESCE(`generic_message_sent_status`.`status`, `twilio_delivery_status`.`status`) AS thisStatus,
                             COUNT(*) FROM `message` USE INDEX FOR JOIN (ix_message_created)
