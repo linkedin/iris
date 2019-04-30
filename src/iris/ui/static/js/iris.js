@@ -2803,13 +2803,15 @@ iris = {
       });
     }
   }, // End iris.appStats
-  hpistats: {
+  singlestats:{},
+  singlestat: {
     data: {
-      url: '/v0/highpriorityincidentstats',
+      url: '/v0/singlestats/',
       $page: $('.stats'),
       $table: $('#stats-table'),
       tableTemplate: $('#stats-table-template').html(),
       DataTable: null,
+      statName: null,
       dataTableOpts: {
         orderClasses: false,
         order: [[0, 'asc']],
@@ -2820,12 +2822,17 @@ iris = {
       }
     },
     init: function() {
-      iris.changeTitle('HPI Stats');
+      var location = window.location.pathname.split('/'),
+          statName = decodeURIComponent(location[location.length - 1]);
+      this.data.statName = statName;
+
+      $('#stats-header').text("Stats: " + statName);
       iris.tables.filterTable.call(this);
     },
     events: function() {},
     getData: function(params) {
-      return $.getJSON(this.data.url).fail(function(){
+      dataUrl = this.data.url + this.data.statName;
+      return $.getJSON(dataUrl).fail(function(){
         iris.createAlert('No stats found');
       });
     }
