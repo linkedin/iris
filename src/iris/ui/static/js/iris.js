@@ -3211,8 +3211,11 @@ iris = {
         var month = months[a.getMonth()];
         var date = a.getDate();
         var hour = a.getHours();
+        if(hour == '0'){hour = '00'}
         var min = a.getMinutes();
+        if(min == '0'){min = '00'}
         var sec = a.getSeconds();
+        if(sec == '0'){sec = '00'}
         var time = date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec ;
         return time;
       } else {

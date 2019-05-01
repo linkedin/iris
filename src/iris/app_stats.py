@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 import logging
 
@@ -76,10 +76,11 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
         fields &= set(fields_filter)
 
     for delta in range(0, 7):
-        now = datetime.utcnow() - timedelta(weeks=delta)
-        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        # 3600 seconds in an hour, round down to the nearest hour
         # 604800 seconds in a week, shift date by delta number of weeks
-        unix_date = int(time.time()) - (delta * 604800)
+        unix_date = int(time.time() // 3600 * 3600) - (delta * 604800)
+        now = datetime.fromtimestamp(unix_date)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
         query_data = {'application_id': app['id'], 'date_variable': formatted_date}
 
         for key in fields:
@@ -207,10 +208,11 @@ def calculate_single_stat(connection, cursor, stat_name):
     stats = {}
 
     for delta in range(0, 7):
-        now = datetime.utcnow() - timedelta(weeks=delta)
-        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        # 3600 seconds in an hour, round down to the nearest hour
         # 604800 seconds in a week, shift date by delta number of weeks
-        unix_date = int(time.time()) - (delta * 604800)
+        unix_date = int(time.time() // 3600 * 3600) - (delta * 604800)
+        now = datetime.fromtimestamp(unix_date)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
         stats[unix_date] = []
 
         row_count = cursor.execute(queries[stat_name], {'date_variable': formatted_date})
@@ -269,10 +271,11 @@ def calculate_global_stats(connection, cursor, fields_filter=None):
 
     for delta in range(0, 7):
 
-        now = datetime.utcnow() - timedelta(weeks=delta)
-        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
+        # 3600 seconds in an hour, round down to the nearest hour
         # 604800 seconds in a week, shift date by delta number of weeks
-        unix_date = int(time.time()) - (delta * 604800)
+        unix_date = int(time.time() // 3600 * 3600) - (delta * 604800)
+        now = datetime.fromtimestamp(unix_date)
+        formatted_date = now.strftime('%Y-%m-%d %H:%M:%S')
 
         for key in fields:
             start = time.time()
