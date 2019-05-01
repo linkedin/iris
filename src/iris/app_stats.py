@@ -160,10 +160,10 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
             result = row[1]
 
             if stats.get(key):
-                stats[key].appennd({unix_date: result})
+                stats[key].append({unix_date: result})
             else:
                 stats[key] = []
-                stats[key].appennd({unix_date: result})
+                stats[key].append({unix_date: result})
 
         # Zero out modes that don't show up in the count
         for mode in modes:

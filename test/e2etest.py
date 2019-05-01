@@ -10,6 +10,8 @@ import json
 import requests
 import copy
 import iris.bin.iris_ctl as iris_ctl
+import iris.bin.app_stats as app_stats
+
 from click.testing import CliRunner
 import uuid
 import socket
@@ -2161,13 +2163,30 @@ def test_stats():
     re = requests.get(base_url + 'stats')
     assert re.status_code == 200
 
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        # run stats script
+        app_stats.stats_task(conn, cursor)
+        # check that gobal stats were initiated
+        cursor.execute('SELECT DISTINCT statistic FROM global_stats')
+        # there should be 10 unique statistics calculated
+        assert cursor.rowcount == 10
+
 
 def test_app_stats(sample_application_name):
+
     re = requests.get(base_url + 'applications/sfsdf232423fakeappname/stats')
     assert re.status_code == 400
 
     re = requests.get(base_url + 'applications/%s/stats' % sample_application_name)
     assert re.status_code == 200
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        # run stats script
+        app_stats.stats_task(conn, cursor)
+        # check that app stats were initialized
+        cursor.execute('SELECT DISTINCT statistic FROM application_stats')
+        # there should be 22 unique statistics calculated
+        assert cursor.rowcount == 22
 
 
 def test_post_invalid_notification(sample_user, sample_application_name):

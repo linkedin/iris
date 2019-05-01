@@ -72,9 +72,8 @@ def set_app_stats(app, stats, connection, cursor):
     connection.commit()
 
 
-def stats_task():
-    connection = db.engine.raw_connection()
-    cursor = connection.cursor()
+def stats_task(connection, cursor):
+
     cursor.execute('SELECT `id`, `name` FROM `application`')
     applications = [{'id': row[0], 'name': row[1]} for row in cursor]
     # clean up old app stats
@@ -93,9 +92,6 @@ def stats_task():
         logger.exception('Global stats calculation failed')
         metrics.incr('task_failure')
 
-    cursor.close()
-    connection.close()
-
 
 def main():
     config = load_config()
@@ -106,7 +102,11 @@ def main():
     db.init(config)
     while True:
         logger.info('Starting app stats calculation loop')
-        stats_task()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        stats_task(connection, cursor)
+        cursor.close()
+        connection.close()
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
 
