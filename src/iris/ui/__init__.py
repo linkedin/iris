@@ -152,12 +152,30 @@ class Index(object):
 
 
 class Stats(object):
-    allow_read_no_auth = False
+    allow_read_no_auth = True
     frontend_route = True
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class AppStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class SingleStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, stat_name):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('singlestat.html').render(request=req)
 
 
 class Plans(object):
@@ -434,6 +452,8 @@ def init(config, app):
     app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
     app.add_route('/', Index())
     app.add_route('/stats', Stats())
+    app.add_route('/stats/{application}', AppStats())
+    app.add_route('/singlestats/{stat_name}', SingleStats())
     app.add_route('/plans/', Plans())
     app.add_route('/plans/{plan}', Plan())
     app.add_route('/incidents/', Incidents())

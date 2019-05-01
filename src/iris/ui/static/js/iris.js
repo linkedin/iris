@@ -2769,6 +2769,74 @@ iris = {
       });
     }
   }, // End iris.stats
+  stat: {
+    data: {
+      url: '/v0/applications/',
+      $page: $('.stats'),
+      $table: $('#stats-table'),
+      application: null,
+      tableTemplate: $('#stats-table-template').html(),
+      DataTable: null,
+      dataTableOpts: {
+        orderClasses: false,
+        order: [[0, 'asc']],
+        columns: [
+          null,
+          null
+        ]
+      }
+    },
+    init: function() {
+      var location = window.location.pathname.split('/'),
+          application = decodeURIComponent(location[location.length - 1]); 
+
+      iris.changeTitle('App Stats');
+      $('#stats-header').text("App Stats: " + application);
+      this.data.application = application;
+      iris.tables.filterTable.call(this);
+    },
+    events: function() {},
+    getData: function(params) {
+      apiUrl = this.data.url + this.data.application + "/stats";
+      return $.getJSON(apiUrl).fail(function(){
+        iris.createAlert('No stats found');
+      });
+    }
+  }, // End iris.appStats
+  singlestats:{},
+  singlestat: {
+    data: {
+      url: '/v0/singlestats/',
+      $page: $('.stats'),
+      $table: $('#stats-table'),
+      tableTemplate: $('#stats-table-template').html(),
+      DataTable: null,
+      statName: null,
+      dataTableOpts: {
+        orderClasses: false,
+        order: [[0, 'asc']],
+        columns: [
+          null,
+          null
+        ]
+      }
+    },
+    init: function() {
+      var location = window.location.pathname.split('/'),
+          statName = decodeURIComponent(location[location.length - 1]);
+      this.data.statName = statName;
+
+      $('#stats-header').text("Stats: " + statName);
+      iris.tables.filterTable.call(this);
+    },
+    events: function() {},
+    getData: function(params) {
+      dataUrl = this.data.url + this.data.statName;
+      return $.getJSON(dataUrl).fail(function(){
+        iris.createAlert('No stats found');
+      });
+    }
+  }, // End iris.hpistats
   tables: {
     filterTable: function(e){
       if (e) {
@@ -3133,6 +3201,22 @@ iris = {
         return string.slice(start, end);
       } else {
         return string
+      }
+    });
+    Handlebars.registerHelper('unixToDate', function(val){
+      if (val) {
+        var a = new Date(val * 1000);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var year = a.getFullYear();
+        var month = months[a.getMonth()];
+        var date = a.getDate();
+        var hour = a.getHours();
+        var min = a.getMinutes();
+        var sec = a.getSeconds();
+        var time = date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec ;
+        return time;
+      } else {
+        return "N/A";
       }
     });
     Handlebars.registerHelper('range', function(n, block) {
