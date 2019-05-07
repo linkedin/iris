@@ -1448,10 +1448,10 @@ def modify_restricted_calls(message):
     if message['destination'].startswith('+86'):
         message['mode'] = 'sms'
         auditlog.message_change(
-                message['message_id'], auditlog.MODE_CHANGE, 'call', 'sms',
-                'Changing mode due to calling restriction')
+            message['message_id'], auditlog.MODE_CHANGE, 'call', 'sms',
+            'Changing mode due to calling restriction')
         # this message will appear before the contents of the sms template
-        message['body'] = message.get('body', '') + ' - Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - '
+        message['body'] = 'Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - ' + message.get('body', '')
 
 
 def message_send_enqueue(message):
