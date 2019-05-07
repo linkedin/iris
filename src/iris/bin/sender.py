@@ -1441,16 +1441,17 @@ def sender_shutdown():
     os._exit(0)
 
 
-def check_call_restrictions(message):
+def modify_restricted_calls(message):
     # check for known corner cases in message delivery and correct accordingly
 
     # due to calling restrictions to china override mode and send as sms instead
     if message['destination'].startswith('+86'):
         message['mode'] = 'sms'
+        auditlog.message_change(
+                message['message_id'], auditlog.MODE_CHANGE, 'call', 'sms',
+                'Changing mode due to calling restriction')
         # this message will appear before the contents of the sms template
-        message['body'] = '''Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - '''
-
-    return message['mode'], message['body']
+        message['body'] = message.get('body', '') + ' - Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - '
 
 
 def message_send_enqueue(message):
@@ -1476,9 +1477,7 @@ def message_send_enqueue(message):
     if message_mode and message_mode in per_mode_send_queues:
         # check for known corner case limitations and correct accordingly
         if message['mode'] == 'call':
-            message_mode, message_body = check_call_restrictions(message)
-            message['mode'] = message_mode
-            message['body'] = message_body
+            modify_restricted_calls(message)
 
         if message_id is not None:
             message_ids_being_sent.add(message_id)
