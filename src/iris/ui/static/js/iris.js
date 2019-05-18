@@ -38,7 +38,12 @@ iris = {
           this[base_route].init();
         break;
       case 2:
-          this[base_route.slice(0, -1)].init();
+          // Add exception for unsubscribe, which has no plural/singular but requires an app
+          if (base_route === 'unsubscribe') {
+            this.unsubscribe.init();
+          } else {
+            this[base_route.slice(0, -1)].init();
+          }
         break;
     }
   },
@@ -2788,7 +2793,7 @@ iris = {
     },
     init: function() {
       var location = window.location.pathname.split('/'),
-          application = decodeURIComponent(location[location.length - 1]); 
+          application = decodeURIComponent(location[location.length - 1]);
 
       iris.changeTitle('App Stats');
       $('#stats-header').text("App Stats: " + application);
@@ -2803,7 +2808,61 @@ iris = {
       });
     }
   }, // End iris.appStats
-  singlestats:{},
+  unsubscribe: {
+    data: {
+      url: '/v0/applications/',
+      $page: $('.unsub'),
+      application: null,
+      user: null,
+      unsubscribeButton: $('#unsub-button'),
+      unsubTemplate: $('#unsub-template').html(),
+    },
+    init: function() {
+      var location = window.location.pathname.split('/'),
+          application = decodeURIComponent(location[location.length - 1])
+          self = this;
+
+      iris.changeTitle('Unsubscribe');
+      this.events()
+      var template = Handlebars.compile(this.data.unsubTemplate);
+      $.when($.get(self.data.url + application), $.get('/v0/users/' + window.appData.user)).then(function(app, user){
+        app = app[0];
+        self.data.application = app;
+        self.data.user = user[0];
+        self.data.$page.html(template({'name': app['name'], 'owners': app['owners'], 'eligible': app.supported_modes.includes('drop')}));
+      }).fail(function(){
+        iris.createAlert('Failed to fetch application data');
+      })
+    },
+    events: function() {
+      this.data.$page.on('click', this.data.unsubscribeButton, this.unsubscribe.bind(this));
+    },
+    unsubscribe: function() {
+      var self = this,
+          modes = self.data.user['modes']
+      // Construct new user modes
+      modes['per_app_modes'] = self.data.user['per_app_modes']
+      modes['per_app_modes'][self.data.application['name']] = {};
+      window.appData.priorities.forEach(function(priority){
+        modes['per_app_modes'][self.data.application['name']][priority['name']] = 'drop';
+      })
+      self.data.unsubscribeButton.prop('disabled', true);
+      $.ajax({
+          url: '/v0/users/modes/' + window.appData.user,
+          data: JSON.stringify(modes),
+          method: 'POST',
+          contentType: 'application/json'
+      }).done(function(r) {
+        iris.createAlert('Successfully unsubscribed from all messages sent by this app!', 'success')
+      }).fail(function(r) {
+        iris.createAlert('Failed to unsubscribe: ' + r.responseJSON['title'])
+      }).always(function(){
+        self.data.unsubscribeButton.prop('disabled', false);
+      })
+    }
+  },
+  // Needed for single stats routing
+  singlestats: {},
   singlestat: {
     data: {
       url: '/v0/singlestats/',
