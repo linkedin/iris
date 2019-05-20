@@ -281,6 +281,16 @@ class Application(object):
                                                                        modes=get_local_api(req, 'modes') + ['drop'])
 
 
+class Unsubscribe(object):
+    allow_read_no_auth = False
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('unsubscribe.html').render(request=req,
+                                                                       priorities=get_local_api(req, 'priorities'))
+
+
 class Login():
     allow_read_no_auth = False
     frontend_route = True
@@ -468,6 +478,7 @@ def init(config, app):
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
+    app.add_route('/unsubscribe/{application}', Unsubscribe())
 
     if(qr_base_url and qr_login_url):
         create_qr_code(qr_base_url, qr_login_url)
