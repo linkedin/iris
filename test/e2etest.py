@@ -2294,7 +2294,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
     assert 'email_html needs to be a string' in re.text
 
 
-def test_post_notification(sample_user, sample_application_name):
+def test_post_notification(sample_user, sample_team, sample_application_name):
     # The iris-api in this case will send a request to iris-sender's
     # rpc endpoint. Don't bother if sender isn't working.
     try:
@@ -2347,6 +2347,35 @@ def test_post_notification(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
 
 
 def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):
