@@ -2028,7 +2028,10 @@ class Notifications(object):
 
         A request is considered invalid if:
 
-        - either target, subject or role is missing
+        - either target, subject or role is missing and target_list is not provided
+        - target_list is provided, but no subject
+        - target_list is malformed (not of the form [{"role": foo, "target": bar}])
+        - a priority is given for a target_list
         - both priority and mode are missing
         - invalid priority, mode
         - both tempalte, body and email_html are missing
@@ -2039,30 +2042,46 @@ class Notifications(object):
         message = ujson.loads(req.context['body'])
         msg_attrs = set(message)
         if not msg_attrs >= self.required_attrs:
-            raise HTTPBadRequest('Missing required atrributes',
-                                 ', '.join(self.required_attrs - msg_attrs))
+            if 'target_list' not in msg_attrs:
+                raise HTTPBadRequest('Missing required atrributes',
+                                     ', '.join(self.required_attrs - msg_attrs))
+            else:
+                if 'subject' not in msg_attrs:
+                    raise HTTPBadRequest('Missing required atrributes: subject')
+                if not all(['role' in t and 'target' in t for t in message['target_list']]):
+                    raise HTTPBadRequest('Malformed target list')
 
-        # If both priority and mode are passed in, priority overrides mode
-        if 'priority' in message:
-            priority = cache.priorities.get(message['priority'])
-            if not priority:
-                raise HTTPBadRequest('Invalid priority', message['priority'])
-            message['priority_id'] = priority['id']
-        elif 'mode' in message:
-            mode_id = cache.modes.get(message['mode'])
-            if not mode_id:
-                raise HTTPBadRequest('Invalid mode', message['mode'])
-            message['mode_id'] = mode_id
+        if 'target_list' in message:
+            message['multi-recipient'] = True
+            if 'mode' in message:
+                mode_id = cache.modes.get(message['mode'])
+                if not mode_id or message['mode'] != 'email':
+                    raise HTTPBadRequest('Invalid mode', message['mode'])
+                message['mode_id'] = mode_id
+            else:
+                raise HTTPBadRequest('Contact mode required for target list')
         else:
-            raise HTTPBadRequest(
-                'Both priority and mode are missing, at least one of it is required')
-        if message['role'] == 'literal_target':
-            # target_literal requires that a mode be set and no priority be defined
-            if 'mode' not in message:
-                raise HTTPBadRequest('INVALID mode not set for literal_target role')
+            # If both priority and mode are passed in, priority overrides mode
             if 'priority' in message:
-                raise HTTPBadRequest('INVALID role literal_target does not support priority')
-            message['unexpanded'] = True
+                priority = cache.priorities.get(message['priority'])
+                if not priority:
+                    raise HTTPBadRequest('Invalid priority', message['priority'])
+                message['priority_id'] = priority['id']
+            elif 'mode' in message:
+                mode_id = cache.modes.get(message['mode'])
+                if not mode_id:
+                    raise HTTPBadRequest('Invalid mode', message['mode'])
+                message['mode_id'] = mode_id
+            else:
+                raise HTTPBadRequest(
+                    'Both priority and mode are missing, at least one of it is required')
+            if message['role'] == 'literal_target':
+                # target_literal requires that a mode be set and no priority be defined
+                if 'mode' not in message:
+                    raise HTTPBadRequest('INVALID mode not set for literal_target role')
+                if 'priority' in message:
+                    raise HTTPBadRequest('INVALID role literal_target does not support priority')
+                message['unexpanded'] = True
 
         # Avoid problems down the line if we have no way of creating the
         # message body, which happens if both body and template are not
