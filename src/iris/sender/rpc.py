@@ -93,6 +93,7 @@ def handle_api_notification_request(socket, address, req):
     if not notification.get('unexpanded'):
         # For multi-recipient notifications, pre-populate destination with literal targets,
         # then expand the remaining
+        has_literal_target = False
         if target_list:
             expanded_targets = []
             notification['destination'] = []
@@ -102,6 +103,7 @@ def handle_api_notification_request(socket, address, req):
                 try:
                     if role == 'literal_target':
                         notification['destination'].append(target)
+                        has_literal_target = True
                     else:
                         expanded = cache.targets_for_role(role, target)
                         expanded_targets += [e for e in expanded]
@@ -113,7 +115,7 @@ def handle_api_notification_request(socket, address, req):
                 expanded_targets = cache.targets_for_role(role, target)
             except IrisRoleLookupException:
                 expanded_targets = None
-        if not expanded_targets:
+        if not expanded_targets and not has_literal_target:
             reject_api_request(socket, address, 'INVALID role:target')
             logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
                         role, target, notification['application'])

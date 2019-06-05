@@ -2348,6 +2348,7 @@ def test_post_notification(sample_user, sample_team, sample_application_name):
     assert re.status_code == 200
     assert re.text == '[]'
 
+    # Multi-recipent notification should succeed
     re = requests.post(base_url + 'notifications', json={
         'target_list': [{'role': 'user', 'target': sample_user},
                         {'role': 'team', 'target': sample_team},
@@ -2359,6 +2360,29 @@ def test_post_notification(sample_user, sample_team, sample_application_name):
     assert re.status_code == 200
     assert re.text == '[]'
 
+    # Multi-recipent notification with all literal targets should succeed
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'literal_target', 'target': 'barbaz@example.com'},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Multi-recipent notification with one invalid target should still succeed
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': 'invalid-user-foobar'},
+                        {'role': 'user', 'target': sample_user}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Should return 400 for multi-recipient notification specifying priority
     re = requests.post(base_url + 'notifications', json={
         'target_list': [{'role': 'user', 'target': sample_user},
                         {'role': 'team', 'target': sample_team},
@@ -2369,6 +2393,7 @@ def test_post_notification(sample_user, sample_team, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 400
 
+    # Should return 400 for multi-recipient notification with missing subject
     re = requests.post(base_url + 'notifications', json={
         'target_list': [{'role': 'user', 'target': sample_user},
                         {'role': 'team', 'target': sample_team},
