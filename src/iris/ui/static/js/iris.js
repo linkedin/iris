@@ -1249,11 +1249,16 @@ iris = {
       $table: $('#incidents-table'),
       $filterApp: $('#filter-application'),
       $filterForm: $('#filter-form'),
+      $claimModal: $('#claim-modal'),
+      claimModalBtn: '#show-claim',
+      claimBtn: '#claim-active-btn',
       tableTemplate: $('#incidents-table-template').html(),
       summaryCtxHash: {},
+      incidentData: null,
       DataTable: null,
       dataTableOpts: {
         orderClasses: false,
+        dom: '<"claim-container"><"pull-right"l>tip',
         order: [[0, 'desc']],
         oLanguage: {
           sEmptyTable: "Use the filters above to find incidents",
@@ -1294,6 +1299,7 @@ iris = {
                            self.data.$filterForm.submit();
                         }));
       }
+      $('div.claim-container').html('<button type="button" class="btn btn-default blue btn-sm" id="show-claim">Claim Active Incidents</button>');
     },
     events: function(){
       var data = this.data,
@@ -1314,8 +1320,40 @@ iris = {
         e.stopPropagation();
         self.claimIncident(e);
       });
-
+      data.$page.on('click', self.data.claimModalBtn, self.claimModal.bind(this));
+      data.$claimModal.on('click', self.data.claimBtn, self.claimActive.bind(this));
       data.$filterForm.on('submit', iris.tables.filterTable.bind(this));
+    },
+    claimModal: function(){
+      var actives = this.data.DataTable.rows(function(_, _, x) { return x.getAttribute('data-active') === '1' }),
+          activeCount = actives.flatten().length;
+      if (activeCount > 0) {
+        $('#active-count').html(actives.flatten().length);
+        this.data.$claimModal.modal();
+      } else {
+        iris.createAlert('No active incidents to claim');
+      }
+    },
+    claimActive: function(){
+      var self = this,
+          actives = this.data.DataTable.rows(function(_, _, x) { return x.getAttribute('data-active') === '1' }),
+          activeIds = [];
+      activeIds = Array.from(actives.nodes().map(function(x) { return x.getAttribute('data-route') }));
+       $.ajax({
+        url: self.data.url + 'claim',
+        data: JSON.stringify({
+          owner: window.appData.user,
+          incident_ids: activeIds
+        }),
+      method: 'POST',
+      contentType: 'application/json'
+      }).done(function(data) {
+        iris.createAlert('Successfully claimed ' + data.claimed.length + ' incidents: ' + data.claimed.join(', '), 'success');
+        self.init();
+      }).fail(function() {
+        iris.createAlert('Error: failed to claim incidents');
+      }
+      )
     },
     getData: function(params){
       //merge params and fields
@@ -1414,7 +1452,9 @@ iris = {
         iris.createAlert(message, 'success', null, null, 'fixed');
         $this.attr('data-action', active ? 'claim' : 'unclaim')
           .text(active ? 'Claim Incident' : 'Unclaim Incident')
-          .parents('tr[data-route=' + incidentId + ']').find('.owner').text(active ? 'Unclaimed' : owner);
+          .parents('tr[data-route=' + incidentId + ']')
+          .attr('data-active', active ? 1 : 0)
+          .find('.owner').text(active ? 'Unclaimed' : owner);
       }).fail(function(){
         iris.createAlert('Failed to modify incident', 'danger');
       }).always(function(){
@@ -3055,10 +3095,9 @@ iris = {
     type = type || 'danger';
     $el = $el || $('.main');
     action = action || 'prepend';
-    if (!$('#iris-alert').length) {
-      alert = '<div id="iris-alert" class="alert alert-'+ type +' alert-dismissible ' + fixed + '" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><span class="alert-content"></span></div>';
-      $el[action](alert);
-    }
+    $('#iris-alert').remove();
+    alert = '<div id="iris-alert" class="alert alert-'+ type +' alert-dismissible ' + fixed + '" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><span class="alert-content"></span></div>';
+    $el[action](alert);
     $('#iris-alert .alert-content').html(alertText);
   }, //end createAlert
   dismissAlerts: function() {
