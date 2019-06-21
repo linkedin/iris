@@ -17,43 +17,45 @@
   
 
   
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript">
+          var DOCUMENTATION_OPTIONS = {
+              URL_ROOT:'./',
+              VERSION:'0.0.14',
+              LANGUAGE:'None',
+              COLLAPSE_INDEX:false,
+              FILE_SUFFIX:'.html',
+              HAS_SOURCE:  true,
+              SOURCELINK_SUFFIX: '.txt'
+          };
+      </script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
 
-  
-  
     
 
   
-
-  
-  
-    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  
-
-  
-
-  
-        <link rel="index" title="Index"
-              href="genindex.html"/>
-        <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
-        <link rel="up" title="Iris admin manual" href="admin_manual.html"/>
-        <link rel="next" title="Nagios Integration" href="nagios.html"/>
-        <link rel="prev" title="Installation" href="installation.html"/> 
-
-  
-  <script src="_static/js/modernizr.min.js"></script>
-
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Nagios Integration" href="nagios.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
 </head>
 
-<body class="wy-body-for-nav" role="document">
+<body class="wy-body-for-nav">
 
    
   <div class="wy-grid-for-nav">
-
     
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
-        <div class="wy-side-nav-search">
+        <div class="wy-side-nav-search" >
           
 
           
@@ -120,7 +122,7 @@
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
 
       
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+      <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">Iris</a>
@@ -128,9 +130,10 @@
       </nav>
 
 
-      
       <div class="wy-nav-content">
+        
         <div class="rst-content">
+        
           
 
 
@@ -249,21 +252,21 @@ the URL where Oncall is hosted</li>
 <h3>Updating Iris configs<a class="headerlink" href="#updating-iris-configs" title="Permalink to this headline">¶</a></h3>
 <p>The last step is to create the slack config section with those secrets for Iris and Iris relay.</p>
 <p>In Iris config, add the following section under venders block with <strong>Bot User OAuth Token</strong>:</p>
-<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">vendors</span><span class="p p-Indicator">:</span>
-<span class="p p-Indicator">-</span> <span class="l l-Scalar l-Scalar-Plain">type</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">iris_slack</span>
-  <span class="l l-Scalar l-Scalar-Plain">name</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">slack</span>
-  <span class="l l-Scalar l-Scalar-Plain">auth_token</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">BOT_USER_OAUTH_TOKEN</span>
-  <span class="l l-Scalar l-Scalar-Plain">base_url</span><span class="p p-Indicator">:</span> <span class="s">&#39;https://slack.com/api/chat.postMessage&#39;</span>
+<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="nt">vendors</span><span class="p">:</span>
+<span class="p p-Indicator">-</span> <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">iris_slack</span>
+  <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">slack</span>
+  <span class="nt">auth_token</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">BOT_USER_OAUTH_TOKEN</span>
+  <span class="nt">base_url</span><span class="p">:</span> <span class="s">&#39;https://slack.com/api/chat.postMessage&#39;</span>
   <span class="c1"># this url config is for constructing url link for the message title</span>
-  <span class="l l-Scalar l-Scalar-Plain">iris_incident_url</span><span class="p p-Indicator">:</span> <span class="s">&#39;https://YOUR_IRIS_URL/incidents&#39;</span>
+  <span class="nt">iris_incident_url</span><span class="p">:</span> <span class="s">&#39;https://YOUR_IRIS_URL/incidents&#39;</span>
   <span class="c1"># we also support an optional proxy key here</span>
-  <span class="l l-Scalar l-Scalar-Plain">message_attachments</span><span class="p p-Indicator">:</span>
-    <span class="l l-Scalar l-Scalar-Plain">fallback</span><span class="p p-Indicator">:</span> <span class="s">&#39;New</span><span class="nv"> </span><span class="s">Iris</span><span class="nv"> </span><span class="s">notification!&#39;</span>
+  <span class="nt">message_attachments</span><span class="p">:</span>
+    <span class="nt">fallback</span><span class="p">:</span> <span class="s">&#39;New</span><span class="nv"> </span><span class="s">Iris</span><span class="nv"> </span><span class="s">notification!&#39;</span>
 </pre></div>
 </div>
 <p>In Iris relay config, add the following top level section with <strong>Verification Token</strong>:</p>
-<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">slack</span><span class="p p-Indicator">:</span>
-  <span class="l l-Scalar l-Scalar-Plain">auth_token</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">VERIFICATION_TOKEN</span>
+<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="nt">slack</span><span class="p">:</span>
+  <span class="nt">auth_token</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">VERIFICATION_TOKEN</span>
 </pre></div>
 </div>
 </div>
@@ -286,9 +289,7 @@ the relay webhook state by doing the following:</p>
 
 
            </div>
-           <div class="articleComments">
-            
-           </div>
+           
           </div>
           <footer>
   
@@ -297,7 +298,7 @@ the relay webhook state by doing the following:</p>
         <a href="nagios.html" class="btn btn-neutral float-right" title="Nagios Integration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="installation.html" class="btn btn-neutral" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -306,11 +307,11 @@ the relay webhook state by doing the following:</p>
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2017, The Iris team.
+        &copy; Copyright 2017, The Iris team
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -323,36 +324,15 @@ the relay webhook state by doing the following:</p>
   
 
 
-  
-
-    <script type="text/javascript">
-        var DOCUMENTATION_OPTIONS = {
-            URL_ROOT:'./',
-            VERSION:'0.0.14',
-            COLLAPSE_INDEX:false,
-            FILE_SUFFIX:'.html',
-            HAS_SOURCE:  true,
-            SOURCELINK_SUFFIX: '.txt'
-        };
-    </script>
-      <script type="text/javascript" src="_static/jquery.js"></script>
-      <script type="text/javascript" src="_static/underscore.js"></script>
-      <script type="text/javascript" src="_static/doctools.js"></script>
-
-  
-
-  
-  
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-  
-
-  
-  
   <script type="text/javascript">
       jQuery(function () {
-          SphinxRtdTheme.StickyNav.enable();
+          SphinxRtdTheme.Navigation.enable(true);
       });
   </script>
+
+  
+  
+    
    
 
 </body>
