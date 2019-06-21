@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>HTTP Routing Table &mdash; Iris 0.0.14 documentation</title>
+  <title>Grafana Integration &mdash; Iris 0.0.14 documentation</title>
   
 
   
@@ -44,13 +44,8 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
- 
-
-    <script type="text/javascript">
-      DOCUMENTATION_OPTIONS.COLLAPSE_INDEX = true;
-    </script>
-
-
+    <link rel="next" title="Iris" href="iris.html" />
+    <link rel="prev" title="Alertmanager Integration" href="alertmanager.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -98,10 +93,24 @@
               
             
             
-              <ul>
+              <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="user_manual.html">Iris user manual</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
-<li class="toctree-l1"><a class="reference internal" href="admin_manual.html">Iris admin manual</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="admin_manual.html">Iris admin manual</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#introduction">Introduction</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="admin_manual.html#service-integration">Service Integration</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="nagios.html">Nagios Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="alertmanager.html">Alertmanager Integration</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Grafana Integration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#iris-configuration">Iris Configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#grafana-configuration">Grafana Configuration</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="admin_manual.html#iris-components">Iris components</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
 </ul>
 
@@ -148,10 +157,16 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>HTTP Routing Table</li>
+          <li><a href="admin_manual.html">Iris admin manual</a> &raquo;</li>
+        
+      <li>Grafana Integration</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/grafana.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -163,103 +178,50 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-
-   <h1>HTTP Routing Table</h1>
-
-   <div class="modindex-jumpbox">
-   <a href="#cap-/healthcheck"><strong>/healthcheck</strong></a> | 
-   <a href="#cap-/v0"><strong>/v0</strong></a>
-   </div>
-
-   <table class="indextable modindextable">
-     <tr class="pcap"><td></td><td>&#160;</td><td></td></tr>
-     <tr class="cap" id="cap-/healthcheck"><td></td><td>
-       <strong>/healthcheck</strong></td><td></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--healthcheck"><code class="xref">GET /healthcheck</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="pcap"><td></td><td>&#160;</td><td></td></tr>
-     <tr class="cap" id="cap-/v0"><td></td><td>
-       <strong>/v0</strong></td><td></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-applications-app_name-incident_emails"><code class="xref">GET /v0/applications/{app_name}/incident_emails</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-applications-app_name-plans"><code class="xref">GET /v0/applications/{app_name}/plans</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-incidents"><code class="xref">GET /v0/incidents</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-incidents-incident_id"><code class="xref">GET /v0/incidents/{incident_id}</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-messages-message_id"><code class="xref">GET /v0/messages/{message_id}</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-messages-message_id-auditlog"><code class="xref">GET /v0/messages/{message_id}/auditlog</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-modes"><code class="xref">GET /v0/modes</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-plans"><code class="xref">GET /v0/plans</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#get--v0-target_roles"><code class="xref">GET /v0/target_roles</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#post--v0-incidents"><code class="xref">POST /v0/incidents</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#post--v0-incidents-incident_id"><code class="xref">POST /v0/incidents/{incident_id}</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#post--v0-notifications"><code class="xref">POST /v0/notifications</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#post--v0-plans"><code class="xref">POST /v0/plans</code></a></td><td>
-       <em></em></td></tr>
-     <tr>
-       <td></td>
-       <td>
-       <a href="rest_api.html#delete--v0-users-reprioritization-username-src_mode_name"><code class="xref">DELETE /v0/users/reprioritization/{username}/{src_mode_name}</code></a></td><td>
-       <em></em></td></tr>
-   </table>
+  <div class="section" id="grafana-integration">
+<h1>Grafana Integration<a class="headerlink" href="#grafana-integration" title="Permalink to this headline">¶</a></h1>
+<p>Iris can easily be integrated into an existing Grafana implementation.</p>
+<div class="section" id="iris-configuration">
+<h2>Iris Configuration<a class="headerlink" href="#iris-configuration" title="Permalink to this headline">¶</a></h2>
+<p>Enable the builtin Grafana webhook in Iris&#8217; configuration.</p>
+<p>Configuration:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">webhooks</span><span class="p">:</span>
+  <span class="o">-</span> <span class="n">grafana</span>
+</pre></div>
+</div>
+<p>Then create an application using the UI. In this example let&#8217;s use the name &#8216;grafana&#8217;.
+Once you&#8217;ve created the application you&#8217;ll be able to retrieve the application&#8217;s key.
+Here we&#8217;ll use &#8220;abc&#8221;.</p>
+</div>
+<div class="section" id="grafana-configuration">
+<h2>Grafana Configuration<a class="headerlink" href="#grafana-configuration" title="Permalink to this headline">¶</a></h2>
+<p>In Grafana, you can configure Iris as a notifcation channel, using the application, it&#8217;s key
+and the target plan as parameters in the webhook url.</p>
+<p>Configuration:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span>Name: iris-team1
+Type: webhook
+Url: http://iris:16649/v0/webhooks/grafana?application=grafana&amp;key=abc&amp;plan=team1
+Http Method: POST
+</pre></div>
+</div>
+<p>Then simply add this notification channel to your alert in Grafana.</p>
+</div>
+</div>
 
 
            </div>
            
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="iris.html" class="btn btn-neutral float-right" title="Iris" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="alertmanager.html" class="btn btn-neutral float-left" title="Alertmanager Integration" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>

@@ -17,42 +17,45 @@
   
 
   
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript">
+          var DOCUMENTATION_OPTIONS = {
+              URL_ROOT:'./',
+              VERSION:'0.0.14',
+              LANGUAGE:'None',
+              COLLAPSE_INDEX:false,
+              FILE_SUFFIX:'.html',
+              HAS_SOURCE:  true,
+              SOURCELINK_SUFFIX: '.txt'
+          };
+      </script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
 
-  
-  
     
 
   
-
-  
-  
-    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  
-
-  
-
-  
-        <link rel="index" title="Index"
-              href="genindex.html"/>
-        <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
-        <link rel="next" title="Iris admin manual" href="admin_manual.html"/>
-        <link rel="prev" title="Iris user manual" href="user_manual.html"/> 
-
-  
-  <script src="_static/js/modernizr.min.js"></script>
-
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Iris admin manual" href="admin_manual.html" />
+    <link rel="prev" title="Iris user manual" href="user_manual.html" /> 
 </head>
 
-<body class="wy-body-for-nav" role="document">
+<body class="wy-body-for-nav">
 
    
   <div class="wy-grid-for-nav">
-
     
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
-        <div class="wy-side-nav-search">
+        <div class="wy-side-nav-search" >
           
 
           
@@ -120,7 +123,7 @@
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
 
       
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+      <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">Iris</a>
@@ -128,9 +131,10 @@
       </nav>
 
 
-      
       <div class="wy-nav-content">
+        
         <div class="rst-content">
+        
           
 
 
@@ -189,7 +193,7 @@ installed/configured properly:</p>
 <div class="section" id="setting-things-up">
 <h2>Setting things up<a class="headerlink" href="#setting-things-up" title="Permalink to this headline">¶</a></h2>
 <p>First thing&#8217;s first: clone the Iris repo:</p>
-<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">git</span><span class="nd">@github</span><span class="o">.</span><span class="n">com</span><span class="p">:</span><span class="n">linkedin</span><span class="o">/</span><span class="n">iris</span><span class="o">.</span><span class="n">git</span>
+<div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">linkedin</span><span class="o">/</span><span class="n">iris</span><span class="o">.</span><span class="n">git</span>
 </pre></div>
 </div>
 <dl class="docutils">
@@ -217,7 +221,7 @@ environment.</p>
 <div class="code sh highlight-default"><div class="highlight"><pre><span></span><span class="n">virtualenv</span> <span class="n">venv</span>
 <span class="n">source</span> <span class="n">venv</span><span class="o">/</span><span class="nb">bin</span><span class="o">/</span><span class="n">activate</span>
 <span class="n">sudo</span> <span class="n">apt</span><span class="o">-</span><span class="n">get</span> <span class="n">install</span> <span class="n">libssl</span><span class="o">-</span><span class="n">dev</span> <span class="n">libxml2</span><span class="o">-</span><span class="n">dev</span> <span class="n">libxslt1</span><span class="o">-</span><span class="n">dev</span> <span class="n">libsasl2</span><span class="o">-</span><span class="n">dev</span> <span class="n">python</span><span class="o">-</span><span class="n">dev</span> <span class="n">libldap2</span><span class="o">-</span><span class="n">dev</span>
-<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s1">&#39;.[dev,kazoo]</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">-</span><span class="n">e</span> <span class="s1">&#39;.[dev,kazoo]&#39;</span>
 </pre></div>
 </div>
 </div>
@@ -227,10 +231,10 @@ environment.</p>
 <code class="docutils literal"><span class="pre">root</span></code> and no password. This isn&#8217;t very secure, so let&#8217;s create an
 <code class="docutils literal"><span class="pre">iris</span></code> user. Log in as root, and add the new user. We&#8217;ll also need to
 turn off the <code class="docutils literal"><span class="pre">ONLY_FULL_GROUP_BY</span></code> MySQL mode.</p>
-<div class="code sql highlight-default"><div class="highlight"><pre><span></span>CREATE USER ‘iris’@’localhost’ IDENTIFIED BY ‘iris’
-CREATE DATABASE iris
-GRANT ALL ON iris.* TO iris@localhost
-SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,&#39;ONLY_FULL_GROUP_BY&#39;,&#39;&#39;));
+<div class="code sql highlight-default"><div class="highlight"><pre><span></span><span class="n">CREATE</span> <span class="n">USER</span> <span class="s1">&#39;iris&#39;</span><span class="o">@</span><span class="s1">&#39;localhost&#39;</span> <span class="n">IDENTIFIED</span> <span class="n">BY</span> <span class="s1">&#39;iris&#39;</span><span class="p">;</span>
+<span class="n">CREATE</span> <span class="n">DATABASE</span> <span class="n">iris</span><span class="p">;</span>
+<span class="n">GRANT</span> <span class="n">ALL</span> <span class="n">ON</span> <span class="n">iris</span><span class="o">.*</span> <span class="n">TO</span> <span class="n">iris</span><span class="nd">@localhost</span><span class="p">;</span>
+<span class="n">SET</span> <span class="n">GLOBAL</span> <span class="n">sql_mode</span><span class="o">=</span><span class="p">(</span><span class="n">SELECT</span> <span class="n">REPLACE</span><span class="p">(</span><span class="o">@</span><span class="nd">@sql_mode</span><span class="p">,</span><span class="s1">&#39;ONLY_FULL_GROUP_BY&#39;</span><span class="p">,</span><span class="s1">&#39;&#39;</span><span class="p">));</span>
 </pre></div>
 </div>
 <p>Now let’s load the schema and some dummy data. Navigate to project root,
@@ -593,9 +597,7 @@ for easier deployment. More questions? Reach out to
 
 
            </div>
-           <div class="articleComments">
-            
-           </div>
+           
           </div>
           <footer>
   
@@ -604,7 +606,7 @@ for easier deployment. More questions? Reach out to
         <a href="admin_manual.html" class="btn btn-neutral float-right" title="Iris admin manual" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="user_manual.html" class="btn btn-neutral" title="Iris user manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="user_manual.html" class="btn btn-neutral float-left" title="Iris user manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -613,11 +615,11 @@ for easier deployment. More questions? Reach out to
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2017, The Iris team.
+        &copy; Copyright 2017, The Iris team
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -630,36 +632,15 @@ for easier deployment. More questions? Reach out to
   
 
 
-  
-
-    <script type="text/javascript">
-        var DOCUMENTATION_OPTIONS = {
-            URL_ROOT:'./',
-            VERSION:'0.0.14',
-            COLLAPSE_INDEX:false,
-            FILE_SUFFIX:'.html',
-            HAS_SOURCE:  true,
-            SOURCELINK_SUFFIX: '.txt'
-        };
-    </script>
-      <script type="text/javascript" src="_static/jquery.js"></script>
-      <script type="text/javascript" src="_static/underscore.js"></script>
-      <script type="text/javascript" src="_static/doctools.js"></script>
-
-  
-
-  
-  
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-  
-
-  
-  
   <script type="text/javascript">
       jQuery(function () {
-          SphinxRtdTheme.StickyNav.enable();
+          SphinxRtdTheme.Navigation.enable(true);
       });
   </script>
+
+  
+  
+    
    
 
 </body>

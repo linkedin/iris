@@ -17,43 +17,45 @@
   
 
   
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript">
+          var DOCUMENTATION_OPTIONS = {
+              URL_ROOT:'./',
+              VERSION:'0.0.14',
+              LANGUAGE:'None',
+              COLLAPSE_INDEX:false,
+              FILE_SUFFIX:'.html',
+              HAS_SOURCE:  true,
+              SOURCELINK_SUFFIX: '.txt'
+          };
+      </script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
 
-  
-  
     
 
   
-
-  
-  
-    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  
-
-  
-
-  
-        <link rel="index" title="Index"
-              href="genindex.html"/>
-        <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="Iris 0.0.14 documentation" href="index.html"/>
-        <link rel="up" title="API" href="api.html"/>
-        <link rel="next" title="Sender API" href="sender_api.html"/>
-        <link rel="prev" title="API" href="api.html"/> 
-
-  
-  <script src="_static/js/modernizr.min.js"></script>
-
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Sender API" href="sender_api.html" />
+    <link rel="prev" title="API" href="api.html" /> 
 </head>
 
-<body class="wy-body-for-nav" role="document">
+<body class="wy-body-for-nav">
 
    
   <div class="wy-grid-for-nav">
-
     
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
-        <div class="wy-side-nav-search">
+        <div class="wy-side-nav-search" >
           
 
           
@@ -98,6 +100,7 @@
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">REST API</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#hmac-auth">HMAC Auth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#query-filters">Query Filters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#routes">Routes</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#v0-plans">/v0/plans</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
@@ -126,7 +129,7 @@
     <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
 
       
-      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+      <nav class="wy-nav-top" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="index.html">Iris</a>
@@ -134,9 +137,10 @@
       </nav>
 
 
-      
       <div class="wy-nav-content">
+        
         <div class="rst-content">
+        
           
 
 
@@ -205,6 +209,30 @@ are replaced with <code class="code docutils literal"><span class="pre">-</span>
 <li><a class="reference external" href="https://github.com/kripplek/node-iris">NodeJS</a></li>
 </ul>
 </div>
+<div class="section" id="query-filters">
+<h2>Query Filters<a class="headerlink" href="#query-filters" title="Permalink to this headline">¶</a></h2>
+<p>Iris has a number of search endpoints allowing filtering based on data
+attributes. For each allowable attribute, filters are defined via the
+query string, with syntax in the form of
+<code class="code docutils literal"><span class="pre">$ATTRIBUTE__$OPERATOR=$ARGUMENT</span></code> e.g. <code class="code docutils literal"><span class="pre">created__ge=123</span></code>.
+The following operators are allowed:</p>
+<blockquote>
+<div><ul class="simple">
+<li>&#8220;eq&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">==</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;in&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span></code> is contained in <code class="code docutils literal"><span class="pre">$ARGUMENT</span></code>, which must be a list</li>
+<li>&#8220;ne&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">!=</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;gt&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">&gt;</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;ge&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">&gt;=</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;lt&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">&lt;</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;le&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span> <span class="pre">&lt;=</span> <span class="pre">$ARGUMENT</span></code></li>
+<li>&#8220;contains&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span></code> contains the substring <code class="code docutils literal"><span class="pre">$ARGUMENT</span></code>. Only defined on string-like attributes</li>
+<li>&#8220;startswith&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span></code> starts with <code class="code docutils literal"><span class="pre">$ARGUMENT</span></code>. Only defined on string-like attributes</li>
+<li>&#8220;endswith&#8221;: <code class="code docutils literal"><span class="pre">$ATTRIBUTE</span></code> ends with <code class="code docutils literal"><span class="pre">$ARGUMENT</span></code>. Only defined on string-like attributes</li>
+</ul>
+</div></blockquote>
+<p>If no operator is defined (e.g. <code class="code docutils literal"><span class="pre">id=123</span></code>), the operator
+is assumed to be &#8220;eq&#8221; (equality).</p>
+</div>
 <div class="section" id="routes">
 <h2>Routes<a class="headerlink" href="#routes" title="Permalink to this headline">¶</a></h2>
 <div class="section" id="v0-plans">
@@ -242,6 +270,9 @@ are replaced with <code class="code docutils literal"><span class="pre">-</span>
    ]
 </pre></div>
 </div>
+<p>You can also search for plans that have specific targets in their steps by using the field &#8216;target&#8217;</p>
+<p><strong>example request</strong></p>
+<p>GET /v0/plans?target=foo&amp;active=1 HTTP/1.1</p>
 </dd></dl>
 
 <dl class="post">
@@ -358,7 +389,7 @@ is provided to define the recipient of a message. See incidents POST endpoint fo
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -369,6 +400,65 @@ is provided to define the recipient of a message. See incidents POST endpoint fo
 </div>
 <div class="section" id="v0-incidents">
 <h3>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h3>
+<dl class="get">
+<dt id="get--v0-incidents">
+<code class="descname">GET </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#get--v0-incidents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Search for incidents. Returns a list of incidents matching specified parameters.
+Valid parameters are listed below:</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/incidents?owner=jdoe&amp;created__gt=1487466146&amp;fields=id,owner</span>  <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Host</span><span class="o">:</span> <span class="l">example.com</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">123</span><span class="p">,</span>
+        <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;jdoe&quot;</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">124</span><span class="p">,</span>
+        <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="s2">&quot;jdoe&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Status Codes:</th><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.1">400 Bad Request</a> &#8211; Too much data requested; more filters are required</li>
+<li><a class="reference external" href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.1">200 OK</a> &#8211; Successful query</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p><em>Allowed filter parameters:</em></p>
+<ul class="simple">
+<li>id: Incident id (int)</li>
+<li>created: Incident creation time, in seconds since Unix epoch (int)</li>
+<li>owner: Username of person who claimed the incident (string)</li>
+<li>updated: Time when incident was last updated (e.g. claimed), in seconds since epoch (int)</li>
+<li>active: Incident status. Incidents are active if unclaimed, and inactive if they are
+claimed or finished with their escalation plan (0 or 1 for inactive/active, respectively)</li>
+<li>context: JSON string representing the incident context data</li>
+<li>application: Application that created this incident (string)</li>
+<li>plan: Escalation plan name (string)</li>
+<li>plan_id: Escalation plan id (int)</li>
+</ul>
+<p>This endpoint also allows specification of a limit via another query parameter, which limits
+results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
+or a filter will be rejected. To specify which incident attribute should be included in the output, the &#8220;fields&#8221;
+query parameter can be used. The fields parameter takes the value of a comma-separated list of attributes
+(e.g. id,owner), and the API will only include these incident fields in the output. If no &#8220;fields&#8221; value is
+specified, all fields will be returned.</p>
+</dd></dl>
+
 <dl class="post">
 <dt id="post--v0-incidents">
 <code class="descname">POST </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#post--v0-incidents" title="Permalink to this definition">¶</a></dt>
@@ -436,7 +526,7 @@ Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -518,7 +608,7 @@ any associated messages, preventing further escalation.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -677,7 +767,7 @@ is a valid email address, slack channel, slack username, etc.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -740,7 +830,7 @@ is a valid email address, slack channel, slack username, etc.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -774,7 +864,7 @@ is a valid email address, slack channel, slack username, etc.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -811,7 +901,7 @@ is a valid email address, slack channel, slack username, etc.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
-<li><a class="reference external" href="http://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
 </ul>
 </td>
 </tr>
@@ -880,9 +970,7 @@ GOOD
 
 
            </div>
-           <div class="articleComments">
-            
-           </div>
+           
           </div>
           <footer>
   
@@ -891,7 +979,7 @@ GOOD
         <a href="sender_api.html" class="btn btn-neutral float-right" title="Sender API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="api.html" class="btn btn-neutral" title="API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-left" title="API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -900,11 +988,11 @@ GOOD
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2017, The Iris team.
+        &copy; Copyright 2017, The Iris team
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
 
@@ -917,36 +1005,15 @@ GOOD
   
 
 
-  
-
-    <script type="text/javascript">
-        var DOCUMENTATION_OPTIONS = {
-            URL_ROOT:'./',
-            VERSION:'0.0.14',
-            COLLAPSE_INDEX:false,
-            FILE_SUFFIX:'.html',
-            HAS_SOURCE:  true,
-            SOURCELINK_SUFFIX: '.txt'
-        };
-    </script>
-      <script type="text/javascript" src="_static/jquery.js"></script>
-      <script type="text/javascript" src="_static/underscore.js"></script>
-      <script type="text/javascript" src="_static/doctools.js"></script>
-
-  
-
-  
-  
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-  
-
-  
-  
   <script type="text/javascript">
       jQuery(function () {
-          SphinxRtdTheme.StickyNav.enable();
+          SphinxRtdTheme.Navigation.enable(true);
       });
   </script>
+
+  
+  
+    
    
 
 </body>
