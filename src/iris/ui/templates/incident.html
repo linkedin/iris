@@ -76,7 +76,7 @@
           <td> {{name}} {{#if target_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
           <td> {{priority}} </td>
           <td> {{mode}} {{#if mode_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
-          <td> {{convertToLocal sent}} </td>
+          <td data-order="{{sent}}"> {{convertToLocal sent}} </td>
         </tr>
         {{/each}}
       </tbody>
