@@ -79,7 +79,10 @@ class iris_smtp(object):
 
         m['Date'] = formatdate(localtime=True)
         m['from'] = from_address
-        m['to'] = message['destination']
+        if message.get('multi-recipient'):
+            m['to'] = ','.join(message['destination'])
+        else:
+            m['to'] = message['destination']
         if message.get('noreply'):
             m['reply-to'] = m['to']
 
@@ -124,6 +127,10 @@ class iris_smtp(object):
 
         conn = None
 
+        if message.get('multi-recipient'):
+            email_recipients = message['destination']
+        else:
+            email_recipients = [message['destination']]
         # Try reusing previous connection in this worker if we have one
         if self.last_conn:
             conn = self.last_conn
@@ -145,7 +152,7 @@ class iris_smtp(object):
             raise Exception('Failed to get smtp connection.')
 
         try:
-            conn.sendmail([from_address], [message['destination']], m.as_string())
+            conn.sendmail([from_address], email_recipients, m.as_string())
         except Exception:
             logger.warning('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
 
@@ -173,7 +180,7 @@ class iris_smtp(object):
                 # If configured, sleep to back-off on connection
                 if self.retry_interval:
                     sleep(self.retry_interval)
-                conn.sendmail([from_address], [message['destination']], m.as_string())
+                conn.sendmail([from_address], email_recipients, m.as_string())
                 logger.info('Message successfully sent through %s after reconnecting', self.last_conn_server)
             except Exception:
                 logger.exception('Failed sending email through %s after trying to reconnect', self.last_conn_server)

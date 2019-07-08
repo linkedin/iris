@@ -1214,6 +1214,10 @@ table.dataTable thead .sorting_asc {
  * Incidents page
  */
 
+  .claim-container {
+    display: inline-block;
+  }
+
 .incidents td.summary .icon-question {
   top: 3px;
 }

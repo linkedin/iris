@@ -783,25 +783,41 @@ def set_target_contact_by_priority(message):
 
 def set_target_contact(message):
     # If we already have a destination set (eg incident tracking emails or literal_target notifications) no-op this
-    if 'destination' in message:
+    if 'destination' in message and not message.get('multi-recipient'):
         return True
 
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
-    try:
-        if 'mode' in message or 'mode_id' in message:
-            # for out of band notification, we already have the mode *OR*
-            # mode_id set by API
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute('''
+    destination_query = '''
                 SELECT `destination` FROM `target_contact`
                 JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
                 JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
                 WHERE `target`.`name` = %(target)s
                 AND `target_type`.`name` = 'user'
                 AND (`target_contact`.`mode_id` = %(mode_id)s OR `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
-                LIMIT 1
-                ''', {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                LIMIT 1'''
+
+    # Handle multi-recipient messages. These are only allowed when mode is specified, not priority.
+    # Return True if we're able to resolve at least one target
+    if message.get('multi-recipient'):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        for t in message['target']:
+            try:
+                cursor.execute(destination_query, {'target': t, 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                message['destination'].append(cursor.fetchone()[0])
+            except (ValueError, TypeError):
+                continue
+        cursor.close()
+        connection.close()
+        return bool(message.get('destination'))
+
+    try:
+        if 'mode' in message or 'mode_id' in message:
+            # for out of band notification, we already have the mode *OR*
+            # mode_id set by API
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(destination_query, {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
@@ -1041,9 +1057,10 @@ def distributed_send_message(message, vendor_manager):
 
     # application is not present for incident tracking emails
     if 'application' in message:
+        notification_count = 1 if not message.get('target_list') else len(message['destination'])
         metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
         metrics.add_new_metrics({metrics_key: 0})
-        metrics.incr(metrics_key)
+        metrics.incr(metrics_key, inc=notification_count)
 
     if runtime is not None:
         return True, True
@@ -1441,6 +1458,19 @@ def sender_shutdown():
     os._exit(0)
 
 
+def modify_restricted_calls(message):
+    # check for known corner cases in message delivery and correct accordingly
+
+    # due to calling restrictions to china override mode and send as sms instead
+    if message['destination'].startswith('+86'):
+        message['mode'] = 'sms'
+        auditlog.message_change(
+            message['message_id'], auditlog.MODE_CHANGE, 'call', 'sms',
+            'Changing mode due to calling restriction')
+        # this message will appear before the contents of the sms template
+        message['body'] = 'Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - ' + message.get('body', '')
+
+
 def message_send_enqueue(message):
 
     # If this message has an ID, avoid queueing it twice, assuming it's not a retry
@@ -1462,6 +1492,10 @@ def message_send_enqueue(message):
 
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
+        # check for known corner case limitations and correct accordingly
+        if message['mode'] == 'call':
+            modify_restricted_calls(message)
+
         if message_id is not None:
             message_ids_being_sent.add(message_id)
         per_mode_send_queues[message_mode].put(message)
