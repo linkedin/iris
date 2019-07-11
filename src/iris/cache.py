@@ -32,6 +32,11 @@ def cache_applications():
                           JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
                           WHERE `application_mode`.`application_id` = %s''', app['id'])
         app['supported_modes'] = [row['name'] for row in cursor]
+        cursor.execute('''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                          FROM `application_custom_sender_address`
+                          JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                          WHERE `application_custom_sender_address`.`application_id` = %s''', app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
         new_applications[app['name']] = app
     applications = new_applications
     connection.close()

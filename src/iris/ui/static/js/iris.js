@@ -2339,10 +2339,12 @@ iris = {
       showSecondaryKeyModalButton: '#show-secondary-key-modal-button',
       removeVariableButton: '.remove-variable',
       removeOwnerButton: '.remove-owner',
+      removeAddressButton: '.remove-address',
       showApiKeyButton: '#show-api-key-button',
       showSecondaryKeyButton: '#show-secondary-key-button',
       addVariableForm: '#add-variable-form',
       addOwnerForm: '#add-owner-form',
+      addAddressForm: '#add-address-form',
       addEmailIncidentForm: '#add-email-incident-form',
       addDefaultModeForm: '#add-default-mode-form',
       removeEmailIncidentButton: '.delete-email-incident-button',
@@ -2395,6 +2397,10 @@ iris = {
         }
         $(this).parent().remove();
       });
+      data.$page.on('click', data.removeAddressButton, function() {
+        self.data.model.custom_sender_addresses.email = null;
+        $(this).parent().remove();
+      });
       data.$page.on('submit', data.addVariableForm, function(e) {
         e.preventDefault();
         var variable = $('#add-variable-box').val();
@@ -2424,6 +2430,19 @@ iris = {
         }
         $('#add-owner-box').val('');
         self.data.model.owners.push(owner);
+        self.modelPersist();
+        self.render();
+      });
+      data.$page.on('submit', data.addAddressForm, function(e) {
+        e.preventDefault();
+        var address = $('#add-address-box').val();
+        if (address == '') {
+          iris.createAlert('Cannot add empty custom address');
+          return;
+        }
+
+        $('#add-address-box').val('');
+        self.data.model.custom_sender_addresses.email = address;
         self.modelPersist();
         self.render();
       });

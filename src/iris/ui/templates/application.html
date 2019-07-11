@@ -121,6 +121,24 @@
     {{/if}}
     <br>
 
+    {{#if @root.isInViewMode}}
+      <span class="light">Custom email "from" address: </span>
+      {{#if custom_sender_addresses.email}} 
+        <span class="label label-info">{{custom_sender_addresses.email}} <i class="glyphicon" data-variable="{{custom_sender_addresses.email}}"></i></span> 
+      {{else}}
+        <span class="light">None (using default sender address)</span>
+      {{/if}}
+    {{else}}
+      <span class="light">custom email "from" address:</span>
+      {{#if custom_sender_addresses.email}}
+      <span class="label label-info">{{custom_sender_addresses.email}} <i class="glyphicon glyphicon-remove remove-address" data-variable="{{custom_sender_addresses.email}}"></i></span> 
+        <form id="add-address-form"><input type="text" class="form-control border-bottom input-sm" placeholder="New address" id="add-address-box"></input><button type="submit" class="btn btn-primary btn-xs"> Update</button></form>
+      {{else}}
+        <form id="add-address-form"><input type="text" class="form-control border-bottom input-sm" placeholder="New address" id="add-address-box"></input><button type="submit" class="btn btn-primary btn-xs"> Add</button></form>
+      {{/if}}
+    
+    {{/if}}
+
 
     <div class="light" id="supported-modes-checkboxes">Supported modes:
       {{#each @root.modes}}
