@@ -270,7 +270,7 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
+    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0, 'send_queue_puts_fail_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
     'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0, 'notifications': 0, 'deactivation': 0,
@@ -847,6 +847,35 @@ def set_target_contact(message):
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
             cursor.execute(destination_query, {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+            message['destination'] = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            result = True
+        elif 'category' in message:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute('''
+                SELECT `mode`.`id`, `mode`.`name` FROM `category_override`
+                JOIN `target` ON `target`.`id` = `category_override`.`user_id`
+                JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                WHERE `target`.`name` = %(target)s AND `category_override`.`category_id` = %(category_id)s
+            ''', {'target': message['target'], 'category_id': message['category_id']})
+            override_mode = cursor.fetchone()
+            if override_mode:
+                message['mode_id'] = override_mode[0]
+                message['mode'] = override_mode[1]
+            else:
+                message['mode_id'] = message['category_mode_id']
+                message['mode'] = message['category_mode']
+            cursor.execute('''
+                SELECT `destination` FROM `target_contact`
+                JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
+                JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
+                WHERE `target`.`name` = %(target)s
+                AND `target_type`.`name` = 'user'
+                AND `target_contact`.`mode_id` = %(mode_id)s
+                LIMIT 1
+                ''', {'target': message['target'], 'mode_id': message['mode_id']})
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()

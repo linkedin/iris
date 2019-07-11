@@ -28,6 +28,7 @@ target_reprioritization = None
 target_names = None
 targets_for_role = None
 dynamic_plan_map = None
+categories = None
 
 
 class Cache():

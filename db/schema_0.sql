@@ -802,6 +802,30 @@ CREATE TABLE `comment` (
   CONSTRAINT `comment_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `notification_category`;
+CREATE TABLE `notification_category` (
+  `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+  `application_id` INT(11) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `description` VARCHAR(255) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `notification_category_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `notification_category_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`),
+  KEY `ix_notification_category_app_id` (`application_id`),
+  UNIQUE KEY (`application_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `category_override`;
+CREATE TABLE `category_override` (
+  `user_id` BIGINT(20) NOT NULL,
+  `category_id` BIGINT(20) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`user_id`, `category_id`),
+  CONSTRAINT `category_override_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `category_override_category_id_ibfk` FOREIGN KEY (`category_id`) REFERENCES `notification_category` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `category_override_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
