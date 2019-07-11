@@ -2440,6 +2440,10 @@ iris = {
           iris.createAlert('Cannot add empty custom address');
           return;
         }
+        if(self.validateEmail(address) == false){
+          iris.createAlert('Email address is invalid. Please make sure it is formatted correctly.');
+          return;
+        }
 
         $('#add-address-box').val('');
         self.data.model.custom_sender_addresses.email = address;
@@ -2489,6 +2493,10 @@ iris = {
         self.render();
       });
       window.onbeforeunload = iris.unloadDialog.bind(this);
+    },
+    validateEmail: function(email) {
+        var re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+        return re.test(String(email).toLowerCase());
     },
     modelPersist: function() {
       var self = this;
