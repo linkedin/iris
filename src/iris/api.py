@@ -2645,6 +2645,9 @@ class Application(object):
         cursor.execute(get_application_owners_query, app['id'])
         app['owners'] = [row['name'] for row in cursor]
 
+        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
         cursor.close()
         connection.close()
 
