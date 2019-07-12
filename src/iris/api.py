@@ -571,6 +571,12 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   JOIN `target` on `target`.`id` = `application_owner`.`user_id`
                                   WHERE `application_owner`.`application_id` = %s'''
 
+get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                                  FROM `application_custom_sender_address`
+                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                                  WHERE `application_custom_sender_address`.`application_id` = %s'''
+
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
@@ -2639,6 +2645,9 @@ class Application(object):
         cursor.execute(get_application_owners_query, app['id'])
         app['owners'] = [row['name'] for row in cursor]
 
+        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
         cursor.close()
         connection.close()
 
@@ -2774,6 +2783,38 @@ class Application(object):
                 if kill_owners or add_owners:
                     logger.info('User %s has changed owners for app %s to: %s',
                                 req.context['username'], app_name, ', '.join(new_owners))
+
+            # change the sender address for the application
+            new_addresses = data.get('custom_sender_addresses')
+            if new_addresses:
+                # currently self service custom addresses are only implemented for the iris_smtp vendor but this can easily be extended
+                supported_custom_address_modes = ['email']
+                kill_address_modes = []
+
+                if not isinstance(new_addresses, dict):
+                    raise HTTPBadRequest('To change custom addresses, you must pass a dictionary of mode: address pairings')
+                for mode in new_addresses:
+                    if mode not in supported_custom_address_modes:
+                        raise HTTPBadRequest('%s does not support custom sender addresses', mode)
+
+                for mode in supported_custom_address_modes:
+                    # if mode key exists and value is none add to kill_list, ignore if key is undefined
+                    if new_addresses.get(mode, 'undefined') is None:
+                        kill_address_modes.append(mode)
+
+                for mode, custom_address in new_addresses.items():
+                    if custom_address is not None:
+                        session.execute('''INSERT INTO `application_custom_sender_address`
+                                        VALUES (:app_id, (SELECT `mode`.`id` FROM `mode`
+                                        WHERE `mode`.`name` = :mode), :custom_address)
+                                        ON DUPLICATE KEY UPDATE `sender_address` = :custom_address''',
+                                        {'app_id': app['id'], 'mode': mode, 'custom_address': custom_address})
+
+                for mode in kill_address_modes:
+                    session.execute('''DELETE FROM `application_custom_sender_address`
+                                        WHERE `application_id` = :app_id AND
+                                        `mode_id` = (SELECT `mode`.`id` FROM `mode` WHERE `mode`.`name` = :mode)''',
+                                    {'app_id': app['id'], 'mode': mode})
 
             # Only admins can (optionally) change supported modes
             new_modes = data.get('supported_modes')
@@ -3472,6 +3513,9 @@ class Applications(object):
             cursor.execute(get_application_owners_query, app['id'])
             app['owners'] = [row['name'] for row in cursor]
 
+            cursor.execute(get_application_custom_sender_addresses, app['id'])
+            app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
             del app['id']
         payload = apps
         cursor.close()
@@ -3480,6 +3524,7 @@ class Applications(object):
         resp.body = ujson.dumps(payload)
 
     def on_post(self, req, resp):
+
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:

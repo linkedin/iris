@@ -7,6 +7,7 @@ from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
+from iris import cache
 import quopri
 import time
 import markdown
@@ -53,21 +54,20 @@ class iris_smtp(object):
     def send_email(self, message, customizations=None):
         md = markdown.Markdown()
 
-        if isinstance(customizations, dict):
-            from_address = customizations.get('from', self.config['from'])
-        else:
-            from_address = self.config['from']
-
         start = time.time()
         m = MIMEMultipart('alternative')
+
+        from_address = self.config['from']
+        application = message.get('application')
+        if application:
+            m['X-IRIS-APPLICATION'] = application
+            address = cache.applications.get(application, {}).get('custom_sender_addresses', {}).get('email')
+            if address is not None:
+                from_address = address
 
         priority = message.get('priority')
         if priority:
             m['X-IRIS-PRIORITY'] = priority
-
-        application = message.get('application')
-        if application:
-            m['X-IRIS-APPLICATION'] = application
 
         plan = message.get('plan')
         if plan:
