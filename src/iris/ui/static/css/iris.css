@@ -1516,6 +1516,10 @@ table.dataTable thead .sorting_asc {
   width: 100px;
 }
 
+#add-address-form input {
+  width: auto;
+}
+
 /*
  * Stats page
  */

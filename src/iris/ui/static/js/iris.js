@@ -2397,9 +2397,10 @@ iris = {
         }
         $(this).parent().remove();
       });
-      data.$page.on('click', data.removeAddressButton, function() {
+      data.$page.on('click', data.removeAddressButton, function(e) {
+        e.preventDefault();
         self.data.model.custom_sender_addresses.email = null;
-        $(this).parent().remove();
+        $("#custom-sender-email-value").text('None (using default sender address)');
       });
       data.$page.on('submit', data.addVariableForm, function(e) {
         e.preventDefault();
@@ -2436,11 +2437,11 @@ iris = {
       data.$page.on('submit', data.addAddressForm, function(e) {
         e.preventDefault();
         var address = $('#add-address-box').val();
-        if (address == '') {
+        if (address === '') {
           iris.createAlert('Cannot add empty custom address');
           return;
         }
-        if(self.validateEmail(address) == false){
+        if(self.validateEmail(address) === false){
           iris.createAlert('Email address is invalid. Please make sure it is formatted correctly.');
           return;
         }

@@ -2798,9 +2798,8 @@ class Application(object):
                         raise HTTPBadRequest('%s does not support custom sender addresses', mode)
 
                 for mode in supported_custom_address_modes:
-                    if mode not in new_addresses:
-                        kill_address_modes.append(mode)
-                    elif new_addresses[mode] is None:
+                    # if mode key exists and value is none add to kill_list, ignore if key is undefined
+                    if new_addresses.get(mode, 'undefined') is None:
                         kill_address_modes.append(mode)
 
                 for mode, custom_address in new_addresses.items():
