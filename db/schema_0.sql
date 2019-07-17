@@ -665,6 +665,20 @@ CREATE TABLE `application_owner` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `application_custom_sender_address` defines custom "from" addresses
+--
+
+DROP TABLE IF EXISTS `application_custom_sender_address`;
+CREATE TABLE `application_custom_sender_address` (
+  `application_id` int(11) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  `sender_address` varchar(255) NOT NULL,
+  PRIMARY KEY (`application_id`, `mode_id`),
+  CONSTRAINT `application_custom_sender_address_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_custom_sender_address_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `twilio_delivery_status`
 --
 

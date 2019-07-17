@@ -121,7 +121,6 @@
     {{/if}}
     <br>
 
-
     <div class="light" id="supported-modes-checkboxes">Supported modes:
       {{#each @root.modes}}
         <label><input type="checkbox" name="supported_modes" value="{{this}}" {{#ifIn this @root.supported_modes}}checked{{/ifIn}} {{#if @root.isInViewMode}}disabled{{else}}{{#ifNot @root.allowEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>
@@ -230,6 +229,34 @@
       </form>
     {{/ifNot}}
   </div>
+
+  <div class="module application-default-modes user-settings">
+    <h4>Custom email sender address</h4>
+    <p class="light">This setting overrides the default "from" address for emails this application generates.</p>
+    {{#if @root.isInViewMode}}
+      <span >Custom email "from" address: </span>
+      {{#if custom_sender_addresses.email}} 
+        <span>{{custom_sender_addresses.email}}</span> 
+      {{else}}
+        <span class="light">None (using default sender address)</span>
+      {{/if}}
+    {{else}}
+      <span class="light">Custom email "from" address:</span>
+      {{#if custom_sender_addresses.email}}
+      <span id="custom-sender-email-value">{{custom_sender_addresses.email}}</span> 
+        <form id="add-address-form">
+          <input type="text" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input>
+          <button type="submit" class="btn btn-primary btn-sm"> Update</button>
+          <button class="btn btn-danger btn-sm remove-address" title="Delete custom address">Delete</button>
+          </form>
+      {{else}}
+        <span>None (using default sender address)</span>
+        <form id="add-address-form"><input type="text" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input><button type="submit" class="btn btn-primary btn-sm"> Add</button></form>
+      {{/if}}
+    
+    {{/if}}
+  </div>
+
   <div class="module application-email-incidents user-settings">
     <h4>Emails which create incidents</h4>
     <p class="light">When you send an email with one of these addresses in the "to" header, a new incident will be created.</p>
