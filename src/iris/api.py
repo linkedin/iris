@@ -1986,6 +1986,13 @@ class Notifications(object):
         This role will set the destination to the target value so make sure the target
         is a valid email address, slack channel, slack username, etc.
 
+        Multi-recipient messages are supported for notifications explicitly specifying the
+        "email" mode. To send a multi-recipient message, specify a list of objects defining
+        "role" and "target" attributes. All roles, including "literal_target", are
+        supported. These messages will be sent on a best-effort basis to as many targets
+        as is possible. If any role:target pairs are found to be invalid, they will be
+        skipped, and the message will be delivered to all other targets.
+
         **Example request**:
 
         .. sourcecode:: http
@@ -2025,6 +2032,27 @@ class Notifications(object):
                "subject": "wake up",
                "body": "something is on fire",
                "mode": "slack"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "target_list": {
+                   {
+                       "role": "literal_target",
+                       "target": "list@example.com"
+                   },
+                   {
+                       "role": "user",
+                       "target": "jdoe"
+                   }
+               }
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "email"
            }
 
         **Example response**:
