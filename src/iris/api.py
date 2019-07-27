@@ -4688,6 +4688,32 @@ class NotificationCategories(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
+        '''
+        Notification category search. Can filter based on id, name, app name,
+        and mode. Returns a list of categories matching the specified filters.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/categories?name__startswith=foo&application=app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "id": 123,
+                    "name": "foobar",
+                    "application": "app",
+                    "mode": "email"
+                }
+            ]
+        '''
         conn = db.engine.raw_connection()
         cursor = conn.cursor(db.dict_cursor)
         query = category_query + ' WHERE ' + ' AND '.join(
@@ -4699,6 +4725,36 @@ class NotificationCategories(object):
         resp.body = ujson.dumps(data)
 
     def on_post(self, req, resp):
+        '''
+        Create notification category. Id for the new category will be returned.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "name": "foo-category",
+               "description": "foobar",
+               "application": "bar-app",
+               "mode": "email"
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 201 Created
+           Content-Type: application/json
+
+           1
+
+        :statuscode 201: category created
+        :statuscode 400: invalid request, missing required attributes
+        :statuscode 401: user/app is not allowed to create categories for this app
+        '''
         post_body = ujson.loads(req.context['body'])
 
         if not {'application', 'name', 'description', 'mode'}.issubset(post_body.keys()):
@@ -4706,26 +4762,69 @@ class NotificationCategories(object):
 
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            '''
-            INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
-            ((SELECT `id` FROM `application` WHERE `name` = %(application)s),
-             %(name)s,
-             %(description)s,
-             (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
-            ''', post_body)
-        conn.commit()
+        try:
+            # Check permissions
+            app = post_body['application']
+            if req.context['is_admin'] or req.context.get('app', {}).get('name') == app:
+                permission = 1
+            else:
+                cursor.execute(
+                    '''SELECT 1
+                    FROM `application_owner`
+                    JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                    JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                    WHERE `target`.`name` = %s
+                    AND `application`.`name` = %s''',
+                    (req.context['username'], app))
+                permission = cursor.fetchone()
+            if not permission:
+                raise HTTPUnauthorized('You don\'t have permissions to create this category')
 
-        resp.status = HTTP_201
-        resp.body = str(cursor.lastrowid)
-        cursor.close()
-        conn.close()
+            cursor.execute(
+                '''
+                INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
+                ((SELECT `id` FROM `application` WHERE `name` = %(application)s),
+                %(name)s,
+                %(description)s,
+                (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                ''', post_body)
+            conn.commit()
+            resp.status = HTTP_201
+            resp.body = str(cursor.lastrowid)
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class NotificationCategory(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, category_id):
+        '''
+        Get notification category by id. Returns a category object, defining
+        name, id, application, and mode (where mode is the default send mode
+        for that category)
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/categories/123 HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            {
+                "id": 123,
+                "name": "foobar",
+                "application": "app",
+                "mode": "email"
+            }
+        '''
         conn = db.engine.raw_connection()
         cursor = conn.cursor(db.dict_cursor)
         cursor.execute('''
@@ -4745,6 +4844,34 @@ class NotificationCategory(object):
             resp.body = ujson.dumps(category)
 
     def on_put(self, req, resp, category_id):
+        '''
+        Edit notification category. Allows changing mode, name, and description
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           PUT /v0/categories/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "name": "bar-category",
+               "description": "foobar",
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 204 No Content
+           Content-Type: application/json
+
+           1
+
+        :statuscode 204: category updated
+        :statuscode 400: invalid request, invalid attributes specified
+        :statuscode 401: user/app is not allowed to edit this category
+        '''
         data = ujson.loads(req.context['body'])
         if not set(data.keys()).issubset({'name', 'description', 'mode'}):
             raise HTTPBadRequest('Invalid attributes specified')
@@ -4767,8 +4894,27 @@ class NotificationCategory(object):
         conn.commit()
         cursor.close()
         conn.close()
+        resp.status = HTTP_204
 
     def on_delete(self, req, resp, category_id):
+        '''
+        Delete notification category by id.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           DELETE /v0/categories/123 HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            []
+        '''
         self.check_permissions(req, resp, category_id)
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
@@ -4776,6 +4922,7 @@ class NotificationCategory(object):
         conn.commit()
         cursor.close()
         conn.close()
+        resp.status = HTTP_204
 
     def check_permissions(self, req, resp, category_id):
         if req.context['is_admin']:
@@ -4804,6 +4951,32 @@ class CategoryOverrides(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, username, application=None):
+        '''
+        Get notification category overrides by user. Returns a list of override
+        objects, defining the app, category, and override mode. If no application
+        is provided in the URL, returns all category overrides for the user.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "application": "foo-app",
+                    "category": "bar-category",
+                    "mode": "drop"
+                }
+            ]
+        '''
         query = '''
             SELECT `mode`.`name` as mode, `notification_category`.`name` as category, `application`.`name` as application
             FROM `category_override` JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
@@ -4823,6 +4996,36 @@ class CategoryOverrides(object):
         conn.close()
 
     def on_post(self, req, resp, username, application):
+        '''
+        Create and edit a user's overrides for an application. Takes
+        a mapping of category_name: mode. For each category passed, either
+        creates or overwrites the user's settings for that category, mapping
+        it to the given mode. If the mode is null/None, instead deletes that
+        mapping to revert the category setting to default. e.g. passing
+        {"foo": "email", "bar": None} will delete the setting for "bar" and
+        map "foo" to "email", regardless of whether "foo" previously had
+        another setting.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "foo-category": "drop",
+               "bar-category": null,
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 201 Created
+           Content-Type: application/json
+
+        '''
         data = ujson.loads(req.context['body'])
         insert_count = 0
         query_params = []
@@ -4877,6 +5080,25 @@ class CategoryOverrides(object):
             conn.close()
 
     def on_delete(self, req, resp, username, application):
+        '''
+        Delete a user's category settings for a given app, removing all
+        overrides for that app. Essentially sets all categories back to
+        default.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           DELETE /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 204 No Content
+            Content-Type: application/json
+
+        '''
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -4890,6 +5112,7 @@ class CategoryOverrides(object):
         conn.commit()
         cursor.close()
         conn.close()
+        resp.status = HTTP_204
 
 
 def update_cache_worker():

@@ -3325,7 +3325,7 @@ def test_category(sample_application_name, sample_admin_user, sample_user):
 
     # Test delete
     re = requests.delete(base_url + 'categories/%s' % category_id, headers=username_header(sample_admin_user))
-    assert re.status_code == 200
+    assert re.status_code == 204
     re = requests.get(base_url + 'categories/%s' % category_id)
     assert re.status_code == 404
 
@@ -3418,9 +3418,9 @@ def test_category_override(sample_application_name, sample_application_name2, sa
 
     # Clean up categories
     re = requests.delete(base_url + 'categories/%s' % category_id, headers=username_header(sample_admin_user))
-    assert re.status_code == 200
+    assert re.status_code == 204
     re = requests.delete(base_url + 'categories/%s' % category_id_2, headers=username_header(sample_admin_user))
-    assert re.status_code == 200
+    assert re.status_code == 204
 
 
 def test_post_category_notification(sample_application_name, sample_user, sample_admin_user):
