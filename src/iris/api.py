@@ -571,6 +571,35 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   JOIN `target` on `target`.`id` = `application_owner`.`user_id`
                                   WHERE `application_owner`.`application_id` = %s'''
 
+get_application_categories = '''
+    SELECT `notification_category`.`id`, `notification_category`.`name`,
+        `notification_category`.`description`, `mode`.`name` AS mode
+    FROM `notification_category`
+    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+    WHERE `application_id` = %s'''
+
+category_query = '''
+    SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
+        `notification_category`.`description`, `mode`.`name` as mode
+    FROM `notification_category`
+    JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+    JOIN `mode` ON `mode`.`id` = `notification_category`.`mode_id`
+'''
+
+category_filters = {
+    'id': '`notification_category`.`id`',
+    'name': '`notification_category`.`name`',
+    'application': '`application`.`name`',
+    'mode': '`mode`.`name`'
+}
+
+category_filter_types = {
+    'id': str,
+    'name': str,
+    'application': str,
+    'mode': str
+}
+
 get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
                                   FROM `application_custom_sender_address`
                                   JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
@@ -586,7 +615,7 @@ def stream_incidents_with_context(cursor, title=False):
         if title:
             title_variable_name = row.get('title_variable_name')
             if title_variable_name:
-                row['title'] = row['context'][title_variable_name]
+                row['title'] = row['context'].get(title_variable_name)
             else:
                 row['title'] = None
         yield row
@@ -1986,6 +2015,13 @@ class Notifications(object):
         This role will set the destination to the target value so make sure the target
         is a valid email address, slack channel, slack username, etc.
 
+        Multi-recipient messages are supported for notifications explicitly specifying the
+        "email" mode. To send a multi-recipient message, specify a list of objects defining
+        "role" and "target" attributes. All roles, including "literal_target", are
+        supported. These messages will be sent on a best-effort basis to as many targets
+        as is possible. If any role:target pairs are found to be invalid, they will be
+        skipped, and the message will be delivered to all other targets.
+
         **Example request**:
 
         .. sourcecode:: http
@@ -2025,6 +2061,27 @@ class Notifications(object):
                "subject": "wake up",
                "body": "something is on fire",
                "mode": "slack"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "target_list": {
+                   {
+                       "role": "literal_target",
+                       "target": "list@example.com"
+                   },
+                   {
+                       "role": "user",
+                       "target": "jdoe"
+                   }
+               }
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "email"
            }
 
         **Example response**:
@@ -2086,15 +2143,46 @@ class Notifications(object):
                 if not mode_id:
                     raise HTTPBadRequest('Invalid mode', message['mode'])
                 message['mode_id'] = mode_id
+            elif 'category' in message:
+                app = req.context.get('app')
+                if app is None:
+                    raise HTTPBadRequest('Invalid app specified for this notification category')
+                category = app['categories'].get(message['category'])
+                if category is None:
+                    # Add an additional DB check here in case our cache hasn't been refreshed yet.
+                    # This should cover the case when a user creates a category and immediately sends
+                    # a message for it, but shouldn't affect performance in the common case
+                    conn = db.engine.raw_connection()
+                    cursor = conn.cursor(db.dict_cursor)
+                    try:
+                        cursor.execute(
+                            '''SELECT `notification_category`.`id`, `notification_category`.`name`,
+                                `notification_category`.`mode_id`, `mode`.`name` AS mode
+                            FROM `notification_category`
+                            JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+                            WHERE `application_id` = %s and `notification_category`.`name`= %s''',
+                            (app['id'], message['category']))
+                        category = cursor.fetchone()
+                    except Exception:
+                        category = None
+                    finally:
+                        cursor.close()
+                        conn.close()
+                    # If we still don't have a category, raise 400
+                    if category is None:
+                        raise HTTPBadRequest('No category named %s exists for this app' % message['category'])
+                message['category_id'] = category['id']
+                message['category_mode_id'] = category['mode_id']
+                message['category_mode'] = category['mode']
             else:
                 raise HTTPBadRequest(
-                    'Both priority and mode are missing, at least one of it is required')
+                    'Priority, mode, and category are missing, at least one is required')
             if message['role'] == 'literal_target':
                 # target_literal requires that a mode be set and no priority be defined
                 if 'mode' not in message:
                     raise HTTPBadRequest('INVALID mode not set for literal_target role')
-                if 'priority' in message:
-                    raise HTTPBadRequest('INVALID role literal_target does not support priority')
+                if 'priority' in message or 'category' in message:
+                    raise HTTPBadRequest('INVALID role literal_target does not support priority or category')
                 message['unexpanded'] = True
 
         # Avoid problems down the line if we have no way of creating the
@@ -2647,6 +2735,9 @@ class Application(object):
 
         cursor.execute(get_application_custom_sender_addresses, app['id'])
         app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+        cursor.execute(get_application_categories, app['id'])
+        app['categories'] = [row for row in cursor]
 
         cursor.close()
         connection.close()
@@ -3515,6 +3606,9 @@ class Applications(object):
 
             cursor.execute(get_application_custom_sender_addresses, app['id'])
             app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+            cursor.execute(get_application_categories, app['id'])
+            app['categories'] = [row for row in cursor]
 
             del app['id']
         payload = apps
@@ -4625,6 +4719,327 @@ class Comments(object):
         conn.close()
 
 
+class NotificationCategories(object):
+    allow_read_no_auth = True
+
+    def on_get(self, req, resp, application=None):
+        '''
+        Notification category search. Can filter based on id, name, app name,
+        and mode. Returns a list of categories matching the specified filters.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/categories?name__startswith=foo&application=app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "id": 123,
+                    "name": "foobar",
+                    "application": "app",
+                    "mode": "email"
+                }
+            ]
+        '''
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        if application:
+            req.params['application'] = application
+        query = category_query + ' WHERE ' + ' AND '.join(
+            gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
+        cursor.execute(query)
+        data = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        resp.body = ujson.dumps(data)
+
+    def on_post(self, req, resp, application):
+        '''
+        Create notification categories for a given app. Pass a list of categories representing
+        all notification categories for the app. This endpoint will create, edit, and delete
+        the app's categories to match the list passed in.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories/foo-app HTTP/1.1
+           Content-Type: application/json
+
+            [
+               {
+                    "name": "foo-category",
+                    "description": "foobar",
+                    "mode": "email"
+                },
+                {
+                    "name": "bar-category",
+                    "description": "barbaz",
+                    "mode": "slack"
+                }
+            ]
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+
+        :statuscode 200: categories saved
+        :statuscode 400: invalid request, missing required attributes
+        :statuscode 401: user/app is not allowed to create categories for this app
+        '''
+        new_categories = ujson.loads(req.context['body'])
+
+        if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
+            raise HTTPBadRequest('Missing required attributes')
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT `id` FROM `application` WHERE `name` = %s', application)
+            app_id = cursor.fetchone()
+            if app_id is None:
+                raise HTTPNotFound()
+            else:
+                app_id = app_id[0]
+
+            # Check ownership permissions
+            if req.context['is_admin'] or req.context.get('app', {}).get('name') == application:
+                permission = 1
+            else:
+                cursor.execute(
+                    '''SELECT 1
+                    FROM `application_owner`
+                    JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                    WHERE `target`.`name` = %s
+                    AND `application_id` = %s''',
+                    (req.context['username'], app_id))
+                permission = cursor.fetchone()
+            if not permission:
+                raise HTTPUnauthorized('You don\'t have permissions to create this category')
+
+            # Split categories into insert, delete, and update
+            cursor.execute('SELECT `name` FROM `notification_category` WHERE `application_id` = %s', app_id)
+            old_categories = {row[0] for row in cursor}
+            delete_categories = old_categories - {c['name'] for c in new_categories}
+            insert_categories = []
+            update_categories = []
+            for category in new_categories:
+                if category['name'] in old_categories:
+                    update_categories.append(category)
+                else:
+                    category['app_id'] = app_id
+                    insert_categories.append(category)
+
+            if insert_categories:
+                cursor.executemany(
+                    '''
+                    INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
+                    (%(app_id)s,
+                    %(name)s,
+                    %(description)s,
+                    (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                    ON DUPLICATE KEY UPDATE
+                    `description` = VALUES(`description`),
+                    `mode_id` = VALUES(`mode_id`)
+                    ''', insert_categories)
+            if update_categories:
+                cursor.executemany(
+                    '''UPDATE `notification_category`
+                    SET `description` = %(description)s,
+                    `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
+                    update_categories)
+            if delete_categories:
+                cursor.execute(
+                    'DELETE FROM `notification_category` WHERE `application_id` = %s AND `name` IN %s',
+                    (app_id, delete_categories))
+            conn.commit()
+            resp.status = HTTP_200
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class CategoryOverrides(object):
+    enforce_user = True
+    allow_read_no_auth = False
+
+    def on_get(self, req, resp, username, application=None):
+        '''
+        Get notification category overrides by user. Returns a list of override
+        objects, defining the app, category, and override mode. If no application
+        is provided in the URL, returns all category overrides for the user.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "application": "foo-app",
+                    "category": "bar-category",
+                    "mode": "drop"
+                }
+            ]
+        '''
+        query = '''
+            SELECT `mode`.`name` as mode, `notification_category`.`name` as category, `application`.`name` as application
+            FROM `category_override` JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+            JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+            JOIN `target` ON `target`.`id` = `category_override`.`user_id`
+            JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+            WHERE `target`.`name` = %s'''
+        query_params = [username]
+        if application is not None:
+            query_params.append(application)
+            query += ' AND `application`.`name` = %s'
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(query, query_params)
+        resp.body = ujson.dumps(cursor.fetchall())
+        cursor.close()
+        conn.close()
+
+    def on_post(self, req, resp, username, application):
+        '''
+        Create and edit a user's overrides for an application. Takes
+        a mapping of category_name: mode. For each category passed, either
+        creates or overwrites the user's settings for that category, mapping
+        it to the given mode. If the mode is null/None, instead deletes that
+        mapping to revert the category setting to default. e.g. passing
+        {"foo": "email", "bar": None} will delete the setting for "bar" and
+        map "foo" to "email", regardless of whether "foo" previously had
+        another setting.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "foo-category": "drop",
+               "bar-category": null,
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 201 Created
+           Content-Type: application/json
+
+        '''
+        data = ujson.loads(req.context['body'])
+        insert_count = 0
+        query_params = []
+        del_categories = []
+        try:
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+            # Find user id
+            cursor.execute('''
+                SELECT `target`.`id` FROM `target`
+                JOIN `target_type` ON `target`.`type_id` = `target_type`.`id`
+                WHERE `target`.`name` = %s AND `target_type`.`name` = 'user'
+                ''', username)
+            user_id = cursor.fetchone()
+            if user_id is None:
+                raise HTTPBadRequest('Invalid user specified')
+            else:
+                user_id = user_id[0]
+
+            # Get list of category ids
+            cursor.execute('''
+                SELECT `notification_category`.`id`, `notification_category`.`name`
+                FROM `notification_category`
+                JOIN `application` ON `application`.`id` = `application_id`
+                WHERE `application`.`name` = %s''', application)
+            categories = {row[1]: row[0] for row in cursor}
+            for category, mode in data.items():
+                if category not in categories:
+                    raise HTTPBadRequest('Invalid category specified')
+                # Remove override setting if mode is None
+                if mode is None:
+                    del_categories.append(categories[category])
+                # Otherwise, add info to query params
+                else:
+                    query_params += [user_id, categories[category], cache.modes[mode]]
+                    insert_count += 1
+
+            # Insert all the new settings, then delete the ones that need to go
+            if insert_count > 0:
+                query = '''
+                    INSERT INTO `category_override` (`user_id`, `category_id`, `mode_id`) VALUES
+                    %s ON DUPLICATE KEY UPDATE `mode_id` = VALUES(`mode_id`)
+                    ''' % ','.join('(%s, %s, %s)' for i in range(insert_count))
+                cursor.execute(query, query_params)
+            if del_categories:
+                cursor.execute('DELETE FROM `category_override` WHERE `category_id` IN %s AND `user_id` = %s',
+                               (del_categories, user_id))
+            conn.commit()
+            resp.status = HTTP_201
+        finally:
+            cursor.close()
+            conn.close()
+
+    def on_delete(self, req, resp, username, application):
+        '''
+        Delete a user's category settings for a given app, removing all
+        overrides for that app. Essentially sets all categories back to
+        default.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           DELETE /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 204 No Content
+            Content-Type: application/json
+
+        '''
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE `category_override` FROM `category_override`
+            JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+            JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+            WHERE `application`.`name` = %s AND `category_override`.`user_id` =
+                (SELECT `id` FROM `target` WHERE `name` = %s AND `type_id` =
+                    (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+            ''', (application, username))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        resp.status = HTTP_204
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -4703,6 +5118,9 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
+
+    api.add_route('/v0/categories/{application}', NotificationCategories())
+    api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
