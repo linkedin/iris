@@ -9,6 +9,7 @@ import pytest
 import json
 import requests
 import copy
+import logging
 import iris.bin.iris_ctl as iris_ctl
 import iris.bin.app_stats as app_stats
 
@@ -2165,6 +2166,7 @@ def test_stats():
 
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         # run stats script
+        app_stats.logger.setLevel(logging.ERROR)
         app_stats.stats_task(conn, cursor)
         # check that gobal stats were initiated
         cursor.execute('SELECT DISTINCT statistic FROM global_stats')
@@ -2183,6 +2185,7 @@ def test_app_stats(sample_application_name):
     with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
         # run stats script
         app_stats.stats_task(conn, cursor)
+        app_stats.logger.setLevel(logging.ERROR)
         # check that app stats were initialized
         cursor.execute('SELECT DISTINCT statistic FROM application_stats')
         # there should be 22 unique statistics calculated
@@ -2210,7 +2213,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
         'body': 'foo'
     })
     assert re.status_code == 400
-    assert 'Both priority and mode are missing' in re.text
+    assert 'Priority, mode, and category are missing' in re.text
 
     re = requests.post(base_url + 'notifications', json={
         'role': 'user',
@@ -2281,7 +2284,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
         'body': '',
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 400
-    assert re.json()['title'] == 'INVALID role literal_target does not support priority'
+    assert re.json()['title'] == 'INVALID role literal_target does not support priority or category'
 
     re = requests.post(base_url + 'notifications', json={
         'mode': 'email',
@@ -3272,86 +3275,102 @@ def test_comment(sample_user, sample_team, sample_application_name, sample_templ
     assert comments[1]['author'] == sample_user
 
 
-def clean_categories(app, category_names, admin):
+def clean_categories(app, admin):
     # Helper to clean up categories before creating them
-    re = requests.get(base_url + 'categories?application=%s' % app)
-    categories = re.json()
-    del_ids = []
-    for c in categories:
-        if c['name'] in category_names:
-            del_ids.append(c['id'])
-    for i in del_ids:
-        requests.delete(base_url + 'categories/%s' % i, headers=username_header(admin))
+    re = requests.post(base_url + 'categories/%s' % app, json=[], headers=username_header(admin))
+    assert re.status_code == 200
 
 
 def test_category(sample_application_name, sample_admin_user, sample_user):
     category_name = 'test_category'
-    clean_categories(sample_application_name, category_name, sample_admin_user)
+    clean_categories(sample_application_name, sample_admin_user)
     # Test creating category
-    re = requests.post(base_url + 'categories', json={
-        'name': category_name,
-        'application': sample_application_name,
-        'description': 'foobar',
-        'mode': 'email'
-    })
-    assert re.status_code == 201
-    category_id = re.json()
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
     # Make sure the category exists and test GET
-    re = requests.get(base_url + 'categories?application=' + sample_application_name)
+    re = requests.get(base_url + 'categories/' + sample_application_name)
     assert re.status_code == 200
     categories = re.json()
-    assert any(c['id'] == category_id for c in categories)
+    assert any(c['name'] == category_name for c in categories)
+
+    # Check that app ownership is required for category creation
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }])
+    assert re.status_code == 401
 
     # Test name filters with GET
-    re = requests.get(base_url + 'categories?name__startswith=' + category_name)
+    re = requests.get(base_url + 'categories/%s?name__startswith=%s' % (sample_application_name, category_name))
     assert re.status_code == 200
     categories = re.json()
-    assert any(c['id'] == category_id for c in categories)
+    assert any(c['name'] == category_name for c in categories)
 
-    # Test GET with single category (by id)
-    re = requests.get(base_url + 'categories/%s' % category_id)
+    # Test GET with application specified
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
     assert re.status_code == 200
-    category = re.json()
-    assert category['id'] == category_id
+    categories = re.json()
+    assert any(c['name'] == category_name for c in categories)
 
     # Test edit category
-    re = requests.put(
-        base_url + 'categories/%s' % category_id,
-        headers=username_header(sample_admin_user),
-        json={'description': 'barfoo'})
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
     assert re.status_code == 200
-    re = requests.get(base_url + 'categories/%s' % category_id)
-    assert re.json()['description'] == 'barfoo'
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
+    data = re.json()[0]
+    assert data['description'] == 'barfoo'
+    assert data['mode'] == 'slack'
 
     # Test delete
-    re = requests.delete(base_url + 'categories/%s' % category_id, headers=username_header(sample_admin_user))
-    assert re.status_code == 204
-    re = requests.get(base_url + 'categories/%s' % category_id)
-    assert re.status_code == 404
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
+    assert len(re.json()) == 0
 
 
 def test_category_override(sample_application_name, sample_application_name2, sample_user, sample_user2, sample_admin_user):
     category_name = 'test_category'
     category_name_2 = 'test_category_2'
-    clean_categories(sample_application_name, {category_name, category_name_2}, sample_admin_user)
+    clean_categories(sample_application_name, sample_admin_user)
+
+    category_data = [
+        {
+            'name': category_name,
+            'description': 'foobar',
+            'mode': 'email'
+        },
+        {
+            'name': category_name_2,
+            'description': 'foobar',
+            'mode': 'email'
+        }
+    ]
 
     # Set up categories
-    re = requests.post(base_url + 'categories', json={
-        'name': category_name,
-        'application': sample_application_name,
-        'description': 'foobar',
-        'mode': 'email'
-    })
-    assert re.status_code == 201
-    category_id = re.json()
-    re = requests.post(base_url + 'categories', json={
-        'name': category_name_2,
-        'application': sample_application_name,
-        'description': 'foobar',
-        'mode': 'email'
-    })
-    assert re.status_code == 201
-    category_id_2 = re.json()
+    re = requests.post(
+        base_url + 'categories/' + sample_application_name,
+        json=category_data,
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
 
     # Test create overrides
     re = requests.post(
@@ -3408,7 +3427,7 @@ def test_category_override(sample_application_name, sample_application_name2, sa
     re = requests.delete(
         base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
         headers=username_header(sample_user))
-    assert re.status_code == 200
+    assert re.status_code == 204
     re = requests.get(
         base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
         headers=username_header(sample_user))
@@ -3417,10 +3436,11 @@ def test_category_override(sample_application_name, sample_application_name2, sa
     assert len(data) == 0
 
     # Clean up categories
-    re = requests.delete(base_url + 'categories/%s' % category_id, headers=username_header(sample_admin_user))
-    assert re.status_code == 204
-    re = requests.delete(base_url + 'categories/%s' % category_id_2, headers=username_header(sample_admin_user))
-    assert re.status_code == 204
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
 
 
 def test_post_category_notification(sample_application_name, sample_user, sample_admin_user):
@@ -3434,15 +3454,17 @@ def test_post_category_notification(sample_application_name, sample_user, sample
         pytest.skip('Skipping this test as sender is not running/reachable.')
 
     category_name = 'test_category'
-    clean_categories(sample_application_name, [category_name], sample_admin_user)
+    clean_categories(sample_application_name, sample_admin_user)
     # Set up category
-    re = requests.post(base_url + 'categories', json={
-        'name': category_name,
-        'application': sample_application_name,
-        'description': 'foobar',
-        'mode': 'email'
-    })
-    assert re.status_code == 201
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
 
     re = requests.post(base_url + 'notifications', json={
         'role': 'user',
@@ -3453,7 +3475,7 @@ def test_post_category_notification(sample_application_name, sample_user, sample
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
-    clean_categories(sample_application_name, [category_name], sample_admin_user)
+    clean_categories(sample_application_name, sample_admin_user)
 
 
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")

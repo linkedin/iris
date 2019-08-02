@@ -572,7 +572,7 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   WHERE `application_owner`.`application_id` = %s'''
 category_query = '''
     SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
-        `mode`.`name` as mode
+        `notification_category`.`description`, `mode`.`name` as mode
     FROM `notification_category`
     JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
     JOIN `mode` ON `mode`.`id` = `notification_category`.`mode_id`
@@ -2141,7 +2141,28 @@ class Notifications(object):
                     raise HTTPBadRequest('Invalid app specified for this notification category')
                 category = app['categories'].get(message['category'])
                 if category is None:
-                    raise HTTPBadRequest('No category named %s exists for this app' % message['category'])
+                    # Add an additional DB check here in case our cache hasn't been refreshed yet.
+                    # This should cover the case when a user creates a category and immediately sends
+                    # a message for it, but shouldn't affect performance in the common case
+                    conn = db.engine.raw_connection()
+                    cursor = conn.cursor(db.dict_cursor)
+                    try:
+                        cursor.execute(
+                            '''SELECT `notification_category`.`id`, `notification_category`.`name`,
+                                `notification_category`.`mode_id`, `mode`.`name` AS mode
+                            FROM `notification_category`
+                            JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+                            WHERE `application_id` = %s and `notification_category`.`name`= %s''',
+                            (app['id'], message['category']))
+                        category = cursor.fetchone()
+                    except Exception:
+                        category = None
+                    finally:
+                        cursor.close()
+                        conn.close()
+                    # If we still don't have a category, raise 400
+                    if category is None:
+                        raise HTTPBadRequest('No category named %s exists for this app' % message['category'])
                 message['category_id'] = category['id']
                 message['category_mode_id'] = category['mode_id']
                 message['category_mode'] = category['mode']
@@ -4687,7 +4708,7 @@ class Comments(object):
 class NotificationCategories(object):
     allow_read_no_auth = True
 
-    def on_get(self, req, resp):
+    def on_get(self, req, resp, application=None):
         '''
         Notification category search. Can filter based on id, name, app name,
         and mode. Returns a list of categories matching the specified filters.
@@ -4716,6 +4737,8 @@ class NotificationCategories(object):
         '''
         conn = db.engine.raw_connection()
         cursor = conn.cursor(db.dict_cursor)
+        if application:
+            req.params['application'] = application
         query = category_query + ' WHERE ' + ' AND '.join(
             gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
         cursor.execute(query)
@@ -4724,223 +4747,111 @@ class NotificationCategories(object):
         conn.close()
         resp.body = ujson.dumps(data)
 
-    def on_post(self, req, resp):
+    def on_post(self, req, resp, application):
         '''
-        Create notification category. Id for the new category will be returned.
+        Create notification categories for a given app. Pass a list of categories representing
+        all notification categories for the app. This endpoint will create, edit, and delete
+        the app's categories to match the list passed in.
 
         **Example request**:
 
         .. sourcecode:: http
 
-           POST /v0/categories HTTP/1.1
+           POST /v0/categories/foo-app HTTP/1.1
            Content-Type: application/json
 
-           {
-               "name": "foo-category",
-               "description": "foobar",
-               "application": "bar-app",
-               "mode": "email"
-           }
+            [
+               {
+                    "name": "foo-category",
+                    "description": "foobar",
+                    "mode": "email"
+                },
+                {
+                    "name": "bar-category",
+                    "description": "barbaz",
+                    "mode": "slack"
+                }
+            ]
 
         **Example response**:
 
         .. sourcecode:: http
 
-           HTTP/1.1 201 Created
+           HTTP/1.1 200 OK
            Content-Type: application/json
 
-           1
 
-        :statuscode 201: category created
+        :statuscode 200: categories saved
         :statuscode 400: invalid request, missing required attributes
         :statuscode 401: user/app is not allowed to create categories for this app
         '''
-        post_body = ujson.loads(req.context['body'])
+        new_categories = ujson.loads(req.context['body'])
 
-        if not {'application', 'name', 'description', 'mode'}.issubset(post_body.keys()):
+        if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
             raise HTTPBadRequest('Missing required attributes')
 
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
         try:
-            # Check permissions
-            app = post_body['application']
-            if req.context['is_admin'] or req.context.get('app', {}).get('name') == app:
+            cursor.execute('SELECT `id` FROM `application` WHERE `name` = %s', application)
+            app_id = cursor.fetchone()
+            if app_id is None:
+                raise HTTPNotFound()
+            else:
+                app_id = app_id[0]
+
+            # Check ownership permissions
+            if req.context['is_admin'] or req.context.get('app', {}).get('name') == application:
                 permission = 1
             else:
                 cursor.execute(
                     '''SELECT 1
                     FROM `application_owner`
                     JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                    JOIN `application` on `application`.`id` = `application_owner`.`application_id`
                     WHERE `target`.`name` = %s
-                    AND `application`.`name` = %s''',
-                    (req.context['username'], app))
+                    AND `application_id` = %s''',
+                    (req.context['username'], app_id))
                 permission = cursor.fetchone()
             if not permission:
                 raise HTTPUnauthorized('You don\'t have permissions to create this category')
 
-            cursor.execute(
-                '''
-                INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
-                ((SELECT `id` FROM `application` WHERE `name` = %(application)s),
-                %(name)s,
-                %(description)s,
-                (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
-                ''', post_body)
+            # Split categories into insert, delete, and update
+            cursor.execute('SELECT `name` FROM `notification_category` WHERE `application_id` = %s', app_id)
+            old_categories = {row[0] for row in cursor}
+            delete_categories = old_categories - {c['name'] for c in new_categories}
+            insert_categories = []
+            update_categories = []
+            for category in new_categories:
+                if category['name'] in old_categories:
+                    update_categories.append(category)
+                else:
+                    category['app_id'] = app_id
+                    insert_categories.append(category)
+
+            if insert_categories:
+                cursor.executemany(
+                    '''
+                    INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
+                    (%(app_id)s,
+                    %(name)s,
+                    %(description)s,
+                    (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                    ON DUPLICATE KEY UPDATE
+                    `description` = VALUES(`description`),
+                    `mode_id` = VALUES(`mode_id`)
+                    ''', insert_categories)
+            if update_categories:
+                cursor.executemany(
+                    '''UPDATE `notification_category`
+                    SET `description` = %(description)s,
+                    `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
+                    update_categories)
+            if delete_categories:
+                cursor.execute(
+                    'DELETE FROM `notification_category` WHERE `application_id` = %s AND `name` IN %s',
+                    (app_id, delete_categories))
             conn.commit()
-            resp.status = HTTP_201
-            resp.body = str(cursor.lastrowid)
-        finally:
-            cursor.close()
-            conn.close()
-
-
-class NotificationCategory(object):
-    allow_read_no_auth = True
-
-    def on_get(self, req, resp, category_id):
-        '''
-        Get notification category by id. Returns a category object, defining
-        name, id, application, and mode (where mode is the default send mode
-        for that category)
-
-        **Example request**:
-
-        .. sourcecode:: http
-
-           GET /v0/categories/123 HTTP/1.1
-
-        **Example response**:
-
-        .. sourcecode:: http
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-
-            {
-                "id": 123,
-                "name": "foobar",
-                "application": "app",
-                "mode": "email"
-            }
-        '''
-        conn = db.engine.raw_connection()
-        cursor = conn.cursor(db.dict_cursor)
-        cursor.execute('''
-            SELECT `notification_category`.`id`, `notification_category`.`name`, `mode`.`name` as mode,
-                   `notification_category`.`description`, `application`.`name` as application
-            FROM `notification_category`
-            JOIN `application` ON `notification_category`.`application_id` = `application`.`id`
-            JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
-            WHERE `notification_category`.`id` = %s''', category_id)
-        category = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if category is None:
-            raise HTTPNotFound()
-        else:
-            resp.body = ujson.dumps(category)
-
-    def on_put(self, req, resp, category_id):
-        '''
-        Edit notification category. Allows changing mode, name, and description
-
-        **Example request**:
-
-        .. sourcecode:: http
-
-           PUT /v0/categories/123 HTTP/1.1
-           Content-Type: application/json
-
-           {
-               "name": "bar-category",
-               "description": "foobar",
-           }
-
-        **Example response**:
-
-        .. sourcecode:: http
-
-           HTTP/1.1 204 No Content
-           Content-Type: application/json
-
-           1
-
-        :statuscode 204: category updated
-        :statuscode 400: invalid request, invalid attributes specified
-        :statuscode 401: user/app is not allowed to edit this category
-        '''
-        data = ujson.loads(req.context['body'])
-        if not set(data.keys()).issubset({'name', 'description', 'mode'}):
-            raise HTTPBadRequest('Invalid attributes specified')
-        self.check_permissions(req, resp, category_id)
-        data['category_id'] = category_id
-
-        set_items = []
-        if 'mode' in data:
-            set_items.append('mode_id = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s')
-        if 'name' in data:
-            set_items.append('name = %(name)s')
-        if 'description' in data:
-            set_items.append('description = %(description)s')
-        set_clause = ','.join(set_items)
-        query = 'UPDATE `notification_category` SET %s WHERE id = %%(category_id)s' % set_clause
-
-        conn = db.engine.raw_connection()
-        cursor = conn.cursor()
-        cursor.execute(query, data)
-        conn.commit()
-        cursor.close()
-        conn.close()
-        resp.status = HTTP_204
-
-    def on_delete(self, req, resp, category_id):
-        '''
-        Delete notification category by id.
-
-        **Example request**:
-
-        .. sourcecode:: http
-
-           DELETE /v0/categories/123 HTTP/1.1
-
-        **Example response**:
-
-        .. sourcecode:: http
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-
-            []
-        '''
-        self.check_permissions(req, resp, category_id)
-        conn = db.engine.raw_connection()
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM notification_category WHERE id = %s', category_id)
-        conn.commit()
-        cursor.close()
-        conn.close()
-        resp.status = HTTP_204
-
-    def check_permissions(self, req, resp, category_id):
-        if req.context['is_admin']:
-            return
-        conn = db.engine.raw_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                '''SELECT 1
-                FROM `application_owner`
-                JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                JOIN `notification_category` on `notification_category`.`application_id` = `application_owner`.`application_id`
-                WHERE `target`.`name` = %(username)s
-                AND `notification_category`.`id` = %(category_id)s''',
-                {'username': req.context['username'], 'category_id': category_id})
-            permission = cursor.fetchone()
-            if not permission:
-                raise HTTPUnauthorized('You don\'t have permissions to change this category')
+            resp.status = HTTP_200
         finally:
             cursor.close()
             conn.close()
@@ -5194,8 +5105,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
-    api.add_route('/v0/categories', NotificationCategories())
-    api.add_route('/v0/categories/{category_id}', NotificationCategory())
+    api.add_route('/v0/categories/{application}', NotificationCategories())
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     mobile_config = config.get('iris-mobile', {})
