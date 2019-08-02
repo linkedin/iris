@@ -570,6 +570,14 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   FROM `application_owner`
                                   JOIN `target` on `target`.`id` = `application_owner`.`user_id`
                                   WHERE `application_owner`.`application_id` = %s'''
+
+get_application_categories = '''
+    SELECT `notification_category`.`id`, `notification_category`.`name`,
+        `notification_category`.`description`, `mode`.`name` AS mode
+    FROM `notification_category`
+    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+    WHERE `application_id` = %s'''
+
 category_query = '''
     SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
         `notification_category`.`description`, `mode`.`name` as mode
@@ -2728,6 +2736,9 @@ class Application(object):
         cursor.execute(get_application_custom_sender_addresses, app['id'])
         app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
 
+        cursor.execute(get_application_categories, app['id'])
+        app['categories'] = [row for row in cursor]
+
         cursor.close()
         connection.close()
 
@@ -3595,6 +3606,9 @@ class Applications(object):
 
             cursor.execute(get_application_custom_sender_addresses, app['id'])
             app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+            cursor.execute(get_application_categories, app['id'])
+            app['categories'] = [row for row in cursor]
 
             del app['id']
         payload = apps

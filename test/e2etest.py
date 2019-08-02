@@ -2006,7 +2006,10 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
 
 
 def test_get_applications(sample_application_name):
-    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context', 'default_modes', 'supported_modes', 'owners', 'title_variable', 'mobile_template', 'custom_sender_addresses'])
+    app_keys = set([
+        'variables', 'required_variables', 'name', 'context_template', 'summary_template',
+        'sample_context', 'default_modes', 'supported_modes', 'owners', 'title_variable',
+        'mobile_template', 'custom_sender_addresses', 'categories'])
     # TODO: insert application data before get
     re = requests.get(base_url + 'applications/' + sample_application_name)
     assert re.status_code == 200
