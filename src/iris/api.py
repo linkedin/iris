@@ -2020,7 +2020,9 @@ class Notifications(object):
         "role" and "target" attributes. All roles, including "literal_target", are
         supported. These messages will be sent on a best-effort basis to as many targets
         as is possible. If any role:target pairs are found to be invalid, they will be
-        skipped, and the message will be delivered to all other targets.
+        skipped, and the message will be delivered to all other targets. Each object can
+        also optionally define a "bcc" field, which will mark those targets as bcc if set
+        to true. If no bcc attribute is defined for a target, the default value is false.
 
         **Example request**:
 
@@ -2106,7 +2108,7 @@ class Notifications(object):
         - a priority is given for a target_list
         - both priority and mode are missing
         - invalid priority, mode
-        - both tempalte, body and email_html are missing
+        - both template, body and email_html are missing
         - template, body and email_html is not a string
         - message queue request rejected by sender
         '''

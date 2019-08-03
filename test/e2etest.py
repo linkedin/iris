@@ -2358,7 +2358,7 @@ def test_post_notification(sample_user, sample_team, sample_application_name):
     re = requests.post(base_url + 'notifications', json={
         'target_list': [{'role': 'user', 'target': sample_user},
                         {'role': 'team', 'target': sample_team},
-                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+                        {'role': 'literal_target', 'target': 'foobar@example.com', 'bcc': True}],
         'subject': 'test',
         'mode': 'email',
         'body': 'foo'},
