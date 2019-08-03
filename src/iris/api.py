@@ -2076,7 +2076,8 @@ class Notifications(object):
                    },
                    {
                        "role": "user",
-                       "target": "jdoe"
+                       "target": "jdoe",
+                       "bcc": true
                    }
                }
                "subject": "wake up",
