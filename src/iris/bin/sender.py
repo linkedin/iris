@@ -832,13 +832,16 @@ def set_target_contact(message):
         cursor = connection.cursor()
         for t in message['target']:
             try:
-                cursor.execute(destination_query, {'target': t, 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
-                message['destination'].append(cursor.fetchone()[0])
+                cursor.execute(destination_query, {'target': t['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                if t.get('bcc'):
+                    message['bcc_destination'].append(cursor.fetchone()[0])
+                else:
+                    message['destination'].append(cursor.fetchone()[0])
             except (ValueError, TypeError):
                 continue
         cursor.close()
         connection.close()
-        return bool(message.get('destination'))
+        return bool(message.get('destination') or message.get('bcc_destination'))
 
     try:
         if 'mode' in message or 'mode_id' in message:

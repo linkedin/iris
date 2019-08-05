@@ -80,7 +80,9 @@ class iris_smtp(object):
         m['Date'] = formatdate(localtime=True)
         m['from'] = from_address
         if message.get('multi-recipient'):
-            m['to'] = ','.join(message['destination'])
+            m['to'] = ','.join(set(message['destination']))
+            if message['bcc_destination']:
+                m['bcc'] = ','.join(set(message['bcc_destination']))
         else:
             m['to'] = message['destination']
         if message.get('noreply'):
@@ -128,7 +130,7 @@ class iris_smtp(object):
         conn = None
 
         if message.get('multi-recipient'):
-            email_recipients = message['destination']
+            email_recipients = message['destination'] + message['bcc_destination']
         else:
             email_recipients = [message['destination']]
         # Try reusing previous connection in this worker if we have one

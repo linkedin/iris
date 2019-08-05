@@ -84,7 +84,7 @@ class iris_twilio(object):
         status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
         result = sender(to=message['destination'],
                         from_=from_,
-                        body=content[:480],
+                        body=content[:1600],
                         status_callback=status_callback_url)
 
         send_time = time.time() - start
