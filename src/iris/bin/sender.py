@@ -132,6 +132,10 @@ INSERT_MESSAGE_SQL = '''INSERT INTO `message`
     (`created`, `plan_id`, `plan_notification_id`, `incident_id`, `application_id`, `target_id`, `priority_id`, `body`)
 VALUES (NOW(), %s,%s,%s,%s,%s,%s,%s)'''
 
+BATCH_INSERT_MESSAGE_QUERY = '''INSERT INTO `message`
+    (`created`, `plan_id`, `plan_notification_id`, `incident_id`, `application_id`, `target_id`, `priority_id`, `body`)
+VALUES '''
+
 UNSENT_MESSAGES_SQL = '''SELECT
     `message`.`body`,
     `message`.`id` as `message_id`,
@@ -266,7 +270,7 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
+    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0, 'send_queue_puts_fail_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
     'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0, 'notifications': 0, 'deactivation': 0,
@@ -280,100 +284,117 @@ should_mock_gwatch_renewer = False
 config = None
 
 
-def create_messages(incident_id, plan_notification_id):
-    application_id = cache.incidents[incident_id]['application_id']
-    plan_notification = cache.plan_notifications[plan_notification_id]
-    if plan_notification['role_id'] is None and plan_notification['target_id'] is None:
-        dynamic_info = cache.dynamic_plan_map[incident_id][plan_notification['dynamic_index']]
-        role = cache.roles[dynamic_info['role_id']]['name']
-        target = cache.targets[dynamic_info['target_id']]['name']
-    else:
-        role = cache.roles[plan_notification['role_id']]['name']
-        target = cache.targets[plan_notification['target_id']]['name']
-
-    # find role/priority from plan_notification_id
-    try:
-        names = cache.targets_for_role(role, target)
-    except IrisRoleLookupException as e:
-        names = None
-        metrics.incr('role_target_lookup_error')
-        lookup_fail_reason = str(e)
-    else:
-        lookup_fail_reason = None
-
-    priority_id = plan_notification['priority_id']
-    redirect_to_plan_owner = False
-    body = ''
-
-    if not names:
-
-        # if message is optional don't bother the creator, simply return true instead
-        if plan_notification['optional']:
-            return True
-
-        # Try to get creator of the plan and nag them instead
-        name = None
-        try:
-            name = cache.plans[plan_notification['plan_id']]['creator']
-        except (KeyError, TypeError):
-            pass
-
-        if not name:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                          'role: %s, target: %s, result: %s and failed looking '
-                          'up the plan\'s creator'),
-                         incident_id, plan_notification_id, role, target, names)
-            return False
-
-        try:
-            priority_id = api_cache.priorities['low']['id']
-        except KeyError:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                          'role: %s, target: %s, result: %s and failed looking '
-                          'up ID for low priority'),
-                         incident_id, plan_notification_id, role, target, names)
-            return False
-
-        logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                      'role: %s, target: %s, result: %s. '
-                      'Reaching out to %s instead and lowering priority to low (%s)'),
-                     incident_id, plan_notification_id, role, target, names, name, priority_id)
-
-        body = ('You are receiving this as you created this plan and we can\'t resolve'
-                ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
-
-        names = [name]
-        redirect_to_plan_owner = True
-
+# msg_info takes the form [(incident_id, plan_notification_id), ...]
+def create_messages(msg_info):
+    msg_count = 0
+    query_params = []
+    values_count = 0
+    error_incident_ids = set()
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
 
-    for name in names:
-        t = cache.target_names[name]
-        if t:
-            target_id = t['id']
-            cursor.execute(INSERT_MESSAGE_SQL,
-                           (plan_notification['plan_id'], plan_notification_id, incident_id,
-                            application_id, target_id, priority_id, body))
-
-            if redirect_to_plan_owner:
-                # needed for the lastrowid to exist in the DB to satisfy the constraint
-                connection.commit()
-                auditlog.message_change(
-                    cursor.lastrowid,
-                    auditlog.TARGET_CHANGE,
-                    role + '|' + target,
-                    name,
-                    lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
-
+    for (incident_id, plan_notification_id) in msg_info:
+        application_id = cache.incidents[incident_id]['application_id']
+        plan_notification = cache.plan_notifications[plan_notification_id]
+        if plan_notification['role_id'] is None and plan_notification['target_id'] is None:
+            dynamic_info = cache.dynamic_plan_map[incident_id][plan_notification['dynamic_index']]
+            role = cache.roles[dynamic_info['role_id']]['name']
+            target = cache.targets[dynamic_info['target_id']]['name']
         else:
-            metrics.incr('target_not_found')
-            logger.warn('Failed to notify plan creator; no active target found: %s', name)
+            role = cache.roles[plan_notification['role_id']]['name']
+            target = cache.targets[plan_notification['target_id']]['name']
 
-    connection.commit()
+        # find role/priority from plan_notification_id
+        try:
+            names = cache.targets_for_role(role, target)
+        except IrisRoleLookupException as e:
+            names = None
+            metrics.incr('role_target_lookup_error')
+            lookup_fail_reason = str(e)
+        else:
+            lookup_fail_reason = None
+
+        priority_id = plan_notification['priority_id']
+        redirect_to_plan_owner = False
+        body = ''
+
+        if not names:
+
+            # if message is optional don't bother the creator, simply return true instead
+            if plan_notification['optional']:
+                msg_count += 1
+                continue
+
+            # Try to get creator of the plan and nag them instead
+            name = None
+            try:
+                name = cache.plans[plan_notification['plan_id']]['creator']
+            except (KeyError, TypeError):
+                pass
+
+            if not name:
+                logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                              'role: %s, target: %s, result: %s and failed looking '
+                              'up the plan\'s creator'),
+                             incident_id, plan_notification_id, role, target, names)
+                error_incident_ids.add(incident_id)
+                continue
+
+            try:
+                priority_id = api_cache.priorities['low']['id']
+            except KeyError:
+                logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                              'role: %s, target: %s, result: %s and failed looking '
+                              'up ID for low priority'),
+                             incident_id, plan_notification_id, role, target, names)
+                error_incident_ids.add(incident_id)
+                continue
+
+            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                          'role: %s, target: %s, result: %s. '
+                          'Reaching out to %s instead and lowering priority to low (%s)'),
+                         incident_id, plan_notification_id, role, target, names, name, priority_id)
+
+            body = ('You are receiving this as you created this plan and we can\'t resolve'
+                    ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
+
+            names = [name]
+            redirect_to_plan_owner = True
+
+        for name in names:
+            t = cache.target_names[name]
+            if t:
+                target_id = t['id']
+                # Create message now if it needs to be redirected, otherwise save it for one batched operation
+                if not redirect_to_plan_owner:
+                    query_params += [plan_notification['plan_id'], plan_notification_id, incident_id,
+                                     application_id, target_id, priority_id, body]
+                    values_count += 1
+                else:
+                    cursor.execute(INSERT_MESSAGE_SQL,
+                                   (plan_notification['plan_id'], plan_notification_id, incident_id,
+                                    application_id, target_id, priority_id, body))
+
+                    # needed for the lastrowid to exist in the DB to satisfy the constraint
+                    connection.commit()
+                    auditlog.message_change(
+                        cursor.lastrowid,
+                        auditlog.TARGET_CHANGE,
+                        role + '|' + target,
+                        name,
+                        lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
+                msg_count += 1
+            else:
+                metrics.incr('target_not_found')
+                logger.warn('Failed to notify plan creator; no active target found: %s', name)
+    if values_count > 0:
+        msg_sql = BATCH_INSERT_MESSAGE_QUERY + ','.join('(NOW(), %s,%s,%s,%s,%s,%s,%s)' for i in range(values_count))
+        cursor.execute(msg_sql, query_params)
+        connection.commit()
+        msg_count += cursor.rowcount
     cursor.close()
     connection.close()
-    return True
+    return msg_count, error_incident_ids
 
 
 def deactivate():
@@ -492,31 +513,39 @@ def escalate():
     msg_count = 0
     cursor = connection.cursor(db.dict_cursor)
     cursor.execute(QUEUE_SQL)
+    msg_info = []
     for n in cursor.fetchall():
         if n['count'] < n['max']:
-            if create_messages(n['incident_id'], n['plan_notification_id']):
-                msg_count += 1
+            msg_info.append((n['incident_id'], n['plan_notification_id']))
         else:
             escalations[n['incident_id']] = (n['plan_id'], n['current_step'] + 1)
+    msg_count += create_messages(msg_info)[0]
 
+    # Create escalation messages
+    msg_info = []
+    for incident_id, (plan_id, step) in escalations.items():
+        plan = cache.plans[plan_id]
+        steps = plan['steps'].get(step, [])
+        for plan_notification_id in steps:
+            msg_info.append((incident_id, plan_notification_id))
+    count, error_incident_ids = create_messages(msg_info)
+    msg_count += count
+
+    # Update incident step value
     for incident_id, (plan_id, step) in escalations.items():
         plan = cache.plans[plan_id]
         steps = plan['steps'].get(step, [])
         if steps:
-            step_msg_cnt = 0
-            for plan_notification_id in steps:
-                if create_messages(incident_id, plan_notification_id):
-                    step_msg_cnt += 1
-            if step == 1 and step_msg_cnt == 0:
+            if step == 1 and incident_id in error_incident_ids:
                 # no message created due to role look up failure, reset step to
                 # 0 for retry
                 step = 0
             cursor.execute(UPDATE_INCIDENT_SQL, (step, incident_id))
-            msg_count += step_msg_cnt
         else:
             logger.error('plan id %d has no steps, incident id %d is invalid', plan_id, incident_id)
             cursor.execute(INVALIDATE_INCIDENT, incident_id)
-        connection.commit()
+
+    connection.commit()
     cursor.close()
     connection.close()
 
@@ -803,13 +832,16 @@ def set_target_contact(message):
         cursor = connection.cursor()
         for t in message['target']:
             try:
-                cursor.execute(destination_query, {'target': t, 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
-                message['destination'].append(cursor.fetchone()[0])
+                cursor.execute(destination_query, {'target': t['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                if t.get('bcc'):
+                    message['bcc_destination'].append(cursor.fetchone()[0])
+                else:
+                    message['destination'].append(cursor.fetchone()[0])
             except (ValueError, TypeError):
                 continue
         cursor.close()
         connection.close()
-        return bool(message.get('destination'))
+        return bool(message.get('destination') or message.get('bcc_destination'))
 
     try:
         if 'mode' in message or 'mode_id' in message:
@@ -818,6 +850,35 @@ def set_target_contact(message):
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
             cursor.execute(destination_query, {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+            message['destination'] = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            result = True
+        elif 'category' in message:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute('''
+                SELECT `mode`.`id`, `mode`.`name` FROM `category_override`
+                JOIN `target` ON `target`.`id` = `category_override`.`user_id`
+                JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                WHERE `target`.`name` = %(target)s AND `category_override`.`category_id` = %(category_id)s
+            ''', {'target': message['target'], 'category_id': message['category_id']})
+            override_mode = cursor.fetchone()
+            if override_mode:
+                message['mode_id'] = override_mode[0]
+                message['mode'] = override_mode[1]
+            else:
+                message['mode_id'] = message['category_mode_id']
+                message['mode'] = message['category_mode']
+            cursor.execute('''
+                SELECT `destination` FROM `target_contact`
+                JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
+                JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
+                WHERE `target`.`name` = %(target)s
+                AND `target_type`.`name` = 'user'
+                AND `target_contact`.`mode_id` = %(mode_id)s
+                LIMIT 1
+                ''', {'target': message['target'], 'mode_id': message['mode_id']})
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()

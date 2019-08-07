@@ -97,16 +97,21 @@ def handle_api_notification_request(socket, address, req):
         if target_list:
             expanded_targets = []
             notification['destination'] = []
+            notification['bcc_destination'] = []
             for t in target_list:
                 role = t['role']
                 target = t['target']
+                bcc = t.get('bcc')
                 try:
                     if role == 'literal_target':
-                        notification['destination'].append(target)
+                        if bcc:
+                            notification['bcc_destination'].append(target)
+                        else:
+                            notification['destination'].append(target)
                         has_literal_target = True
                     else:
                         expanded = cache.targets_for_role(role, target)
-                        expanded_targets += [e for e in expanded]
+                        expanded_targets += [{'target': e, 'bcc': bcc} for e in expanded]
                 except IrisRoleLookupException:
                     # Maintain best-effort delivery for remaining targets if one fails to resolve
                     continue
@@ -154,16 +159,15 @@ def handle_api_notification_request(socket, address, req):
     if notification.get('unexpanded'):
         notification['destination'] = notification['target']
         send_funcs['message_send_enqueue'](notification)
+    elif notification.get('multi-recipient'):
+        notification['target'] = expanded_targets
+        send_funcs['message_send_enqueue'](notification)
+        notification_count = len(expanded_targets)
     else:
-        if notification.get('multi-recipient'):
-            notification['target'] = expanded_targets
-            send_funcs['message_send_enqueue'](notification)
-            notification_count = len(expanded_targets)
-        else:
-            for _target in expanded_targets:
-                temp_notification = notification.copy()
-                temp_notification['target'] = _target
-                send_funcs['message_send_enqueue'](temp_notification)
+        for _target in expanded_targets:
+            temp_notification = notification.copy()
+            temp_notification['target'] = _target
+            send_funcs['message_send_enqueue'](temp_notification)
     metrics.incr('notification_cnt', inc=notification_count)
     socket.sendall(msgpack.packb('OK'))
 

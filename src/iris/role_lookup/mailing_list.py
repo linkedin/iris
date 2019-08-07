@@ -2,7 +2,6 @@
 # See LICENSE in the project root for license information.
 
 from iris import db
-from iris.role_lookup import IrisRoleLookupException
 import logging
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class mailing_list(object):
                         list_name, list_count, self.max_list_names)
             cursor.close()
             connection.close()
-            raise IrisRoleLookupException('List %s contains too many members to safely expand (%s >= %s)' % (list_name, list_count, self.max_list_names))
+            return None
 
         cursor.execute('''SELECT `target`.`name`
                           FROM `mailing_list_membership`
