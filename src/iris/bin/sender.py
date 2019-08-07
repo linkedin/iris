@@ -1566,6 +1566,15 @@ def message_send_enqueue(message):
         metrics.incr('send_queue_puts_fail_cnt')
 
 
+def update_api_cache_worker():
+    while True:
+        logger.debug('Reinitializing cache')
+        api_cache.cache_priorities()
+        api_cache.cache_applications()
+        api_cache.cache_modes()
+        sleep(60)
+
+
 def init_sender(config):
     gevent.signal(signal.SIGINT, sender_shutdown)
     gevent.signal(signal.SIGTERM, sender_shutdown)
@@ -1630,6 +1639,7 @@ def main():
 
     logger.info('[-] bootstraping sender...')
     init_sender(config)
+    spawn(update_api_cache_worker)
     init_plugins(config.get('plugins', {}))
 
     if not rpc.run(config['sender']):
