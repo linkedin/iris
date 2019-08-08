@@ -4115,7 +4115,7 @@ class ResponseEmail(ResponseMixin):
                         'application_id': email_check_result['application_id'],
                         'created': datetime.datetime.utcnow(),
                         'plan_id': email_check_result['plan_id'],
-                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject})
+                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source})
                     }
                     incident_id = session.execute(
                         '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
