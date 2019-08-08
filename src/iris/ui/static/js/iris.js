@@ -1880,6 +1880,7 @@ iris = {
   user: {
     data: {
       url: '/v0/users/',
+      apiBase: '/v0/',
       postModesUrl: '/v0/users/modes/',
       reprioritizationUrl: '/v0/users/reprioritization/',
       settingsUrl: '/v0/users/settings/',
@@ -1890,16 +1891,23 @@ iris = {
       supportedTimezones: [],
       $page: $('.main'),
       $priority: $('#priority-table'),
+      $customNotificationTable: $('#custom-notification-table'),
+      $customNotificationModal: $('#custom-notification-modal-content'),
       $batching: $('#batching-table'),
       $contact: $('.user-contact-module'),
       $saveBtn: $('#save-settings'),
+      $saveModalBtn: $('#save-custom-notification-modal'),
       $reprioritizationToggleBtn: $('#reprioritization h4'),
       $reprioritizationAddBtn: $('#reprio-add-btn'),
       $reprioritizationTable: $('#reprioritization-table'),
       $addAppSelect: $('#add-application-select'),
+      $addAppNotificationSelect: $('#add-application-notification-select'),
       $addAppBtn: $('#add-application-button'),
+      $addAppNotificationBtn: $('#add-application-notification-button'),
       appsToDelete: {},
       priorityTemplate: $('#priority-template').html(),
+      customNotificationTemplate: $('#custom-notification-template').html(),
+      createCustomNotificationModalTemplate: $('#custom-notification-modal-template').html(),
       batchingTemplate: $('#batching-template').html(),
       subheaderTemplate: $('#user-contact-template').html(),
       reprioritizationTemplate: $('#reprioritization-table-template').html(),
@@ -1911,6 +1919,9 @@ iris = {
       iris.changeTitle('Settings');
       var self = this;
       this.getUserSettings().done(function(){
+        self.getCustomNotificationSettings().done(function(){
+          self.createCustomNotificationTable();
+        });
         self.createContactModule();
         self.createPriorityTable();
         self.events();
@@ -1927,6 +1938,9 @@ iris = {
       this.data.$saveBtn.on('click', function(){
         self.saveSetting();
       });
+      this.data.$saveModalBtn.on('click', function(){
+        self.saveModal();
+      });
       this.data.$reprioritizationAddBtn.on('click', function(){
         $(this).prop('disabled', true);
         self.saveReprioritizationSettings();
@@ -1937,8 +1951,15 @@ iris = {
       this.data.$addAppBtn.on('click', function(){
         self.addApplication();
       });
+      this.data.$addAppNotificationBtn.on('click', function(){
+        self.addApplicationNotification();
+        self.data.$addAppNotificationBtn.prop('disabled', true);
+      });
       this.data.$addAppSelect.change(function() {
         self.data.$addAppBtn.prop('disabled', $(this).val() == '');
+      });
+      this.data.$addAppNotificationSelect.change(function() {
+        self.data.$addAppNotificationBtn.prop('disabled', $(this).val() == '');
       });
       this.data.$timezoneSelect.change(function() {
         self.data.$timezoneSave.prop('disabled', $(this).val() == '');
@@ -1947,6 +1968,7 @@ iris = {
         self.saveTimezone();
       });
       self.data.$saveBtn.prop('disabled', true);
+      self.data.$addAppNotificationBtn.prop('disabled', true);
       self.data.$addAppBtn.prop('disabled', true);
     },
     getUserSettings: function(){
@@ -1970,6 +1992,20 @@ iris = {
         self.data.reprioritizationSettings = response;
       }).fail(function(response){
         iris.createAlert('Error: Failed to load reprioritization data -' + response.text);
+      });
+    },
+    getCustomNotificationSettings: function() {
+      var self = this;
+      return $.getJSON(this.data.url + this.data.user + '/categories').done(function(response){
+        self.data.settings.categories = response;
+        var tempSet = new Set();
+        self.data.settings.categories.forEach(function (item, index) {
+          tempSet.add(item['application']);
+        });
+        self.data.settings['customApp'] = Array.from(tempSet);
+
+      }).fail(function(response){
+        iris.createAlert('Error: Failed to load notification category data -' + response.text);
       });
     },
     saveReprioritizationSettings: function() {
@@ -2111,6 +2147,61 @@ iris = {
       });
       this.redrawApplicationDropdown();
     },
+    createCustomNotificationTable: function(){
+      var template = Handlebars.compile(this.data.customNotificationTemplate),
+          settings = this.data.settings,
+          self = this;
+      this.data.$customNotificationTable.empty();
+      this.data.$customNotificationTable.append(template(settings));
+      this.data.$customNotificationTable.find('button.delete-custom-app-button').each(function() {
+        $(this).click(function() {
+          self.deletePerCustomApp($(this));
+        });
+      });
+
+      this.data.$customNotificationTable.find('button.edit-custom-app-button').each(function() {
+        $(this).click(function() {
+          self.editPerCustomApp($(this));
+        });
+      });
+
+      this.redrawApplicationNotificationDropdown();
+    },
+    createCustomNotificationModal: function(app){
+
+      var template = Handlebars.compile(this.data.createCustomNotificationModalTemplate),
+              settings = this.data.settings,
+              customNotificationModal = this.data.$customNotificationModal;
+
+      // call out to the back end to get all categories for this app
+      var appNotificationCategories = [];
+      $.ajax({
+        type: "GET",
+        url: '/v0/categories/' + app,
+        success: function(resp)
+        {
+          appNotificationCategories = resp;
+          appNotificationCategories.forEach((appSetting, i) => {
+            settings.categories.forEach(userSetting => {
+              if(appSetting['application'] === userSetting['application'] && appSetting['name'] === userSetting['category']){
+                //apply user overrides
+                appNotificationCategories[i]['mode'] = userSetting['mode'];
+              }
+            });
+
+          });
+          settings['modalAppName'] = app;
+          settings['appCategoryData'] = appNotificationCategories;
+          settings['supported_modes'] = ['email','slack','call','sms','drop'];
+          customNotificationModal.empty();
+          customNotificationModal.append(template(settings));
+          $('#custom-notification-modal').modal('show');
+        }
+      }).fail(function(){
+        iris.createAlert('Failed to fetch category data for this app', 'danger');
+      });
+
+    },
     createBatchingTable: function(){
       var template = Handlebars.compile(this.data.batchingTemplate),
           settings = this.data.settings;
@@ -2123,6 +2214,31 @@ iris = {
       delete self.data.settings.per_app_modes[app];
       self.data.appsToDelete[app] = true;
       self.createPriorityTable();
+    },
+    deletePerCustomApp: function(elem) {
+      var self = this,
+          app = elem.data('app');
+
+      var index = self.data.settings.customApp.indexOf(app);
+
+      if(index > -1){
+
+        $.ajax({
+          url: self.data.url + self.data.user + '/categories/' + app,
+          method: 'DELETE',
+          contentType: 'text'
+        }).done(function(){
+          delete self.data.settings.customApp.splice(index, 1);
+          iris.createAlert('Deleted application succesfully', 'success');
+          self.createCustomNotificationTable();
+        }).fail(function(){
+          iris.createAlert('Failed to delete application', 'danger');
+        });
+      }
+    },
+    editPerCustomApp: function(elem) {
+      var app = elem.data('app');
+      this.createCustomNotificationModal(app);
     },
     saveSetting: function(){
       var globalOptions = this.data.postModel,
@@ -2178,6 +2294,33 @@ iris = {
         iris.createAlert('Failed to save settings', 'danger');
       });
     },
+    saveModal: function(){
+      var modalOptions = {},
+          self = this,
+          settings = this.data.settings,
+          app = $('#custom-notification-modal-table').data('app');
+
+      $('select.custom-modal-priority').each(function() {
+        var $this = $(this), val = $this.val();
+        modalOptions[$this.data('category')] = val;
+      });
+
+      $.ajax({
+        url: this.data.url + this.data.user + '/categories/' + app,
+        data: JSON.stringify(modalOptions),
+        method: 'POST',
+        contentType: 'text'
+      }).done(function(){
+        iris.createAlert('Modal settings saved succesfully', 'success');
+        // update user overrides
+        settings.categories.forEach(function(cat, i){
+          if(cat['application'] == app && (cat['category'] in modalOptions))
+            self.data.settings.categories[i]['mode'] = modalOptions[cat['category']];
+        });
+      }).fail(function(){
+        iris.createAlert('Failed to save modal settings', 'danger');
+      });
+    },
     redrawApplicationDropdown: function() {
       var self = this;
       self.data.$addAppSelect.empty();
@@ -2212,6 +2355,45 @@ iris = {
         delete this.data.appsToDelete[app];
       }
       this.createPriorityTable();
+    },
+    addApplicationNotification: function() {
+      var app = this.data.$addAppNotificationSelect.val();
+
+      this.data.$addAppNotificationSelect.val('');
+
+      if(this.data.settings.customApp.indexOf(app) === -1){
+        this.data.settings.customApp.push(app);
+      }
+      this.createCustomNotificationTable();
+      this.createCustomNotificationModal(app);
+
+    },
+    redrawApplicationNotificationDropdown: function() {
+      var self = this,
+        customNotificationApps = new Set;
+
+      //fetch apps that have custom categories defined
+      $.ajax({
+        type: "GET",
+        url: '/v0/categories/',
+        success: function(resp)
+        {
+          self.data.$addAppNotificationSelect.empty();
+          self.data.$addAppNotificationSelect.append($('<option value="">').text('Add Application'));
+
+          appNotificationCategories = resp;
+          appNotificationCategories.forEach((appSetting, i) => {
+            customNotificationApps.add(appSetting['application']);
+          });
+
+          Array.from(customNotificationApps).sort().forEach(function(app) {
+            self.data.$addAppNotificationSelect.append($('<option>').text(app));
+          });
+        }
+       }).fail(function(){
+        iris.createAlert('Failed to fetch applications for dropdown', 'danger');
+      });
+
     },
     loadSupportedTimezones: function() {
       var self = this;
@@ -2323,6 +2505,7 @@ iris = {
   application: {
     data: {
       url: '/v0/applications/',
+      apiBase: '/v0/',
       $page: $('.main'),
       $editButton: $('#application-edit-button'),
       applicationTemplate: $('#application-template').html(),
@@ -2346,8 +2529,10 @@ iris = {
       addOwnerForm: '#add-owner-form',
       addAddressForm: '#add-address-form',
       addEmailIncidentForm: '#add-email-incident-form',
+      addCustomCategoryForm: '#add-custom-category-form',
       addDefaultModeForm: '#add-default-mode-form',
       removeEmailIncidentButton: '.delete-email-incident-button',
+      removeCustomCategoryButton: '.delete-custom-category-button',
       removeDefaultModeButton: '.delete-default-mode-button',
       dangerousActionsToggle: '.application-dangerous-actions h4',
       application: null,
@@ -2466,6 +2651,33 @@ iris = {
         self.modelPersist();
         self.render();
       });
+      data.$page.on('submit', data.addCustomCategoryForm, function(e) {
+        e.preventDefault();
+        var $category = $('#add-custom-category');
+        var $description = $('#add-custom-category-description');
+        var $mode = $('#category-default-mode');
+        self.data.model.customCategories.forEach(function(element, i){
+          // if it already exists, replace with new values
+          if(element["name"] == $category.val()){
+            self.data.model.customCategories.splice(i, 1);
+          }
+        });
+        self.data.model.customCategories.push({"name":$category.val(), "description": $description.val(), "mode": $mode.val()});
+        $category.val('');
+        $description.val('');
+        self.modelPersist();
+        self.render();
+      });
+      data.$page.on('click', data.removeCustomCategoryButton, function() {
+        var nameToDelete = $(this).data('category');
+        self.data.model.customCategories.forEach(function(element, i){
+          if(element["name"] == nameToDelete){
+            self.data.model.customCategories.splice(i, 1);
+          }
+        });
+        self.modelPersist();
+        self.render();
+      });
       data.$page.on('submit', data.addDefaultModeForm, function(e) {
         e.preventDefault();
         var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
@@ -2526,10 +2738,16 @@ iris = {
       self.showLoader();
 
       $.when($.get(self.data.url + application + '/quota'),
-             $.get(self.data.url + application + '/incident_emails')
-      ).always(function(quota, incident_emails) {
+             $.get(self.data.url + application + '/incident_emails'),
+             $.get(self.data.apiBase + 'categories/' + self.data.application)
+      ).always(function(quota, incident_emails, customCategories) {
         app.quota = Object.keys(quota[0]).length ? quota[0] : null;
         app.emailIncidents = incident_emails[0];
+ 
+        app.customCategories = [];
+        customCategories[0].forEach(function(element){
+          app.customCategories.push({'name':element['name'], 'description':element['description'], 'mode':element['mode']})
+        });
 
         // For convenience in setting the below boolean flags, localize
         // whether the user is an owner of this app or is an admin here.
@@ -2543,6 +2761,7 @@ iris = {
         app.isEditable = isAdmin || isOwner;
         app.allowViewingKey = isAdmin || isOwner;
         app.allowEditingEmailIncidents = isAdmin || isOwner;
+        app.allowEditingCustomCategories = isAdmin || isOwner;
         app.showEditOwners = isAdmin || isOwner;
         app.allowDangerousActions = isAdmin || isOwner;
         app.allowEditingSupportedModes = isAdmin;
@@ -2664,6 +2883,14 @@ iris = {
           url: self.data.url + self.data.application + '/incident_emails',
           data: JSON.stringify(self.data.model.emailIncidents),
           method: 'PUT',
+          contentType: 'application/json'
+        }));
+      }
+      if (self.data.model.allowEditingCustomCategories) {
+        ajaxCalls.push($.ajax({
+          url: self.data.apiBase + 'categories/' + self.data.application,
+          data: JSON.stringify(self.data.model.customCategories),
+          method: 'POST',
           contentType: 'application/json'
         }));
       }

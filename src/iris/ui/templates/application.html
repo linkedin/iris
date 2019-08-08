@@ -245,7 +245,7 @@
       {{#if custom_sender_addresses.email}}
       <span id="custom-sender-email-value">{{custom_sender_addresses.email}}</span> 
         <form id="add-address-form">
-          <input type="text" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input>
+          <input required type="email" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input>
           <button type="submit" class="btn btn-primary btn-sm"> Update</button>
           <button class="btn btn-danger btn-sm remove-address" title="Delete custom address">Delete</button>
           </form>
@@ -302,6 +302,61 @@
       {{/if}}
     {{/ifNot}}
   </div>
+
+  <div class="module application-custom-categories user-settings">
+    <h4>Custom notification categories</h4>
+    <p class="light">Users can individually define rules for how they wish to receive messages for each category.</p>
+    {{#hasKeys @root.customCategories}}
+    <table id="application-custom-categories-table">
+      <thead>
+        <tr>
+          <td>Category name</td>
+          <td>Description</td>
+          <td>Default mode</td>
+          {{#ifNot @root.isInViewMode}}
+            {{#if @root.allowEditingCustomCategories}}
+              <td class="delete-column">Delete</td>
+            {{/if}}
+          {{/ifNot}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#each customCategories}}
+        <tr>
+          <td>{{this.name}}</td>
+          <td>{{this.description}}</td>
+          <td>{{this.mode}}</td>
+          {{#ifNot @root.isInViewMode}}
+            {{#if @root.allowEditingCustomCategories}}
+              <td><button class="btn btn-danger btn-sm delete-custom-category-button" data-category="{{this.name}}" title="Delete this category">Delete</button></td>
+            {{/if}}
+          {{/ifNot}}
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{else}}
+      {{#if @root.isInViewMode}}
+        <p class="light">None configured.</p>
+      {{/if}}
+    {{/hasKeys}}
+    {{#ifNot @root.isInViewMode}}
+      {{#if @root.allowEditingCustomCategories}}
+        <form id="add-custom-category-form">
+          <input required type="text" maxlength="255" id="add-custom-category" class="form-control border-bottom" placeholder="Category name">
+          <input required type="text" maxlength="255" id="add-custom-category-description" class="form-control border-bottom " placeholder="Description">
+          <select required id="category-default-mode" class="form-control border-bottom">
+            <option value="" disabled selected>Mode</option>
+            {{#each @root.modes}}
+              <option value="{{this}}">{{this}}</option>
+            {{/each}}
+          </select>
+          <input type="submit" value="Add" class="btn btn-primary btn-sm">
+        </form>
+      {{/if}}
+    {{/ifNot}}
+  </div>
+
   {{#ifNot @root.isInViewMode}}
     {{#if @root.allowDangerousActions}}
       <div class="module application-dangerous-actions">

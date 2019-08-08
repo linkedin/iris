@@ -1474,6 +1474,40 @@ table.dataTable thead .sorting_asc {
   width: auto;
 }
 
+.custom-notification.form-control {
+  height: 28px;
+  width: 120px;
+}
+
+#custom-inner {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+#custom-notification-table {
+  width: auto;
+}
+
+#custom-notification-table .delete-column {
+  width: 86px;
+}
+
+#custom-notification-controls {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-right: 20px;
+}
+
+#add-application-notification-select {
+  width: auto;
+}
+
+
+#custom-notification-modal-table th {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
 /*
  * Applications page
  */
@@ -1507,6 +1541,20 @@ table.dataTable thead .sorting_asc {
 }
 
 #add-email-incident-form {
+  /* Need this to make the email incidents text boxes line up, as the twitter typeahead
+     skews everything */
+  line-height: 33px;
+}
+
+#add-custom-category-form input {
+  width: auto;
+}
+
+.application-custom-category span.twitter-typeahead {
+  width: auto;
+}
+
+#add-custom-category-form {
   /* Need this to make the email incidents text boxes line up, as the twitter typeahead
      skews everything */
   line-height: 33px;
@@ -1722,6 +1770,7 @@ h3 .btn-primary {
   -webkit-appearance: none;
   -moz-appearance: none;
   border-radius: 0;
+  width: auto;
   border: none;
   border-bottom: 1px solid #ccc;
   box-shadow: none;

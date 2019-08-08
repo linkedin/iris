@@ -19,6 +19,34 @@
       </div>
       <span class="light">It is possible for applications to override these settings.</span>
     </div>
+
+    <h4>Custom OOB notification rules</h4>
+    <p class="light">How would you like to receive different categories of out of band notifications from applications?</p>
+    <div id="custom-inner">
+      <table id="custom-notification-table">
+          <!-- Table template renders here -->
+      </table>
+
+      <div id="custom-notification-controls">
+        <select id="add-application-notification-select" class="form-control border-bottom"></select>
+        <button type="button" id="add-application-notification-button" class="btn btn-primary btn-sm">Add</button>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="custom-notification-modal" tabindex="-1" role="dialog" aria-labelledby="custom-notification-modalTitle" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" >
+          <!-- modal template renders here -->
+          <div id="custom-notification-modal-content"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            <button id="save-custom-notification-modal" type="button" class="btn btn-primary" data-dismiss="modal">Save changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <h4>Timezone</h4>
     <span class="light">What timezone would you like to see dates displayed as?</span>
     <div id="timezone-controls">
@@ -198,5 +226,55 @@
   {{/each}}
   </tbody>
 </script>
+<script id="custom-notification-template" type="text/x-handlebars-template">
+  <thead>
+    <tr>
+      <td>Application</td>
+      <td class="edit-column"></td>
+      <td class="delete-column"></td>
+    </tr>
+  </thead>
+  <tbody>
+    {{#unless customApp}}
+      <tr><td>No custom notification settings have been defined for any application </td></tr>
+    {{/unless}}
+
+    {{#each customApp }}
+    <tr data-app="{{this}}" class="app-row">
+      <td class="application-name">{{this}}</td>
+      <td><button class="btn  btn-sm btn-primary edit-custom-app-button" data-app="{{this}}" title="Edit custom settings for {{this}}">Edit</button></td>
+      <td><button class="btn btn-danger btn-sm delete-custom-app-button" data-app="{{this}}" title="Remove custom settings for {{this}}">Delete</button></td>
+    </tr>
+    {{/each}}
+  </tbody>
+</script>
+
+  <script id="custom-notification-modal-template" type="text/x-handlebars-template">
+          <div class="modal-header">
+            <h4 class="modal-title" >Per category notification rules for: <strong>{{modalAppName}}</strong></h5>
+          </div>
+          <div class="modal-body">
+            <table id="custom-notification-modal-table" data-app="{{modalAppName}}">
+                
+                <tr>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Delivery mode</th>
+                </tr>
+                {{#each appCategoryData}}
+                  <tr>
+                    <td>{{this.name}}</td>
+                    <td>{{this.description}}</td>
+                    <td>
+                      <select class="app-priority custom-modal-priority form-control border-bottom" data-category="{{this.name}}">
+                        <option value="{{mode}}">{{mode}}</option>
+                        {{#each ../supported_modes}}<option value="{{this}}">{{this}}</option>{{/each}}
+                      </select>
+                    </td>
+                  </tr>
+                {{/each}}
+            </table>
+          </div>
+  </script>
 {% endraw %}
 {% endblock content %}
