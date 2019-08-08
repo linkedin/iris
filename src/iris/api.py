@@ -4754,7 +4754,7 @@ class NotificationCategories(object):
         if application:
             req.params['application'] = application
         query = category_query
-        if req.params: 
+        if req.params:
             query += ' WHERE ' + ' AND '.join(
                 gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
         cursor.execute(query)
