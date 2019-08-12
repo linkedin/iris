@@ -1891,24 +1891,24 @@ iris = {
             supportedTimezones: [],
             $page: $('.main'),
             $priority: $('#priority-table'),
-            $customNotificationTable: $('#custom-notification-table'),
-            $customNotificationModal: $('#custom-notification-modal-content'),
+            $customOverrideTable: $('#custom-override-table'),
+            $customOverrideModal: $('#custom-override-modal-content'),
             $batching: $('#batching-table'),
             $contact: $('.user-contact-module'),
             $saveBtn: $('#save-settings'),
-            $saveModalBtn: $('#save-custom-notification-modal'),
+            $saveModalBtn: $('#save-custom-override-modal'),
             $delOverrideBtn: $('#delete-override'),
             $reprioritizationToggleBtn: $('#reprioritization h4'),
             $reprioritizationAddBtn: $('#reprio-add-btn'),
             $reprioritizationTable: $('#reprioritization-table'),
             $addAppSelect: $('#add-application-select'),
-            $addAppNotificationSelect: $('#add-application-notification-select'),
+            $addAppOverrideSelect: $('#add-application-override-select'),
             $addAppBtn: $('#add-application-button'),
-            $addAppNotificationBtn: $('#add-application-notification-button'),
+            $addAppOverrideBtn: $('#add-application-override-button'),
             appsToDelete: {},
             priorityTemplate: $('#priority-template').html(),
-            customNotificationTemplate: $('#custom-notification-template').html(),
-            createCustomNotificationModalTemplate: $('#custom-notification-modal-template').html(),
+            customOverrideTemplate: $('#custom-override-template').html(),
+            createCustomOverrideModalTemplate: $('#custom-override-modal-template').html(),
             batchingTemplate: $('#batching-template').html(),
             subheaderTemplate: $('#user-contact-template').html(),
             reprioritizationTemplate: $('#reprioritization-table-template').html(),
@@ -1920,8 +1920,8 @@ iris = {
             iris.changeTitle('Settings');
             var self = this;
             this.getUserSettings().done(function(){
-                self.getCustomNotificationSettings().done(function(){
-                    self.createCustomNotificationTable();
+                self.getCustomOverrideSettings().done(function(){
+                    self.createCustomOverrideTable();
                 });
                 self.createContactModule();
                 self.createPriorityTable();
@@ -1955,15 +1955,15 @@ iris = {
             this.data.$addAppBtn.on('click', function(){
                 self.addApplication();
             });
-            this.data.$addAppNotificationBtn.on('click', function(){
-                self.addApplicationNotification();
-                self.data.$addAppNotificationBtn.prop('disabled', true);
+            this.data.$addAppOverrideBtn.on('click', function(){
+                self.addApplicationOverride();
+                self.data.$addAppOverrideBtn.prop('disabled', true);
             });
             this.data.$addAppSelect.change(function() {
                 self.data.$addAppBtn.prop('disabled', $(this).val() == '');
             });
-            this.data.$addAppNotificationSelect.change(function() {
-                self.data.$addAppNotificationBtn.prop('disabled', $(this).val() == '');
+            this.data.$addAppOverrideSelect.change(function() {
+                self.data.$addAppOverrideBtn.prop('disabled', $(this).val() == '');
             });
             this.data.$timezoneSelect.change(function() {
                 self.data.$timezoneSave.prop('disabled', $(this).val() == '');
@@ -1972,7 +1972,7 @@ iris = {
                 self.saveTimezone();
             });
             self.data.$saveBtn.prop('disabled', true);
-            self.data.$addAppNotificationBtn.prop('disabled', true);
+            self.data.$addAppOverrideBtn.prop('disabled', true);
             self.data.$addAppBtn.prop('disabled', true);
         },
         getUserSettings: function() {
@@ -1998,7 +1998,7 @@ iris = {
                 iris.createAlert('Error: Failed to load reprioritization data -' + response.text);
             });
         },
-        getCustomNotificationSettings: function() {
+        getCustomOverrideSettings: function() {
             var self = this;
             return $.getJSON(this.data.url + this.data.user + '/categories').done(function(response){
                 self.data.settings.categories = response;
@@ -2151,13 +2151,13 @@ iris = {
             });
             this.redrawApplicationDropdown();
         },
-        createCustomNotificationTable: function(){
-            var template = Handlebars.compile(this.data.customNotificationTemplate),
+        createCustomOverrideTable: function(){
+            var template = Handlebars.compile(this.data.customOverrideTemplate),
                 settings = this.data.settings,
                 self = this;
-            this.data.$customNotificationTable.empty();
-            this.data.$customNotificationTable.append(template(settings));
-            this.data.$customNotificationTable.find('button.delete-custom-app-button').each(function() {
+            this.data.$customOverrideTable.empty();
+            this.data.$customOverrideTable.append(template(settings));
+            this.data.$customOverrideTable.find('button.delete-custom-app-button').each(function() {
                 $(this).click(function() {
                     var appToDelete = $(this).data('app');
                     $('#app-overrides-to-delete').text(appToDelete);
@@ -2166,43 +2166,43 @@ iris = {
                 });
             });
 
-            this.data.$customNotificationTable.find('button.edit-custom-app-button').each(function() {
+            this.data.$customOverrideTable.find('button.edit-custom-app-button').each(function() {
                 $(this).click(function() {
                     self.editPerCustomApp($(this));
                 });
             });
 
-            this.redrawApplicationNotificationDropdown();
+            this.redrawApplicationOverrideDropdown();
         },
-        createCustomNotificationModal: function(app){
+        createCustomOverrideModal: function(app){
 
-            var template = Handlebars.compile(this.data.createCustomNotificationModalTemplate),
+            var template = Handlebars.compile(this.data.createCustomOverrideModalTemplate),
                 settings = this.data.settings,
-                customNotificationModal = this.data.$customNotificationModal;
+                customOverrideModal = this.data.$customOverrideModal;
 
             // call out to the back end to get all categories for this app
-            var appNotificationCategories = [];
+            var appOverrideCategories = [];
             $.ajax({
                 type: "GET",
                 url: '/v0/categories/' + app,
                 success: function(resp)
                 {
-                    appNotificationCategories = resp;
-                    appNotificationCategories.forEach((appSetting, i) => {
+                    appOverrideCategories = resp;
+                    appOverrideCategories.forEach((appSetting, i) => {
                         settings.categories.forEach(userSetting => {
                             if(appSetting['application'] === userSetting['application'] && appSetting['name'] === userSetting['category']){
                                 //apply user overrides
-                                appNotificationCategories[i]['mode'] = userSetting['mode'];
+                                appOverrideCategories[i]['mode'] = userSetting['mode'];
                             }
                         });
 
                     });
                     settings['modalAppName'] = app;
-                    settings['appCategoryData'] = appNotificationCategories;
+                    settings['appCategoryData'] = appOverrideCategories;
                     settings['supported_modes'] = ['email','slack','call','sms','drop'];
-                    customNotificationModal.empty();
-                    customNotificationModal.append(template(settings));
-                    $('#custom-notification-modal').modal('show');
+                    customOverrideModal.empty();
+                    customOverrideModal.append(template(settings));
+                    $('#custom-override-modal').modal('show');
                 }
             }).fail(function(){
                 iris.createAlert('Failed to fetch category data for this app', 'danger');
@@ -2236,7 +2236,7 @@ iris = {
                 }).done(function(){
                     delete self.data.settings.customApp.splice(index, 1);
                     iris.createAlert('Deleted application succesfully', 'success');
-                    self.createCustomNotificationTable();
+                    self.createCustomOverrideTable();
                 }).fail(function(){
                     iris.createAlert('Failed to delete application', 'danger');
                 });
@@ -2244,7 +2244,7 @@ iris = {
         },
         editPerCustomApp: function(elem) {
             var app = elem.data('app');
-            this.createCustomNotificationModal(app);
+            this.createCustomOverrideModal(app);
         },
         saveSetting: function(){
             var globalOptions = this.data.postModel,
@@ -2306,7 +2306,7 @@ iris = {
             var modalOptions = {},
                 self = this,
                 settings = this.data.settings,
-                app = $('#custom-notification-modal-table').data('app');
+                app = $('#custom-override-modal-table').data('app');
 
             $('select.custom-modal-priority').each(function() {
                 var $this = $(this),
@@ -2324,7 +2324,7 @@ iris = {
                 if (self.data.settings.customApp.indexOf(app) === -1) {
                     self.data.settings.customApp.push(app);
                 }
-                self.createCustomNotificationTable();
+                self.createCustomOverrideTable();
                 // update user overrides
                 settings.categories.forEach(function(cat, i){
                     if(cat['application'] == app && (cat['category'] in modalOptions))
@@ -2369,15 +2369,15 @@ iris = {
             }
             this.createPriorityTable();
         },
-        addApplicationNotification: function() {
-            var app = this.data.$addAppNotificationSelect.val();
-            this.data.$addAppNotificationSelect.val('');
-            this.createCustomNotificationModal(app);
+        addApplicationOverride: function() {
+            var app = this.data.$addAppOverrideSelect.val();
+            this.data.$addAppOverrideSelect.val('');
+            this.createCustomOverrideModal(app);
 
         },
-        redrawApplicationNotificationDropdown: function() {
+        redrawApplicationOverrideDropdown: function() {
             var self = this,
-                customNotificationApps = new Set;
+                customOverrideApps = new Set;
 
             //fetch apps that have custom categories defined
             $.ajax({
@@ -2385,16 +2385,16 @@ iris = {
                 url: '/v0/categories/',
                 success: function(resp)
                 {
-                    self.data.$addAppNotificationSelect.empty();
-                    self.data.$addAppNotificationSelect.append($('<option value="">').text('Add Application'));
+                    self.data.$addAppOverrideSelect.empty();
+                    self.data.$addAppOverrideSelect.append($('<option value="">').text('Add Application'));
 
-                    appNotificationCategories = resp;
-                    appNotificationCategories.forEach((appSetting, i) => {
-                        customNotificationApps.add(appSetting['application']);
+                    appOverrideCategories = resp;
+                    appOverrideCategories.forEach((appSetting, i) => {
+                        customOverrideApps.add(appSetting['application']);
                     });
 
-                    Array.from(customNotificationApps).sort().forEach(function(app) {
-                        self.data.$addAppNotificationSelect.append($('<option>').text(app));
+                    Array.from(customOverrideApps).sort().forEach(function(app) {
+                        self.data.$addAppOverrideSelect.append($('<option>').text(app));
                     });
                 }
             }).fail(function(){

@@ -1512,25 +1512,25 @@ table.dataTable thead .sorting_asc {
     margin-bottom: 20px;
 }
 
-#custom-notification-table {
+#custom-override-table {
     width: auto;
 }
 
-#custom-notification-table .delete-column {
+#custom-override-table .delete-column {
     width: 86px;
 }
 
-#custom-notification-controls {
+#custom-override-controls {
     margin-top: 10px;
     margin-bottom: 10px;
     margin-right: 20px;
 }
 
-#add-application-notification-select {
+#add-application-override-select {
     width: auto;
 }
 
-#custom-notification-modal-table th {
+#custom-override-modal-table th {
     padding-right: 10px;
     padding-left: 10px;
 }

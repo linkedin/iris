@@ -22,25 +22,25 @@
         <h4>Custom OOB notification rules</h4>
         <p class="light">How would you like to receive different categories of out of band notifications from applications?</p>
         <div id="custom-inner">
-            <table id="custom-notification-table">
+            <table id="custom-override-table">
                 <!-- Table template renders here -->
             </table>
 
-            <div id="custom-notification-controls">
-                <select id="add-application-notification-select" class="form-control border-bottom"></select>
-                <button type="button" id="add-application-notification-button" class="btn btn-primary btn-sm">Add</button>
+            <div id="custom-override-controls">
+                <select id="add-application-override-select" class="form-control border-bottom"></select>
+                <button type="button" id="add-application-override-button" class="btn btn-primary btn-sm">Add</button>
             </div>
         </div>
 
         <!-- Modal -->
-        <div class="modal fade" id="custom-notification-modal" tabindex="-1" role="dialog" aria-labelledby="custom-notification-modalTitle" aria-hidden="true">
+        <div class="modal fade" id="custom-override-modal" tabindex="-1" role="dialog" aria-labelledby="custom-override-modalTitle" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <!-- modal template renders here -->
-                    <div id="custom-notification-modal-content"></div>
+                    <div id="custom-override-modal-content"></div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                        <button id="save-custom-notification-modal" type="button" class="btn btn-primary"
+                        <button id="save-custom-override-modal" type="button" class="btn btn-primary"
                             data-dismiss="modal">Save changes</button>
                     </div>
                 </div>
@@ -243,7 +243,7 @@
         {{/each}}
     </tbody>
 </script>
-<script id="custom-notification-template" type="text/x-handlebars-template">
+<script id="custom-override-template" type="text/x-handlebars-template">
     <thead>
         <tr>
             <td>Application</td>
@@ -267,12 +267,12 @@
     </tbody>
 </script>
 
-<script id="custom-notification-modal-template" type="text/x-handlebars-template">
+<script id="custom-override-modal-template" type="text/x-handlebars-template">
     <div class="modal-header">
         <h4 class="modal-title">Per category notification rules for: <strong>{{modalAppName}}</strong></h5>
     </div>
     <div class="modal-body">
-        <table id="custom-notification-modal-table" data-app="{{modalAppName}}">
+        <table id="custom-override-modal-table" data-app="{{modalAppName}}">
 
             <tr>
                 <th>Category</th>
