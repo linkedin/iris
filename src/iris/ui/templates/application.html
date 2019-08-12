@@ -1,113 +1,113 @@
-{% extends "base.html" %}
+{% extends "base.html" %} 
 {% block content %}
 <div class="main">
-  <!-- template renders here -->
+    <!-- template renders here -->
 </div>
 {% raw %}
 <script id="loader-template" type="text/x-handlebars-template">
-  <i class="loader"></i>
+    <i class="loader"></i>
 </script>
 <script id="application-template" type="text/x-handlebars-template">
-  <!-- Modal for ReKey-ing this application -->
-  <div class="modal fade" id="rekey-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-rekey-modal-button">
+    <!-- Modal for ReKey-ing this application -->
+<div class="modal fade" id="rekey-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-rekey-modal-button">
     <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">Re-key application {{name}}</h4>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">Re-key application {{name}}</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Are you sure you want to promote the secondary key for application {{name}}? This will invalidate the previous
+                    primary API key and give primary status to the existing secondary key.
+                    Anything using the old key will promptly break. (Which might be your intention..)
+                  </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="application-rekey-button">Yes, please rekey {{name}}</button>
+            </div>
         </div>
-        <div class="modal-body">
-          <p>
-            Are you sure you want to promote the secondary key for application {{name}}? This will invalidate the previous
-            primary API key and give primary status to the existing secondary key.
-            Anything using the old key will promptly break. (Which might be your intention..)
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger btn-sm" id="application-rekey-button">Yes, please rekey {{name}}</button>
-        </div>
-      </div>
     </div>
-  </div>
-    <!-- Modal for generating a secondary key for this application -->
-  <div class="modal fade" id="secondary-key-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-secondary-key-modal-button">
+</div>
+<!-- Modal for generating a secondary key for this application -->
+<div class="modal fade" id="secondary-key-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-secondary-key-modal-button">
     <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">Generate a secondary key</h4>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">Generate a secondary key</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Are you sure you want to generate a secondary key for application {{name}}?
+                    This will create a new API key for your application, but will not affect the current API key.
+                    Later, you can promote this secondary key to primary for zero-downtime key rotation.
+                  </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="application-secondary-key-button">Generate</button>
+            </div>
         </div>
-        <div class="modal-body">
-          <p>
-            Are you sure you want to generate a secondary key for application {{name}}?
-            This will create a new API key for your application, but will not affect the current API key.
-            Later, you can promote this secondary key to primary for zero-downtime key rotation.
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger btn-sm" id="application-secondary-key-button">Generate</button>
-        </div>
-      </div>
     </div>
-  </div>
-  <!-- Modal for deleting this application -->
-  <div class="modal fade" id="delete-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-delete-modal-button">
+</div>
+<!-- Modal for deleting this application -->
+<div class="modal fade" id="delete-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-delete-modal-button">
     <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">Delete application {{name}}</h4>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">Delete application {{name}}</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Are you sure you want to delete the application {{name}}? Its API key will no longer work and anything using
+                    it will promptly break. The delete will not be successful if incidents or messages were created using this app.
+                  </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" id="application-delete-button">Yes, please delete {{name}}</button>
+            </div>
         </div>
-        <div class="modal-body">
-          <p>
-            Are you sure you want to delete the application {{name}}? Its API key will no longer work and anything using
-            it will promptly break. The delete will not be successful if incidents or messages were created using this app.
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger btn-sm" id="application-delete-button">Yes, please delete {{name}}</button>
-        </div>
-      </div>
     </div>
-  </div>
-  <!-- Modal for renaming this application -->
-  <div class="modal fade" id="rename-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-rename-modal-button">
+</div>
+<!-- Modal for renaming this application -->
+<div class="modal fade" id="rename-app-modal" tabindex="-1" role="dialog" aria-labelledby="show-rename-modal-button">
     <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">rename application {{name}}</h4>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title">rename application {{name}}</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Renaming this app will cause anything using its API key to promptly break until they have been changed to use the new app
+                    name.
+                  </p>
+                <div class="form-inline">
+                    <label for="app-new-name-box">New Name: </label>
+                    <input type="text" class="form-control input-sm typeahead" data-targettype="user" id="app-new-name-box"></input>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm" id="application-rename-button">Rename {{name}}</button>
+            </div>
         </div>
-        <div class="modal-body">
-          <p>
-            Renaming this app will cause anything using its API key to promptly break until they have been changed to use the new app
-            name.
-          </p>
-          <div class="form-inline">
-            <label for="app-new-name-box">New Name: </label>
-            <input type="text" class="form-control input-sm typeahead" data-targettype="user" id="app-new-name-box"></input>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default btn-sm" data-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-warning btn-sm" id="application-rename-button">Rename {{name}}</button>
-        </div>
-      </div>
     </div>
-  </div>
-  <div class="module application-module {{#if @root.isInViewMode}}view{{else}}edit{{/if}}-application">
+</div>
+<div class="module application-module {{#if @root.isInViewMode}}view{{else}}edit{{/if}}-application">
     <h3>
-      {{name}}
-      {{#if @root.isEditable}}
-        {{#if @root.isInViewMode}}
-        <button id="application-edit-button" class="btn btn-default blue btn-sm pull-right">Edit Application</button>
-        {{else}}
-        <button id="application-save-button" class="btn btn-primary btn-sm pull-right">Save Application</button>
+        {{name}}
+        {{#if @root.isEditable}}
+          {{#if @root.isInViewMode}}
+          <button id="application-edit-button" class="btn btn-default blue btn-sm pull-right">Edit Application</button>
+          {{else}}
+          <button id="application-save-button" class="btn btn-primary btn-sm pull-right">Save Application</button>
+          {{/if}}
         {{/if}}
-      {{/if}}
     </h3>
     <span class="light">Owners: {{#if owners}}{{#each owners}}<span class="label label-info">{{this}} {{#if @root.showEditOwners}}{{#ifCanShowDeleteUserButton this}}<i class="glyphicon glyphicon-remove remove-owner" data-owner="{{this}}"></i>{{/ifCanShowDeleteUserButton}}{{/if}}</span>{{/each}}{{else}}<i>none</i>{{/if}}</span>
     {{#if @root.showEditOwners}}<form id="add-owner-form"><input type="text" class="form-control border-bottom input-sm typeahead" data-targettype="user" placeholder="Add username" id="add-owner-box"></input><button type="submit" class="btn btn-primary btn-xs">Add</button></form>{{/if}}<br> 
@@ -117,57 +117,56 @@
     {{#if @root.isInViewMode}}
     <span class="light">Incident title variable: {{#if title_variable}}<span class="label label-info">{{title_variable}} <i class="glyphicon glyphicon-remove remove-variable" data-variable="{{title_variable}}"></i></span>{{else}}<i>none</i>{{/if}}</span>
     {{else}}
-    <span class="light">Incident title variable: {{#if variables}}<select id="title-variable-select">{{#each variables}}<option value="{{this}}">{{this}}</option>{{/each}}<option value='null'>NONE</option></select>{{else}}<i>None</i>{{/if}}</span>
-    {{/if}}
+    <span class="light">Incident title variable: {{#if variables}}<select id="title-variable-select">{{#each variables}} <option value="{{this}}" {{#isEqual this ../title_variable}}selected{{/isEqual}}>{{this}}</option>{{/each}} <option value='null'>NONE</option></select>{{else}}<i>None</i>{{/if}}</span> {{/if}}
     <br>
 
     <div class="light" id="supported-modes-checkboxes">Supported modes:
-      {{#each @root.modes}}
-        <label><input type="checkbox" name="supported_modes" value="{{this}}" {{#ifIn this @root.supported_modes}}checked{{/ifIn}} {{#if @root.isInViewMode}}disabled{{else}}{{#ifNot @root.allowEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>
-      {{/each}}
-    </div>
+        {{#each @root.modes}}
+          <label><input type="checkbox" name="supported_modes" value="{{this}}" {{#ifIn this @root.supported_modes}}checked{{/ifIn}} {{#if @root.isInViewMode}}disabled{{else}}{{#ifNot @root.allowEditingSupportedModes}}disabled{{/ifNot}}{{/if}}> {{this}}</label>
+        {{/each}}
+      </div>
     {{#if @root.allowViewingKey}}
     <div id="api-key-box" class="light">API key: {{#if @root.apiKey}}<code>{{ @root.apiKey }}</code>{{else}}<button id="show-api-key-button" class="btn btn-default blue btn-xs">Show</button>{{/if}}</div>
     <div id="secondary-key-box" class="light">Secondary API key: {{#if @root.secondaryKey}}<code>{{ @root.secondaryKey }}</code>{{else}}<button id="show-secondary-key-button" class="btn btn-default blue btn-xs">Show</button>{{/if}}</div>
     {{/if}}
-  </div>
-  <div class="module application-settings">
+</div>
+<div class="module application-settings">
     <h4>Context Template</h4>
     {{#if @root.isInViewMode}}
     <div class="application-setting">
-      <pre>{{context_template}}</pre>
+        <pre>{{context_template}}</pre>
     </div>
     <h4>Summary Template</h4>
     <div class="application-setting">
-      <pre>{{summary_template}}</pre>
+        <pre>{{summary_template}}</pre>
     </div>
     <h4>Sample Context</h4>
     <div class="application-setting">
-      <pre>{{sample_context}}</pre>
+        <pre>{{sample_context}}</pre>
     </div>
     <h4>Mobile Template</h4>
     <div class="application-setting">
-      <pre>{{mobile_template}}</pre>
+        <pre>{{mobile_template}}</pre>
     </div>
     {{else}}
     <div class="application-setting">
-      <textarea data-field="context_template" class="form-control">{{context_template}}</textarea>
+        <textarea data-field="context_template" class="form-control">{{context_template}}</textarea>
     </div>
     <h4>Summary Template</h4>
     <div class="application-setting">
-      <textarea data-field="summary_template" class="form-control">{{summary_template}}</textarea>
+        <textarea data-field="summary_template" class="form-control">{{summary_template}}</textarea>
     </div>
     <h4>Sample Context</h4>
     <div class="application-setting">
-      <textarea data-field="sample_context" class="form-control">{{sample_context}}</textarea>
+        <textarea data-field="sample_context" class="form-control">{{sample_context}}</textarea>
     </div>
     <h4>Mobile Template</h4>
     <div class="application-setting">
-      <textarea data-field="mobile_template" class="form-control">{{mobile_template}}</textarea>
+        <textarea data-field="mobile_template" class="form-control">{{mobile_template}}</textarea>
     </div>
     {{/if}}
-  </div>
-  <div class="module application-quota">
+</div>
+<div class="module application-quota">
     <h4>Message Volume Quotas</h4>
     {{#if @root.showEditQuotas}}
       Soft quota will be breached when <input type="number" name="soft_quota_threshold" class="form-control border-bottom" value="{{ quota.soft_quota_threshold }}"> messages occur within <input type="number" name="soft_quota_duration" class="form-control border-bottom" value="{{secondsToMinutes quota.soft_quota_duration }}"> minutes,
@@ -183,58 +182,58 @@
       {{/if}}
     {{/if}}
   </div>
-  <div class="module application-default-modes user-settings">
+<div class="module application-default-modes user-settings">
     <h4>Default contact modes per priority for this app</h4>
     <p class="light">These defaults can be overridden on a per-user basis in the user settings page.</p>
     {{#hasKeys @root.default_modes}}
     <table id="application-email-incidents-table">
-      <thead>
-        <tr>
-          <td>Priority</td>
-          <td>Mode</td>
-          {{#ifNot @root.isInViewMode}}
-            <td class="delete-column">Delete</td>
-          {{/ifNot}}
-      <thead>
-      <tbody>
-        {{#each @root.default_modes}}
-        <tr>
-          <td>{{@key}}</td>
-          <td>{{this}}</td>
-          {{#ifNot @root.isInViewMode}}
-            <td><button class="btn btn-danger btn-sm delete-default-mode-button" data-priority="{{@key}}" title="Delete this custom priority">Delete</button></td>
-          {{/ifNot}}
-        </tr>
-        {{/each}}
-      </tbody>
+        <thead>
+            <tr>
+                <td>Priority</td>
+                <td>Mode</td>
+                {{#ifNot @root.isInViewMode}}
+                <td class="delete-column">Delete</td>
+                {{/ifNot}}
+                <thead>
+                <tbody>
+                    {{#each @root.default_modes}}
+                    <tr>
+                        <td>{{@key}}</td>
+                        <td>{{this}}</td>
+                        {{#ifNot @root.isInViewMode}}
+                        <td><button class="btn btn-danger btn-sm delete-default-mode-button" data-priority="{{@key}}" title="Delete this custom priority">Delete</button></td>
+                        {{/ifNot}}
+                    </tr>
+                    {{/each}}
+                </tbody>
     </table>
     {{else}}
     <p class="light">None configured.</p>
     {{/hasKeys}}
     {{#ifNot @root.isInViewMode}}
-      <form id="add-default-mode-form">
+    <form id="add-default-mode-form">
         <select id="default-mode-form-priority" class="form-control border-bottom">
             <option value="">Priority</option>
             {{#each @root.priorities}}
-              <option>{{this}}</option>
+            <option>{{this}}</option>
             {{/each}}
         </select>
         <select id="default-mode-form-mode" class="form-control border-bottom">
             <option value="">Mode</option>
             {{#each @root.supported_modes}}
-              <option>{{this}}</option>
+            <option>{{this}}</option>
             {{/each}}
         </select>
         <input type="submit" value="Set" class="btn btn-primary btn-sm">
-      </form>
+    </form>
     {{/ifNot}}
-  </div>
+</div>
 
-  <div class="module application-default-modes user-settings">
+<div class="module application-default-modes user-settings">
     <h4>Custom email sender address</h4>
     <p class="light">This setting overrides the default "from" address for emails this application generates.</p>
     {{#if @root.isInViewMode}}
-      <span >Custom email "from" address: </span>
+    <span >Custom email "from" address: </span>
       {{#if custom_sender_addresses.email}} 
         <span>{{custom_sender_addresses.email}}</span> 
       {{else}}
@@ -243,49 +242,49 @@
     {{else}}
       <span class="light">Custom email "from" address:</span>
       {{#if custom_sender_addresses.email}}
-      <span id="custom-sender-email-value">{{custom_sender_addresses.email}}</span> 
-        <form id="add-address-form">
+      <span id="custom-sender-email-value">{{custom_sender_addresses.email}}</span>
+      <form id="add-address-form">
           <input required type="email" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input>
           <button type="submit" class="btn btn-primary btn-sm"> Update</button>
           <button class="btn btn-danger btn-sm remove-address" title="Delete custom address">Delete</button>
-          </form>
+      </form>
       {{else}}
-        <span>None (using default sender address)</span>
-        <form id="add-address-form"><input type="text" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input><button type="submit" class="btn btn-primary btn-sm"> Add</button></form>
+      <span>None (using default sender address)</span>
+      <form id="add-address-form"><input type="text" class="form-control border-bottom" placeholder="New address" id="add-address-box"></input><button type="submit" class="btn btn-primary btn-sm"> Add</button></form>
       {{/if}}
-    
-    {{/if}}
-  </div>
 
-  <div class="module application-email-incidents user-settings">
+      {{/if}}
+</div>
+
+<div class="module application-email-incidents user-settings">
     <h4>Emails which create incidents</h4>
     <p class="light">When you send an email with one of these addresses in the "to" header, a new incident will be created.</p>
     {{#hasKeys @root.emailIncidents}}
     <table id="application-email-incidents-table">
-      <thead>
-        <tr>
-          <td>Email Address</td>
-          <td>Plan To Fire</td>
-          {{#ifNot @root.isInViewMode}}
-            {{#if @root.allowEditingEmailIncidents}}
-              <td class="delete-column">Delete</td>
-            {{/if}}
-          {{/ifNot}}
-        </tr>
-      </thead>
-      <tbody>
-        {{#each @root.emailIncidents}}
-        <tr>
-          <td>{{@key}}</td>
-          <td><a href="/plans/{{this}}">{{this}}</a></td>
-          {{#ifNot @root.isInViewMode}}
-            {{#if @root.allowEditingEmailIncidents}}
-              <td><button class="btn btn-danger btn-sm delete-email-incident-button" data-email="{{@key}}" title="Delete this email->plan combo">Delete</button></td>
-            {{/if}}
-          {{/ifNot}}
-        </tr>
-        {{/each}}
-      </tbody>
+        <thead>
+            <tr>
+              <td>Email Address</td>
+              <td>Plan To Fire</td>
+              {{#ifNot @root.isInViewMode}}
+                {{#if @root.allowEditingEmailIncidents}}
+                  <td class="delete-column">Delete</td>
+                {{/if}}
+              {{/ifNot}}
+            </tr>
+        </thead>
+        <tbody>
+            {{#each @root.emailIncidents}}
+            <tr>
+                <td>{{@key}}</td>
+                <td><a href="/plans/{{this}}">{{this}}</a></td>
+              {{#ifNot @root.isInViewMode}}
+                {{#if @root.allowEditingEmailIncidents}}
+                  <td><button class="btn btn-danger btn-sm delete-email-incident-button" data-email="{{@key}}" title="Delete this email->plan combo">Delete</button></td>
+                {{/if}}
+              {{/ifNot}}
+            </tr>
+            {{/each}}
+        </tbody>
     </table>
     {{else}}
       {{#if @root.isInViewMode}}
@@ -295,81 +294,81 @@
     {{#ifNot @root.isInViewMode}}
       {{#if @root.allowEditingEmailIncidents}}
         <form id="add-email-incident-form">
-          <input required type="email" id="add-email-incident-email" class="form-control border-bottom" placeholder="Email Address">
-          <input required type="text" id="add-email-incident-plan" class="form-control border-bottom typeahead" data-typeaheadtype="plan" placeholder="Plan name">
-          <input type="submit" value="Add" class="btn btn-primary btn-sm">
+            <input required type="email" id="add-email-incident-email" class="form-control border-bottom" placeholder="Email Address">
+            <input required type="text" id="add-email-incident-plan" class="form-control border-bottom typeahead" data-typeaheadtype="plan" placeholder="Plan name">
+            <input type="submit" value="Add" class="btn btn-primary btn-sm">
         </form>
       {{/if}}
     {{/ifNot}}
-  </div>
+</div>
 
-  <div class="module application-custom-categories user-settings">
+<div class="module application-custom-categories user-settings">
     <h4>Custom notification categories</h4>
     <p class="light">Users can individually define rules for how they wish to receive messages for each category.</p>
     {{#hasKeys @root.customCategories}}
     <table id="application-custom-categories-table">
-      <thead>
-        <tr>
-          <td>Category name</td>
-          <td>Description</td>
-          <td>Default mode</td>
-          {{#ifNot @root.isInViewMode}}
-            {{#if @root.allowEditingCustomCategories}}
-              <td class="delete-column">Delete</td>
-            {{/if}}
-          {{/ifNot}}
-        </tr>
-      </thead>
-      <tbody>
-        {{#each customCategories}}
-        <tr>
-          <td>{{this.name}}</td>
-          <td>{{this.description}}</td>
-          <td>{{this.mode}}</td>
-          {{#ifNot @root.isInViewMode}}
-            {{#if @root.allowEditingCustomCategories}}
-              <td><button class="btn btn-danger btn-sm delete-custom-category-button" data-category="{{this.name}}" title="Delete this category">Delete</button></td>
-            {{/if}}
-          {{/ifNot}}
-        </tr>
-        {{/each}}
-      </tbody>
+        <thead>
+            <tr>
+                <td>Category name</td>
+                <td>Description</td>
+                <td>Default mode</td>
+              {{#ifNot @root.isInViewMode}}
+                {{#if @root.allowEditingCustomCategories}}
+                  <td class="delete-column">Delete</td>
+                {{/if}}
+              {{/ifNot}}
+            </tr>
+        </thead>
+        <tbody>
+            {{#each customCategories}}
+            <tr>
+                <td>{{this.name}}</td>
+                <td>{{this.description}}</td>
+                <td>{{this.mode}}</td>
+                {{#ifNot @root.isInViewMode}}
+                {{#if @root.allowEditingCustomCategories}}
+                <td><button class="btn btn-danger btn-sm delete-custom-category-button" data-category="{{this.name}}" title="Delete this category">Delete</button></td>
+                {{/if}}
+                {{/ifNot}}
+            </tr>
+            {{/each}}
+        </tbody>
     </table>
     {{else}}
-      {{#if @root.isInViewMode}}
-        <p class="light">None configured.</p>
+    {{#if @root.isInViewMode}}
+    <p class="light">None configured.</p>
       {{/if}}
     {{/hasKeys}}
     {{#ifNot @root.isInViewMode}}
       {{#if @root.allowEditingCustomCategories}}
         <form id="add-custom-category-form">
-          <input required type="text" maxlength="255" id="add-custom-category" class="form-control border-bottom" placeholder="Category name">
-          <input required type="text" maxlength="255" id="add-custom-category-description" class="form-control border-bottom " placeholder="Description">
-          <select required id="category-default-mode" class="form-control border-bottom">
-            <option value="" disabled selected>Mode</option>
-            {{#each @root.modes}}
-              <option value="{{this}}">{{this}}</option>
-            {{/each}}
-          </select>
-          <input type="submit" value="Add" class="btn btn-primary btn-sm">
+            <input required type="text" maxlength="255" id="add-custom-category" class="form-control border-bottom auto-field" placeholder="Category name">
+            <input required type="text" maxlength="255" id="add-custom-category-description" class="form-control border-bottom long-field" placeholder="Description">
+            <select required id="category-default-mode" class="form-control border-bottom">
+                <option value="" disabled selected>Mode</option>
+                {{#each @root.modes}}
+                <option value="{{this}}">{{this}}</option>
+                {{/each}}
+            </select>
+            <input type="submit" value="Add" class="btn btn-primary btn-sm">
         </form>
       {{/if}}
     {{/ifNot}}
-  </div>
+</div>
 
-  {{#ifNot @root.isInViewMode}}
-    {{#if @root.allowDangerousActions}}
-      <div class="module application-dangerous-actions">
+{{#ifNot @root.isInViewMode}}
+  {{#if @root.allowDangerousActions}}
+    <div class="module application-dangerous-actions">
         <h4>Destructive Actions <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
         <div class="inner">
-          <p class="light">Here be dragons!</p>
-          <button id="show-rename-modal-button" class="btn btn-warning btn-sm">Rename Application</button>
-          <button id="show-secondary-key-modal-button" class="btn btn-warning btn-sm">Generate Secondary Key</button>
-          <button id="show-rekey-modal-button" class="btn btn-warning btn-sm">Promote Secondary Key</button>
-          <button id="show-delete-modal-button" class="btn btn-danger btn-sm">Delete Application</button>
+            <p class="light">Here be dragons!</p>
+            <button id="show-rename-modal-button" class="btn btn-warning btn-sm">Rename Application</button>
+            <button id="show-secondary-key-modal-button" class="btn btn-warning btn-sm">Generate Secondary Key</button>
+            <button id="show-rekey-modal-button" class="btn btn-warning btn-sm">Promote Secondary Key</button>
+            <button id="show-delete-modal-button" class="btn btn-danger btn-sm">Delete Application</button>
         </div>
-      </div>
-    {{/if}}
+    </div>
+  {{/if}}
   {{/ifNot}}
 </script>
 {% endraw %}

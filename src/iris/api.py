@@ -4803,13 +4803,9 @@ class NotificationCategories(object):
         '''
         new_categories = ujson.loads(req.context['body'])
 
-        if not isinstance(new_categories, list):
-            raise HTTPBadRequest('Body must be a list of objects')
-
         # an empty list is valid and will delete all categories
-        if new_categories:
-            if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
-                raise HTTPBadRequest('Missing required attributes')
+        if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
+            raise HTTPBadRequest('Missing required attributes')
 
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
