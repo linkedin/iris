@@ -1921,6 +1921,10 @@ iris = {
         init: function(){
             iris.changeTitle('Settings');
             var self = this;
+            this.supportedOverrideModes = window.appData.modes;
+            // drop is ommitted add it for override options
+            this.supportedOverrideModes.push('drop');
+            
             this.getUserSettings().done(function(){
                 self.getCustomOverrideSettings().done(function(){
                     self.createCustomOverrideTable();
@@ -1935,7 +1939,6 @@ iris = {
             this.loadSupportedTimezones().done(function(){
                 self.populateTimezone();
             });
-            this.getModes();
         },
         events: function(){
             var self = this;
@@ -1992,14 +1995,6 @@ iris = {
         },
         toggleReprioritization: function() {
             $('#reprioritization').toggleClass('active')
-        },
-        getModes: function(){
-            var self = this;
-            return $.getJSON(this.data.modesUrl, function(response){
-                self.supportedOverrideModes = response;
-                // drop is ommitted from back end response, add it for override options
-                self.supportedOverrideModes.push('drop');
-            });
         },
         getReprioritizationSettings: function() {
             var self = this;
@@ -2234,7 +2229,7 @@ iris = {
             var self = this;
 
             if(self.data.settings.customApp.has(app)){
-                // delete user overrides for appliucation
+                // delete user overrides for application
                 $.ajax({
                     url: self.data.url + self.data.user + '/categories/' + app,
                     method: 'DELETE',
@@ -2244,7 +2239,7 @@ iris = {
                     self.data.settings.categories = self.data.settings.categories.filter(function( obj ) {
                         return obj.application !== app;
                     });
-                    delete self.data.settings.customApp.delete(app);
+                    self.data.settings.customApp.delete(app);
                     iris.createAlert('Deleted application succesfully', 'success');
                     self.createCustomOverrideTable();
                 }).fail(function(){
@@ -2331,9 +2326,7 @@ iris = {
                 contentType: 'text'
             }).done(function(){
                 iris.createAlert('Modal settings saved succesfully', 'success');
-                if (!self.data.settings.customApp.has(app)) {
-                    self.data.settings.customApp.add(app);
-                }
+                self.data.settings.customApp.add(app);
     
                 // update user overrides
                 settings.categories.forEach(function(cat, i){
@@ -2403,7 +2396,7 @@ iris = {
             }).done(function (resp) {
                   self.data.$addAppOverrideSelect.empty();
                   self.data.$addAppOverrideSelect.append($('<option value="">').text('Add Application'));
-                  appOverrideCategories = resp;
+                  var appOverrideCategories = resp;
                   appOverrideCategories.forEach(function (appSetting, i) {
                     customOverrideApps.add(appSetting['application']);
                   });
