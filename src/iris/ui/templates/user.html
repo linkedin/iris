@@ -257,13 +257,13 @@
             <td>No custom notification settings have been defined for any application </td>
         </tr>
         {{/unless}}
-        {{#each customApp }}
-        <tr data-app="{{this}}" class="app-row">
-            <td class="application-name">{{this}}</td>
-            <td><button class="btn  btn-sm btn-primary edit-custom-app-button" data-app="{{this}}" title="Edit custom settings for {{this}}">Edit</button></td>
-            <td><button class="btn btn-danger btn-sm delete-custom-app-button" data-app="{{this}}" title="Remove custom settings for {{this}}">Delete</button></td>
+        {{#eachInSet customApp}}
+        <tr data-app="{{value}}" class="app-row">
+            <td class="application-name">{{value}}</td>
+            <td><button class="btn  btn-sm btn-primary edit-custom-app-button" data-app="{{value}}" title="Edit custom settings for {{value}}">Edit</button></td>
+            <td><button class="btn btn-danger btn-sm delete-custom-app-button" data-app="{{value}}" title="Remove custom settings for {{value}}">Delete</button></td>
         </tr>
-        {{/each}}
+        {{/eachInSet}}
     </tbody>
 </script>
 
@@ -285,8 +285,7 @@
                 <td>{{this.description}}</td>
                 <td>
                     <select class="app-priority custom-modal-priority form-control border-bottom" data-category="{{this.name}}">
-                        <option value="{{mode}}">{{mode}}</option>
-                        {{#each ../supported_modes}}<option value="{{this}}">{{this}}</option>{{/each}}
+                        {{#each ../supported_modes}}<option value="{{this}}" {{#isEqual this ../mode}} selected {{/isEqual}}>{{this}}</option>{{/each}}
                       </select>
                 </td>
             </tr>

@@ -1880,6 +1880,7 @@ iris = {
     user: {
         data: {
             url: '/v0/users/',
+            modesUrl: '/v0/modes',
             apiBase: '/v0/',
             postModesUrl: '/v0/users/modes/',
             reprioritizationUrl: '/v0/users/reprioritization/',
@@ -1889,6 +1890,7 @@ iris = {
             settings: null,
             reprioritizationSettings: [],
             supportedTimezones: [],
+            supportedOverrideModes: [],
             $page: $('.main'),
             $priority: $('#priority-table'),
             $customOverrideTable: $('#custom-override-table'),
@@ -1933,6 +1935,7 @@ iris = {
             this.loadSupportedTimezones().done(function(){
                 self.populateTimezone();
             });
+            this.getModes();
         },
         events: function(){
             var self = this;
@@ -1990,6 +1993,14 @@ iris = {
         toggleReprioritization: function() {
             $('#reprioritization').toggleClass('active')
         },
+        getModes: function(){
+            var self = this;
+            return $.getJSON(this.data.modesUrl, function(response){
+                self.supportedOverrideModes = response;
+                // drop is ommitted from back end response, add it for override options
+                self.supportedOverrideModes.push('drop');
+            });
+        },
         getReprioritizationSettings: function() {
             var self = this;
             return $.getJSON(this.data.reprioritizationUrl + this.data.user).done(function(response){
@@ -2002,11 +2013,10 @@ iris = {
             var self = this;
             return $.getJSON(this.data.url + this.data.user + '/categories').done(function(response){
                 self.data.settings.categories = response;
-                var tempSet = new Set();
+                self.data.settings['customApp'] = new Set();
                 self.data.settings.categories.forEach(function (item, index) {
-                    tempSet.add(item['application']);
+                    self.data.settings.customApp.add(item['application']);
                 });
-                self.data.settings['customApp'] = Array.from(tempSet);
 
             }).fail(function(response){
                 iris.createAlert('Error: Failed to load notification category data -' + response.text);
@@ -2177,6 +2187,7 @@ iris = {
         createCustomOverrideModal: function(app){
 
             var template = Handlebars.compile(this.data.createCustomOverrideModalTemplate),
+                self = this,
                 settings = this.data.settings,
                 customOverrideModal = this.data.$customOverrideModal;
 
@@ -2184,26 +2195,23 @@ iris = {
             var appOverrideCategories = [];
             $.ajax({
                 type: "GET",
-                url: '/v0/categories/' + app,
-                success: function(resp)
-                {
-                    appOverrideCategories = resp;
-                    appOverrideCategories.forEach((appSetting, i) => {
-                        settings.categories.forEach(userSetting => {
-                            if(appSetting['application'] === userSetting['application'] && appSetting['name'] === userSetting['category']){
-                                //apply user overrides
-                                appOverrideCategories[i]['mode'] = userSetting['mode'];
-                            }
-                        });
-
+                url: '/v0/categories/' + app
+            }).done(function (resp) {
+                  appOverrideCategories = resp;
+                  appOverrideCategories.forEach(function (appSetting, i) {
+                    settings.categories.forEach(function (userSetting) {
+                      if(appSetting['application'] === userSetting['application'] && appSetting['name'] === userSetting['category']){
+                        //apply user overrides
+                        appOverrideCategories[i]['mode'] = userSetting['mode'];
+                      }
                     });
-                    settings['modalAppName'] = app;
-                    settings['appCategoryData'] = appOverrideCategories;
-                    settings['supported_modes'] = ['email','slack','call','sms','drop'];
-                    customOverrideModal.empty();
-                    customOverrideModal.append(template(settings));
-                    $('#custom-override-modal').modal('show');
-                }
+                  });
+                  settings['modalAppName'] = app;
+                  settings['appCategoryData'] = appOverrideCategories;
+                  settings['supported_modes'] = self.supportedOverrideModes;
+                  customOverrideModal.empty();
+                  customOverrideModal.append(template(settings));
+                  $('#custom-override-modal').modal('show');
             }).fail(function(){
                 iris.createAlert('Failed to fetch category data for this app', 'danger');
             });
@@ -2225,16 +2233,18 @@ iris = {
         deletePerCustomApp: function(app) {
             var self = this;
 
-            var index = self.data.settings.customApp.indexOf(app);
-
-            if(index > -1){
-
+            if(self.data.settings.customApp.has(app)){
+                // delete user overrides for appliucation
                 $.ajax({
                     url: self.data.url + self.data.user + '/categories/' + app,
                     method: 'DELETE',
                     contentType: 'text'
                 }).done(function(){
-                    delete self.data.settings.customApp.splice(index, 1);
+                    // delete user mode overrides locally 
+                    self.data.settings.categories = self.data.settings.categories.filter(function( obj ) {
+                        return obj.application !== app;
+                    });
+                    delete self.data.settings.customApp.delete(app);
                     iris.createAlert('Deleted application succesfully', 'success');
                     self.createCustomOverrideTable();
                 }).fail(function(){
@@ -2321,15 +2331,22 @@ iris = {
                 contentType: 'text'
             }).done(function(){
                 iris.createAlert('Modal settings saved succesfully', 'success');
-                if (self.data.settings.customApp.indexOf(app) === -1) {
-                    self.data.settings.customApp.push(app);
+                if (!self.data.settings.customApp.has(app)) {
+                    self.data.settings.customApp.add(app);
                 }
-                self.createCustomOverrideTable();
+    
                 // update user overrides
                 settings.categories.forEach(function(cat, i){
-                    if(cat['application'] == app && (cat['category'] in modalOptions))
-                        self.data.settings.categories[i]['mode'] = modalOptions[cat['category']];
+                    if(cat['application'] == app){
+                        self.data.settings.categories.splice(i,1);
+                    }
                 });
+                Object.keys(modalOptions).forEach(function(key) {
+                    self.data.settings.categories.push({ 'application': app, 'category': key, 'mode': modalOptions[key]});
+                });
+
+                self.createCustomOverrideTable();
+                
             }).fail(function(){
                 iris.createAlert('Failed to save modal settings', 'danger');
             });
@@ -2382,24 +2399,21 @@ iris = {
             //fetch apps that have custom categories defined
             $.ajax({
                 type: "GET",
-                url: '/v0/categories/',
-                success: function(resp)
-                {
-                    self.data.$addAppOverrideSelect.empty();
-                    self.data.$addAppOverrideSelect.append($('<option value="">').text('Add Application'));
-
-                    appOverrideCategories = resp;
-                    appOverrideCategories.forEach((appSetting, i) => {
-                        customOverrideApps.add(appSetting['application']);
-                    });
-
-                    Array.from(customOverrideApps).sort().forEach(function(app) {
-                        self.data.$addAppOverrideSelect.append($('<option>').text(app));
-                    });
-                }
-            }).fail(function(){
+                url: '/v0/categories/'
+            }).done(function (resp) {
+                  self.data.$addAppOverrideSelect.empty();
+                  self.data.$addAppOverrideSelect.append($('<option value="">').text('Add Application'));
+                  appOverrideCategories = resp;
+                  appOverrideCategories.forEach(function (appSetting, i) {
+                    customOverrideApps.add(appSetting['application']);
+                  });
+                  Array.from(customOverrideApps).sort().forEach(function (app) {
+                    self.data.$addAppOverrideSelect.append($('<option>').text(app));
+                  });
+    
+              }).fail(function () {
                 iris.createAlert('Failed to fetch applications for dropdown', 'danger');
-            });
+              });
 
         },
         loadSupportedTimezones: function() {
@@ -3523,6 +3537,15 @@ iris = {
         })
         Handlebars.registerHelper('prettyPrint', function(val){
           return typeof(val) === 'string' ? val : "{...}";
+        });
+        Handlebars.registerHelper('eachInSet', function(context, options) {
+            // handle sets and return them in sorted order
+            var ret = "";
+            values = Array.from(context).sort();
+            values.forEach(function(val) {
+                ret = ret + options.fn({value:val});
+            });
+            return ret;
         });
         Handlebars.registerHelper('secondsToMinutes', function(val){
           if (val) {
