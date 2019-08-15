@@ -4756,8 +4756,10 @@ class NotificationCategories(object):
         cursor = conn.cursor(db.dict_cursor)
         if application:
             req.params['application'] = application
-        query = category_query + ' WHERE ' + ' AND '.join(
-            gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
+        query = category_query
+        if req.params:
+            query += ' WHERE ' + ' AND '.join(
+                gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
         cursor.execute(query)
         data = cursor.fetchall()
         cursor.close()
@@ -4804,6 +4806,7 @@ class NotificationCategories(object):
         '''
         new_categories = ujson.loads(req.context['body'])
 
+        # an empty list is valid and will delete all categories
         if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
             raise HTTPBadRequest('Missing required attributes')
 
@@ -4861,7 +4864,8 @@ class NotificationCategories(object):
                 cursor.executemany(
                     '''UPDATE `notification_category`
                     SET `description` = %(description)s,
-                    `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)''',
+                    `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)
+                    WHERE `name` = %(name)s''',
                     update_categories)
             if delete_categories:
                 cursor.execute(
@@ -4869,6 +4873,7 @@ class NotificationCategories(object):
                     (app_id, delete_categories))
             conn.commit()
             resp.status = HTTP_200
+            resp.body = ujson.dumps({})
         finally:
             cursor.close()
             conn.close()
@@ -5003,6 +5008,7 @@ class CategoryOverrides(object):
                                (del_categories, user_id))
             conn.commit()
             resp.status = HTTP_201
+            resp.body = ujson.dumps({})
         finally:
             cursor.close()
             conn.close()
@@ -5122,7 +5128,9 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
+    api.add_route('/v0/categories', NotificationCategories())
     api.add_route('/v0/categories/{application}', NotificationCategories())
+    api.add_route('/v0/users/{username}/categories', CategoryOverrides())
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     mobile_config = config.get('iris-mobile', {})
