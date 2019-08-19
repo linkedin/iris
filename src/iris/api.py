@@ -1309,6 +1309,8 @@ class Plans(object):
         index provided. At incident creation time, a mapping of dynamic index to role/target
         is provided to define the recipient of a message. See incidents POST endpoint for details.
 
+        The total time of all plan steps can not exceed 24 hours.
+
         '''
         plan_params = ujson.loads(req.context['body'])
         try:
@@ -1357,14 +1359,19 @@ class Plans(object):
         }
 
         dynamic_indices = set()
-
+        plan_length = 0
         for steps in plan_params['steps']:
             for step in steps:
                 if 'dynamic_index' in step:
                     dynamic_indices.add(step['dynamic_index'])
+                plan_length += step.get('wait', 0) * step.get('count', 0)
+
         if dynamic_indices != set(range(len(dynamic_indices))):
             raise HTTPBadRequest('Invalid plan',
                                  'Dynamic target numbers must span 0..n without gaps')
+        if plan_length > 1440:
+            raise HTTPBadRequest('Invalid plan',
+                                 'Plan length exceeds the 24 hour maximum')
 
         with db.guarded_session() as session:
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
