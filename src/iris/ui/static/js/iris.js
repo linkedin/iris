@@ -554,7 +554,8 @@ iris = {
       // gets & checks data from plan inputs and prepares model for post.
       var model = this.data.submitModel,
           missingFields = [],
-          $trackingEl = $('#tracking-notification.active');
+          $trackingEl = $('#tracking-notification.active'),
+          planLength = 0;
 
       model.creator = window.appData.user;
       model.name = $('#plan-name').val();
@@ -581,6 +582,15 @@ iris = {
       // validate plan notifications exist.
       if ($('.plan-notification').length === 0) {
         missingFields.push('steps/notifications');
+        model.isValid = false;
+      }
+
+      // validate maximum plan duration
+      $('.step-time').each(function(_, element) {
+        planLength += parseInt($(element).html());
+      });
+      if ( planLength > 1440 ){
+        iris.createAlert('Maximum plan duration exceeded: plan steps must add up to < 24 hours', 'danger', $('.plan-details') );
         model.isValid = false;
       }
 
