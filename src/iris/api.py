@@ -1372,6 +1372,7 @@ class Plans(object):
         if dynamic_indices != set(range(len(dynamic_indices))):
             raise HTTPBadRequest('Invalid plan',
                                  'Dynamic target numbers must span 0..n without gaps')
+
         if plan_length > 86400:
             raise HTTPBadRequest('Invalid plan',
                                  'Plan length exceeds the 24 hour maximum')
