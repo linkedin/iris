@@ -1361,15 +1361,19 @@ class Plans(object):
         dynamic_indices = set()
         plan_length = 0
         for steps in plan_params['steps']:
+            longest_step = 0
             for step in steps:
                 if 'dynamic_index' in step:
                     dynamic_indices.add(step['dynamic_index'])
-                plan_length += step.get('wait', 0) * step.get('count', 0)
+                if (step.get('wait', 0) * step.get('count', 0)) > longest_step:
+                    longest_step = step.get('wait', 0) * step.get('count', 0)
+            plan_length += longest_step
 
         if dynamic_indices != set(range(len(dynamic_indices))):
             raise HTTPBadRequest('Invalid plan',
                                  'Dynamic target numbers must span 0..n without gaps')
-        if plan_length > 1440:
+
+        if plan_length > 86400:
             raise HTTPBadRequest('Invalid plan',
                                  'Plan length exceeds the 24 hour maximum')
 
