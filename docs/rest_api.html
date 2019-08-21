@@ -697,6 +697,8 @@ send messages directly to mailing lists or slack channels.
 Note that if you use this role you MUST specify the mode key but not the priority.
 This role will set the destination to the target value so make sure the target
 is a valid email address, slack channel, slack username, etc.</p>
+<p>If you define a category users will be able to define how they wish to receive that notification by category.
+To use a category you must first define it for your application from your application page or through an api call.</p>
 <p>Multi-recipient messages are supported for notifications explicitly specifying the
 &#8220;email&#8221; mode. To send a multi-recipient message, specify a list of objects defining
 &#8220;role&#8221; and &#8220;target&#8221; attributes. All roles, including &#8220;literal_target&#8221;, are
@@ -727,6 +729,18 @@ to true. If no bcc attribute is defined for a target, the default value is false
     <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
     <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
     <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_user&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;category_name&quot;</span>
 <span class="p">}</span>
 </pre></div>
 </div>
