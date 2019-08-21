@@ -27,7 +27,7 @@ def get_routes(app):
             for method in curr_node.method_map:
                 handler = curr_node.method_map[method]
                 try:
-                    if handler.__getattribute__('func_name') == 'method_not_allowed':
+                    if handler.__getattribute__('func_name') == 'HTTPMethodNotAllowed':
                         # method not defined for route
                         continue
                 except Exception:
@@ -54,8 +54,9 @@ class AutofalconDirective(Directive):
                 continue
             if not docstring:
                 continue
-            if not (handler.__self__.allow_read_no_auth and method == 'GET'):
-                docstring += '\n:reqheader Authorization: see :ref:`hmac-auth-label`.\n'
+            if hasattr(handler, '__self__'):
+                if not (handler.__self__.allow_read_no_auth and method == 'GET'):
+                    docstring += '\n:reqheader Authorization: see :ref:`hmac-auth-label`.\n'
 
             docstring = prepare_docstring(docstring)
 
