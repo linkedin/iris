@@ -110,6 +110,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#v0-users">/v0/users</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-applications">/v0/applications</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-categories">/v0/categories</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#healthcheck">/healthcheck</a></li>
 </ul>
 </li>
@@ -382,6 +383,7 @@ parameters:</p>
 combination. These indices must span a range from 0..n, where n is the largest dynamic
 index provided. At incident creation time, a mapping of dynamic index to role/target
 is provided to define the recipient of a message. See incidents POST endpoint for details.</p>
+<p>The total time of all plan steps can not exceed 24 hours.</p>
 </div></blockquote>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -695,6 +697,14 @@ send messages directly to mailing lists or slack channels.
 Note that if you use this role you MUST specify the mode key but not the priority.
 This role will set the destination to the target value so make sure the target
 is a valid email address, slack channel, slack username, etc.</p>
+<p>Multi-recipient messages are supported for notifications explicitly specifying the
+&#8220;email&#8221; mode. To send a multi-recipient message, specify a list of objects defining
+&#8220;role&#8221; and &#8220;target&#8221; attributes. All roles, including &#8220;literal_target&#8221;, are
+supported. These messages will be sent on a best-effort basis to as many targets
+as is possible. If any role:target pairs are found to be invalid, they will be
+skipped, and the message will be delivered to all other targets. Each object can
+also optionally define a &#8220;bcc&#8221; field, which will mark those targets as bcc if set
+to true. If no bcc attribute is defined for a target, the default value is false.</p>
 <p><strong>Example request</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
 <span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
@@ -732,6 +742,27 @@ is a valid email address, slack channel, slack username, etc.</p>
 <span class="p">}</span>
 </pre></div>
 </div>
+<div class="highlight-http"><div class="highlight"><pre><span></span>POST /v0/notifications HTTP/1.1
+Content-Type: application/json
+
+{
+    &quot;target_list&quot;: {
+        {
+            &quot;role&quot;: &quot;literal_target&quot;,
+            &quot;target&quot;: &quot;list@example.com&quot;
+        },
+        {
+            &quot;role&quot;: &quot;user&quot;,
+            &quot;target&quot;: &quot;jdoe&quot;,
+            &quot;bcc&quot;: true
+        }
+    }
+    &quot;subject&quot;: &quot;wake up&quot;,
+    &quot;body&quot;: &quot;something is on fire&quot;,
+    &quot;mode&quot;: &quot;email&quot;
+}
+</pre></div>
+</div>
 <p><strong>Example response</strong>:</p>
 <div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
 <span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
@@ -753,10 +784,13 @@ is a valid email address, slack channel, slack username, etc.</p>
 </table>
 <p>A request is considered invalid if:</p>
 <ul class="simple">
-<li>either target, subject or role is missing</li>
+<li>either target, subject or role is missing and target_list is not provided</li>
+<li>target_list is provided, but no subject</li>
+<li>target_list is malformed (not of the form [{&#8220;role&#8221;: foo, &#8220;target&#8221;: bar}])</li>
+<li>a priority is given for a target_list</li>
 <li>both priority and mode are missing</li>
 <li>invalid priority, mode</li>
-<li>both tempalte, body and email_html are missing</li>
+<li>both template, body and email_html are missing</li>
 <li>template, body and email_html is not a string</li>
 <li>message queue request rejected by sender</li>
 </ul>
@@ -807,6 +841,341 @@ is a valid email address, slack channel, slack username, etc.</p>
 </div>
 <div class="section" id="v0-users">
 <h3>/v0/users<a class="headerlink" href="#v0-users" title="Permalink to this headline">¶</a></h3>
+<dl class="delete">
+<dt id="delete--v0-users-username-categories">
+<code class="descname">DELETE </code><code class="descname">/v0/users/{username}/categories</code><a class="headerlink" href="#delete--v0-users-username-categories" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Delete a user&#8217;s category settings for a given app, removing all
+overrides for that app. Essentially sets all categories back to
+default.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">DELETE</span> <span class="nn">/v0/users/jdoe/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">204</span> <span class="ne">No Content</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-users-username-categories">
+<code class="descname">GET </code><code class="descname">/v0/users/{username}/categories</code><a class="headerlink" href="#get--v0-users-username-categories" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Get notification category overrides by user. Returns a list of override
+objects, defining the app, category, and override mode. If no application
+is provided in the URL, returns all category overrides for the user.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/users/jdoe/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;foo-app&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;bar-category&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;drop&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="post">
+<dt id="post--v0-users-username-categories">
+<code class="descname">POST </code><code class="descname">/v0/users/{username}/categories</code><a class="headerlink" href="#post--v0-users-username-categories" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Create and edit a user&#8217;s overrides for an application. Takes
+a mapping of category_name: mode. For each category passed, either
+creates or overwrites the user&#8217;s settings for that category, mapping
+it to the given mode. If the mode is null/None, instead deletes that
+mapping to revert the category setting to default. e.g. passing
+{&#8220;foo&#8221;: &#8220;email&#8221;, &#8220;bar&#8221;: None} will delete the setting for &#8220;bar&#8221; and
+map &#8220;foo&#8221; to &#8220;email&#8221;, regardless of whether &#8220;foo&#8221; previously had
+another setting.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/categories/123</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;foo-category&quot;</span><span class="p">:</span> <span class="s2">&quot;drop&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;bar-category&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">201</span> <span class="ne">Created</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="delete">
+<dt id="delete--v0-users-username-categories-application">
+<code class="descname">DELETE </code><code class="descname">/v0/users/{username}/categories/{application}</code><a class="headerlink" href="#delete--v0-users-username-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Delete a user&#8217;s category settings for a given app, removing all
+overrides for that app. Essentially sets all categories back to
+default.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">DELETE</span> <span class="nn">/v0/users/jdoe/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">204</span> <span class="ne">No Content</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-users-username-categories-application">
+<code class="descname">GET </code><code class="descname">/v0/users/{username}/categories/{application}</code><a class="headerlink" href="#get--v0-users-username-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Get notification category overrides by user. Returns a list of override
+objects, defining the app, category, and override mode. If no application
+is provided in the URL, returns all category overrides for the user.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/users/jdoe/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;foo-app&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;bar-category&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;drop&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="post">
+<dt id="post--v0-users-username-categories-application">
+<code class="descname">POST </code><code class="descname">/v0/users/{username}/categories/{application}</code><a class="headerlink" href="#post--v0-users-username-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Create and edit a user&#8217;s overrides for an application. Takes
+a mapping of category_name: mode. For each category passed, either
+creates or overwrites the user&#8217;s settings for that category, mapping
+it to the given mode. If the mode is null/None, instead deletes that
+mapping to revert the category setting to default. e.g. passing
+{&#8220;foo&#8221;: &#8220;email&#8221;, &#8220;bar&#8221;: None} will delete the setting for &#8220;bar&#8221; and
+map &#8220;foo&#8221; to &#8220;email&#8221;, regardless of whether &#8220;foo&#8221; previously had
+another setting.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/categories/123</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;foo-category&quot;</span><span class="p">:</span> <span class="s2">&quot;drop&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;bar-category&quot;</span><span class="p">:</span> <span class="kc">null</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">201</span> <span class="ne">Created</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-users-modes-username">
+<code class="descname">GET </code><code class="descname">/v0/users/modes/{username}</code><a class="headerlink" href="#get--v0-users-modes-username" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Get priority:mode mappings for a given user. If no application is
+passed via query params, returns a user&#8217;s global priority:mode
+mapping. Otherwise, return the per-application priority mapping
+that corresponds to the specified application. Any undefined mapping
+has &#8220;default&#8221; specified as mode, otherwise the mode&#8217;s name is specified.</p>
+<p>This action is only available if the request&#8217;s username matches the
+username passed in the URL. Admins and apps that can authenticate as
+users are also allowed to access this data.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/users/modes/jdoe?application=foo</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+    <span class="nt">&quot;high&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;low&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;medium&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;urgent&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="post">
+<dt id="post--v0-users-modes-username">
+<code class="descname">POST </code><code class="descname">/v0/users/modes/{username}</code><a class="headerlink" href="#post--v0-users-modes-username" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Update priority:mode mappings for a given user. To update global
+priority mappings, specify the priority and new value in the base
+level of the post body. For per application settings, define new
+values in a dict mapping to the app&#8217;s name under the &#8220;per_app_modes&#8221;
+key. To delete settings, specify &#8220;default&#8221; as the mode mapping.
+Any priority/app not specified in the request is unchanged.</p>
+<p>This API responds with the new value of the global priority:mode
+mapping after the request has been made.</p>
+<p>This action is available only to the user matching the username in
+the URL, to admins, and to apps that can authenticate as users.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+ <span class="p">{</span>
+     <span class="nt">&quot;urgent&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;high&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;medium&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;low&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;per_app_modes&quot;</span><span class="p">:</span> <span class="p">{</span>
+         <span class="nt">&quot;foo-app&quot;</span><span class="p">:</span> <span class="p">{</span>
+             <span class="nt">&quot;urgent&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;high&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;medium&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;low&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+         <span class="p">},</span>
+         <span class="nt">&quot;bar-app&quot;</span><span class="p">:</span> <span class="p">{</span>
+             <span class="nt">&quot;urgent&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;high&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;medium&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+             <span class="nt">&quot;low&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span>
+         <span class="p">}</span>
+     <span class="p">}</span>
+ <span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">{</span>
+     <span class="nt">&quot;urgent&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;high&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;medium&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span><span class="p">,</span>
+     <span class="nt">&quot;low&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+ <span class="p">}</span>
+</pre></div>
+</div>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 <dl class="delete">
 <dt id="delete--v0-users-reprioritization-username-src_mode_name">
 <code class="descname">DELETE </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#delete--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
@@ -942,6 +1311,173 @@ that defines content for that application.</p>
 <span class="p">]</span>
 </pre></div>
 </div>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-categories">
+<h3>/v0/categories<a class="headerlink" href="#v0-categories" title="Permalink to this headline">¶</a></h3>
+<dl class="get">
+<dt id="get--v0-categories">
+<code class="descname">GET </code><code class="descname">/v0/categories</code><a class="headerlink" href="#get--v0-categories" title="Permalink to this definition">¶</a></dt>
+<dd><p>Notification category search. Can filter based on id, name, app name,
+and mode. Returns a list of categories matching the specified filters.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/categories?name__startswith=foo&amp;application=app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">123</span><span class="p">,</span>
+        <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;foobar&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;app&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="post">
+<dt id="post--v0-categories">
+<code class="descname">POST </code><code class="descname">/v0/categories</code><a class="headerlink" href="#post--v0-categories" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Create notification categories for a given app. Pass a list of categories representing
+all notification categories for the app. This endpoint will create, edit, and delete
+the app&#8217;s categories to match the list passed in.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+ <span class="p">[</span>
+    <span class="p">{</span>
+         <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;foo-category&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;foobar&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+     <span class="p">},</span>
+     <span class="p">{</span>
+         <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;bar-category&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;barbaz&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span>
+     <span class="p">}</span>
+ <span class="p">]</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">statuscode 200:</th><td class="field-body">categories saved</td>
+</tr>
+<tr class="field-even field"><th class="field-name">statuscode 400:</th><td class="field-body">invalid request, missing required attributes</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">statuscode 401:</th><td class="field-body">user/app is not allowed to create categories for this app</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="get">
+<dt id="get--v0-categories-application">
+<code class="descname">GET </code><code class="descname">/v0/categories/{application}</code><a class="headerlink" href="#get--v0-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><p>Notification category search. Can filter based on id, name, app name,
+and mode. Returns a list of categories matching the specified filters.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">GET</span> <span class="nn">/v0/categories?name__startswith=foo&amp;application=app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+<span class="p">[</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="mi">123</span><span class="p">,</span>
+        <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;foobar&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;application&quot;</span><span class="p">:</span> <span class="s2">&quot;app&quot;</span><span class="p">,</span>
+        <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="post">
+<dt id="post--v0-categories-application">
+<code class="descname">POST </code><code class="descname">/v0/categories/{application}</code><a class="headerlink" href="#post--v0-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><blockquote>
+<div><p>Create notification categories for a given app. Pass a list of categories representing
+all notification categories for the app. This endpoint will create, edit, and delete
+the app&#8217;s categories to match the list passed in.</p>
+<p><strong>Example request</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/categories/foo-app</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+
+ <span class="p">[</span>
+    <span class="p">{</span>
+         <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;foo-category&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;foobar&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
+     <span class="p">},</span>
+     <span class="p">{</span>
+         <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;bar-category&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;barbaz&quot;</span><span class="p">,</span>
+         <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;slack&quot;</span>
+     <span class="p">}</span>
+ <span class="p">]</span>
+</pre></div>
+</div>
+<p><strong>Example response</strong>:</p>
+<div class="highlight-http"><div class="highlight"><pre><span></span><span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span> <span class="m">200</span> <span class="ne">OK</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">statuscode 200:</th><td class="field-body">categories saved</td>
+</tr>
+<tr class="field-even field"><th class="field-name">statuscode 400:</th><td class="field-body">invalid request, missing required attributes</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">statuscode 401:</th><td class="field-body">user/app is not allowed to create categories for this app</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">Request Headers:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><ul class="first last simple">
+<li><a class="reference external" href="https://tools.ietf.org/html/rfc7235#section-4.2">Authorization</a> &#8211; see <a class="reference internal" href="#hmac-auth-label"><span class="std std-ref">HMAC Auth</span></a>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 </div>
