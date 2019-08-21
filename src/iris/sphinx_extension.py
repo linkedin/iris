@@ -22,16 +22,9 @@ def get_routes(app):
     walk_queue = [node for node in app._router._roots]
     while walk_queue:
         curr_node = walk_queue.pop(0)
-
         if curr_node.method_map:
             for method in curr_node.method_map:
                 handler = curr_node.method_map[method]
-                try:
-                    if handler.__getattribute__('func_name') == 'method_not_allowed':
-                        # method not defined for route
-                        continue
-                except Exception:
-                    pass
                 yield method, curr_node.uri_template, handler
 
         if curr_node.children:
@@ -52,10 +45,14 @@ class AutofalconDirective(Directive):
                 docstring = force_decode(docstring, analyzer.encoding)
             if not docstring and 'include-empty-docstring' not in self.options:
                 continue
+            # exclude falcon HTTPMethodNotAllowed endpoints
+            if docstring == 'Raise 405 HTTPMethodNotAllowed error':
+                continue
             if not docstring:
                 continue
-            if not (handler.__self__.allow_read_no_auth and method == 'GET'):
-                docstring += '\n:reqheader Authorization: see :ref:`hmac-auth-label`.\n'
+            if hasattr(handler, '__self__'):
+                if not (handler.__self__.allow_read_no_auth and method == 'GET'):
+                    docstring += '\n:reqheader Authorization: see :ref:`hmac-auth-label`.\n'
 
             docstring = prepare_docstring(docstring)
 
