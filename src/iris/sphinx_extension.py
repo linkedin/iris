@@ -22,16 +22,9 @@ def get_routes(app):
     walk_queue = [node for node in app._router._roots]
     while walk_queue:
         curr_node = walk_queue.pop(0)
-
         if curr_node.method_map:
             for method in curr_node.method_map:
                 handler = curr_node.method_map[method]
-                try:
-                    if handler.__getattribute__('func_name') == 'HTTPMethodNotAllowed':
-                        # method not defined for route
-                        continue
-                except Exception:
-                    pass
                 yield method, curr_node.uri_template, handler
 
         if curr_node.children:
@@ -51,6 +44,9 @@ class AutofalconDirective(Directive):
                 analyzer = ModuleAnalyzer.for_module(handler.__module__)
                 docstring = force_decode(docstring, analyzer.encoding)
             if not docstring and 'include-empty-docstring' not in self.options:
+                continue
+            # exclude falcon HTTPMethodNotAllowed endpoints
+            if docstring == 'Raise 405 HTTPMethodNotAllowed error':
                 continue
             if not docstring:
                 continue
