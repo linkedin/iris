@@ -106,7 +106,7 @@ def prune_target(engine, target_name, target_type):
     if target_type == 'team':
         try:
             # rename team to prevent namespace conflict but preserve the ability to reactivate it in the future
-            new_name = str(uuid.uuid1())
+            new_name = str(uuid.uuid4())
             engine.execute('''UPDATE `target` SET `active` = FALSE, `name` = %s WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = %s)''', (new_name, target_name, target_type))
             logger.info('Deleted inactive oncall team %s', target_name)
         except SQLAlchemyError as e:
