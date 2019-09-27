@@ -105,11 +105,14 @@ def prune_target(engine, target_name, target_type):
 
     if target_type == 'team':
         try:
-            engine.execute('''DELETE FROM `oncall_team` WHERE `target_id` = (SELECT `target`.`id` FROM `target` JOIN `target_type` ON `target`.`type_id` = `target_type`.`id` WHERE `target_type`.`name` = %s AND `target`.`name` = %s)''', target_type, target_name)
+            # rename team to prevent namespace conflict but preserve the ability to reactivate it in the future
+            new_name = str(uuid.uuid1())
+            engine.execute('''UPDATE `target` SET `active` = FALSE, `name` = %s WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = %s)''', (new_name, target_name, target_type))
             logger.info('Deleted inactive oncall team %s', target_name)
         except SQLAlchemyError as e:
             logger.error('Deleting oncall team %s failed: %s', target_name, e)
             metrics.incr('sql_errors')
+        return
 
     try:
         engine.execute('''DELETE FROM `target` WHERE `name` = %s AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = %s)''', (target_name, target_type))
@@ -307,6 +310,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         for t in matching_target_names_no_oncall_entry:
             logger.info('Inserting existing team into oncall_team %s', t)
             try:
+                engine.execute('''UPDATE `target` SET `active` = TRUE WHERE `id` = %s''', iris_target_name_id_dict[t])
                 engine.execute(oncall_add_sql, (iris_target_name_id_dict[t], oncall_response_dict_name_key[t]))
             except SQLAlchemyError as e:
                 logger.exception('Error inserting oncall_team %s: %s', t, e)
@@ -380,8 +384,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
     # mark users/teams inactive
     if purge_old_users:
-        # find teams that don't exist in oncall anymore
-        updated_iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
+        # find active teams that don't exist in oncall anymore
+        updated_iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s AND `active` = TRUE''', target_types['team'])}
         teams_to_deactivate = updated_iris_team_names - oncall_team_names
 
         logger.info('Users to mark inactive (%d)' % len(users_to_mark_inactive))
