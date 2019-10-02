@@ -11,6 +11,7 @@ from iris import metrics
 from iris.role_lookup import IrisRoleLookupException
 
 import logging
+import logging.handlers
 logger = logging.getLogger(__name__)
 access_logger = logging.getLogger('RPC:access')
 
