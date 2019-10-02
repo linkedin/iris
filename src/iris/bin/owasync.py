@@ -9,6 +9,7 @@ import exchangelib.errors
 import exchangelib.protocol
 import sys
 import logging
+import logging.handlers
 import os
 import time
 import requests

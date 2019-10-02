@@ -5,6 +5,7 @@ from gevent import monkey, sleep, spawn
 monkey.patch_all()  # NOQA
 
 import logging
+import logging.handlers
 import os
 import uuid
 from sqlalchemy import create_engine

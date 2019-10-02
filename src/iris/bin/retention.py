@@ -7,6 +7,7 @@ monkey.patch_all()  # NOQA
 from sqlalchemy import create_engine
 from collections import deque
 import logging
+import logging.handlers
 import ujson
 import errno
 import time
