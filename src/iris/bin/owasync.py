@@ -15,6 +15,10 @@ import time
 import requests
 
 
+RELAY_IGNORE = 0
+RELAY_SUCCESS = 1
+RELAY_FAILURE = 2
+
 logger = logging.getLogger()
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
 log_file = os.environ.get('OWA_SYNC_LOG_FILE')
@@ -66,6 +70,13 @@ class UseProxyHttpAdapter(requests.adapters.HTTPAdapter):
         return super(UseProxyHttpAdapter, self).send(*args, **kwargs)
 
 
+def split_in_batches(l, n):
+    # For item i in a range that is a length of l,
+    for i in range(0, len(l), n):
+        # Create an index range for l of n items:
+        yield l[i:i + n]
+
+
 def is_pointless_message(headers):
     for header in email_headers_to_ignore:
         if {'name': header[0], 'value': header[1]} in headers:
@@ -85,13 +96,16 @@ def poll(account, iris_client):
 
     processed_messages = 0
     messages_to_mark_read = []
+    messages_to_delete = []
 
     try:
         for message in account.inbox.filter(is_read=False).order_by('-datetime_received'):
             processed_messages += 1
 
             try:
-                relay(message, iris_client)
+                result = relay(message, iris_client)
+                if result != RELAY_FAILURE:
+                    messages_to_delete.append(message)
             except Exception:
                 logger.exception('Uncaught exception during message relaying')
                 metrics.incr('message_relay_failure_count')
@@ -105,13 +119,26 @@ def poll(account, iris_client):
         metrics.incr('owa_api_failure_count')
 
     if messages_to_mark_read:
-        bulk_update_count = len(messages_to_mark_read)
-        logger.info('will mark %s messages as read', bulk_update_count)
-        try:
-            account.bulk_update(items=messages_to_mark_read)
-        except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
-            logger.exception('Failed to update read status on %s messages in bulk', bulk_update_count)
-            metrics.incr('owa_api_failure_count')
+        # mark as read in batches of 100 messages
+        messages_in_batches = split_in_batches(messages_to_mark_read, 100)
+        for batch in messages_in_batches:
+            bulk_update_count = len(batch)
+            logger.info('will mark %s messages as read', bulk_update_count)
+            try:
+                account.bulk_update(items=batch)
+            except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
+                logger.exception('Failed to update read status on %s messages in bulk', bulk_update_count)
+                metrics.incr('owa_api_failure_count')
+
+    if messages_to_delete:
+        for batch in split_in_batches(messages_to_delete, 100):
+            bulk_delete_count = len(batch)
+            logger.info('will delete %s messages', bulk_delete_count)
+            try:
+                account.bulk_delete(ids=batch)
+            except (exchangelib.errors.EWSError, requests.exceptions.RequestException):
+                logger.exception('Failed to delete on %s messages in bulk', bulk_delete_count)
+                metrics.incr('owa_api_failure_count')
 
     metrics.set('message_process_count', processed_messages)
     return processed_messages
@@ -121,7 +148,7 @@ def relay(message, iris_client):
     if message.headers is None:
         logger.info('Ignoring message with no headers %s (from %s)', message.message_id, message.sender.email_address)
         metrics.incr('message_ignore_count')
-        return
+        return RELAY_IGNORE
 
     # Get headers into the format the iris expects from gmail
     headers = [{'name': header.name, 'value': header.value} for header in message.headers]
@@ -130,7 +157,7 @@ def relay(message, iris_client):
     if is_pointless_message(headers):
         logger.info('Not relaying pointless message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
         metrics.incr('message_ignore_count')
-        return
+        return RELAY_IGNORE
 
     # To and From headers are strangely missing
     if message.to_recipients:
@@ -144,8 +171,9 @@ def relay(message, iris_client):
     except requests.exceptions.RequestException:
         metrics.incr('message_relay_failure_count')
         logger.exception('Failed posting message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
-        return
+        return RELAY_FAILURE
 
+    result = RELAY_FAILURE
     code_type = req.status_code // 100
 
     if code_type == 5:
@@ -167,10 +195,13 @@ def relay(message, iris_client):
         incident_header = req.headers.get('X-IRIS-INCIDENT')
         if isinstance(incident_header, str) and incident_header.isdigit():
             metrics.incr('incident_created_count')
+            result = RELAY_SUCCESS
 
     else:
         logger.error('Failed posting message %s (from %s) to iris-api. Message likely malformed. Got back strange status code: %s. Response: %s',
                      message.message_id, message.sender.email_address, req.status_code, req.text)
+
+    return result
 
 
 def main():
