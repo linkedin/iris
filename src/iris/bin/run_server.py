@@ -8,7 +8,7 @@ import logging
 import sys
 import multiprocessing
 import gunicorn.app.base
-from gunicorn.six import iteritems
+from six import iteritems
 import iris
 import iris.config
 import imp

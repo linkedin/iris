@@ -53,6 +53,7 @@ setuptools.setup(
         'prometheus': ['prometheus_client'],
         'dev': [
             'gunicorn',
+            'six',
             'Sphinx==1.5.6',
             'sphinxcontrib-httpdomain',
             'sphinx_rtd_theme',
