@@ -15,10 +15,6 @@ import time
 import requests
 
 
-RELAY_IGNORE = 0
-RELAY_SUCCESS = 1
-RELAY_FAILURE = 2
-
 logger = logging.getLogger()
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
 log_file = os.environ.get('OWA_SYNC_LOG_FILE')
@@ -104,7 +100,7 @@ def poll(account, iris_client):
 
             try:
                 result = relay(message, iris_client)
-                if result != RELAY_FAILURE:
+                if not result:
                     messages_to_delete.append(message)
             except Exception:
                 logger.exception('Uncaught exception during message relaying')
@@ -148,7 +144,7 @@ def relay(message, iris_client):
     if message.headers is None:
         logger.info('Ignoring message with no headers %s (from %s)', message.message_id, message.sender.email_address)
         metrics.incr('message_ignore_count')
-        return RELAY_IGNORE
+        return True
 
     # Get headers into the format the iris expects from gmail
     headers = [{'name': header.name, 'value': header.value} for header in message.headers]
@@ -157,7 +153,7 @@ def relay(message, iris_client):
     if is_pointless_message(headers):
         logger.info('Not relaying pointless message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
         metrics.incr('message_ignore_count')
-        return RELAY_IGNORE
+        return True
 
     # To and From headers are strangely missing
     if message.to_recipients:
@@ -171,9 +167,9 @@ def relay(message, iris_client):
     except requests.exceptions.RequestException:
         metrics.incr('message_relay_failure_count')
         logger.exception('Failed posting message %s (from %s) to iris-api', message.message_id, message.sender.email_address)
-        return RELAY_FAILURE
+        return False
 
-    result = RELAY_FAILURE
+    result = False
     code_type = req.status_code // 100
 
     if code_type == 5:
@@ -195,7 +191,7 @@ def relay(message, iris_client):
         incident_header = req.headers.get('X-IRIS-INCIDENT')
         if isinstance(incident_header, str) and incident_header.isdigit():
             metrics.incr('incident_created_count')
-            result = RELAY_SUCCESS
+            result = True
 
     else:
         logger.error('Failed posting message %s (from %s) to iris-api. Message likely malformed. Got back strange status code: %s. Response: %s',
