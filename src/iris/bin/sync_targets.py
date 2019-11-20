@@ -705,9 +705,8 @@ def main():
         # which will be in ldap already populated.
         if ldap_lists:
 
-            if 'ldap_cert_path' in config['auth']:
-                root = os.path.abspath('./')
-                ldap_cert_path = os.path.join(root, config['auth']['ldap_cert_path'])
+            if 'ldap_cert_path' in ldap_lists:
+                ldap_cert_path = ldap_lists['ldap_cert_path']
                 if not os.access(ldap_cert_path, os.R_OK):
                     logger.error("Failed to read ldap_cert_path certificate")
                     raise IOError
