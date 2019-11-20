@@ -524,12 +524,16 @@ def batch_remove_ldap_memberships(session, list_id, members):
 
 def sync_ldap_lists(ldap_settings, engine):
     try:
+        if 'cert_path' in ldap_settings:
+            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
         l = ldap.ldapobject.ReconnectLDAPObject(ldap_settings['connection']['url'])
     except Exception:
         logger.exception('Connecting to ldap to get our mailing lists failed.')
         return
 
     try:
+        if 'cert_path' in ldap_settings:
+            l.set_option(ldap.OPT_X_TLS_CACERTFILE, ldap_settings['cert_path'])
         l.simple_bind_s(*ldap_settings['connection']['bind_args'])
     except Exception:
         logger.exception('binding to ldap to get our mailing lists failed.')
@@ -700,6 +704,14 @@ def main():
         # Do ldap mailing list sync *after* we do the normal sync, to ensure we have the users
         # which will be in ldap already populated.
         if ldap_lists:
+
+            if 'ldap_cert_path' in ldap_lists:
+                ldap_cert_path = ldap_lists['ldap_cert_path']
+                if not os.access(ldap_cert_path, os.R_OK):
+                    logger.error("Failed to read ldap_cert_path certificate")
+                    raise IOError
+                else:
+                    ldap_lists['cert_path'] = ldap_cert_path
             list_run_start = time.time()
             sync_ldap_lists(ldap_lists, engine)
             logger.info('Ldap mailing list sync took %.2f seconds', time.time() - list_run_start)
