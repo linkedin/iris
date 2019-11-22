@@ -22,6 +22,7 @@ from falcon_cors import CORS
 from sqlalchemy.exc import IntegrityError
 import falcon.uri
 import falcon
+import pymysql.err
 
 from collections import defaultdict
 from streql import equals
@@ -1667,35 +1668,52 @@ class Incidents(object):
             if not app_template_count:
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
-            data = {
-                'plan_id': plan_id,
-                'created': datetime.datetime.utcnow(),
-                'application_id': app['id'],
-                'context': context_json_str,
-                'current_step': 0,
-                'active': True,
-            }
+        # To try to avoid deadlocks, split the inserts into their own session
+        retries = 0
+        max_retries = 5
+        while True:
+            with db.guarded_session() as session:
+                retries += 1
+                try:
+                    data = {
+                        'plan_id': plan_id,
+                        'created': datetime.datetime.utcnow(),
+                        'application_id': app['id'],
+                        'context': context_json_str,
+                        'current_step': 0,
+                        'active': True,
+                    }
 
-            incident_id = session.execute(
-                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                           `current_step`, `active`, `application_id`)
-                   VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                data).lastrowid
+                    incident_id = session.execute(
+                        '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                                   `current_step`, `active`, `application_id`)
+                           VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                        data).lastrowid
 
-            for idx, target in enumerate(dynamic_targets):
-                data = {
-                    'incident_id': incident_id,
-                    'target_id': target['target_id'],
-                    'role_id': target['role_id'],
-                    'index': idx
-                }
-                session.execute('''INSERT INTO `dynamic_plan_map` (`incident_id`, `role_id`,
-                                                                   `target_id`, `dynamic_index`)
-                                   VALUES (:incident_id, :role_id, :target_id, :index)''',
-                                data)
+                    for idx, target in enumerate(dynamic_targets):
+                        data = {
+                            'incident_id': incident_id,
+                            'target_id': target['target_id'],
+                            'role_id': target['role_id'],
+                            'index': idx
+                        }
+                        session.execute('''INSERT INTO `dynamic_plan_map` (`incident_id`, `role_id`,
+                                                                           `target_id`, `dynamic_index`)
+                                           VALUES (:incident_id, :role_id, :target_id, :index)''',
+                                        data)
 
-            session.commit()
-            session.close()
+                    session.commit()
+                    session.close()
+                except pymysql.err.InternalError:
+                    logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
+                    if retries < max_retries:
+                        sleep(.2)
+                        continue
+                    else:
+                        raise
+                else:
+                    break
+
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
