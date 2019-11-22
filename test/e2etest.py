@@ -2916,6 +2916,17 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
     assert re.json()['title'] == 'Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (special_email, sample_plan_name2)
 
 
+def test_create_incident(sample_plan_name, sample_application_name):
+    re = requests.post(base_url + 'incidents',
+                       json={"plan": sample_plan_name, "context": {}},
+                       headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 201
+    incident_id = re.json()
+    assert incident_id
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
+
+
 def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_plan_name2, sample_admin_user):
     if not sample_application_name or not sample_plan_name or not sample_plan_name2 or not sample_email:
         pytest.skip('We do not have enough data in DB to do this test')
