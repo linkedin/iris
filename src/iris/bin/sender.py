@@ -372,27 +372,57 @@ def create_messages(msg_info):
                                      application_id, target_id, priority_id, body]
                     values_count += 1
                 else:
-                    cursor.execute(INSERT_MESSAGE_SQL,
-                                   (plan_notification['plan_id'], plan_notification_id, incident_id,
-                                    application_id, target_id, priority_id, body))
+                    # To try to avoid deadlocks, split the inserts into their own session
+                    retries = 0
+                    max_retries = 5
+                    while True:
+                        retries += 1
+                        try:
+                            cursor.execute(INSERT_MESSAGE_SQL,
+                                           (plan_notification['plan_id'], plan_notification_id, incident_id,
+                                            application_id, target_id, priority_id, body))
+                            connection.commit()
+                        except InternalError:
+                            logger.exception('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                            if retries < max_retries:
+                                sleep(.2)
+                                continue
+                            else:
+                                raise Exception('Failed inserting message retries exceeded')
+                        else:
+                            # needed for the lastrowid to exist in the DB to satisfy the constraint
+                            auditlog.message_change(
+                                cursor.lastrowid,
+                                auditlog.TARGET_CHANGE,
+                                role + '|' + target,
+                                name,
+                                lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
+                            break
 
-                    # needed for the lastrowid to exist in the DB to satisfy the constraint
-                    connection.commit()
-                    auditlog.message_change(
-                        cursor.lastrowid,
-                        auditlog.TARGET_CHANGE,
-                        role + '|' + target,
-                        name,
-                        lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
                 msg_count += 1
             else:
                 metrics.incr('target_not_found')
                 logger.warn('Failed to notify plan creator; no active target found: %s', name)
     if values_count > 0:
-        msg_sql = BATCH_INSERT_MESSAGE_QUERY + ','.join('(NOW(), %s,%s,%s,%s,%s,%s,%s)' for i in range(values_count))
-        cursor.execute(msg_sql, query_params)
-        connection.commit()
-        msg_count += cursor.rowcount
+        # To try to avoid deadlocks, split the inserts into their own session
+        retries = 0
+        max_retries = 5
+        while True:
+            retries += 1
+            try:
+                msg_sql = BATCH_INSERT_MESSAGE_QUERY + ','.join('(NOW(), %s,%s,%s,%s,%s,%s,%s)' for i in range(values_count))
+                cursor.execute(msg_sql, query_params)
+                connection.commit()
+            except InternalError:
+                logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
+                if retries < max_retries:
+                    sleep(.2)
+                    continue
+                else:
+                    raise Exception('Failed inserting batch messages retries exceeded')
+            else:
+                msg_count += cursor.rowcount
+                break
     cursor.close()
     connection.close()
     return msg_count, error_incident_ids
