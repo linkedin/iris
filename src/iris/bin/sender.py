@@ -372,7 +372,6 @@ def create_messages(msg_info):
                                      application_id, target_id, priority_id, body]
                     values_count += 1
                 else:
-                    # To try to avoid deadlocks, split the inserts into their own session
                     retries = 0
                     max_retries = 5
                     while True:
@@ -404,7 +403,6 @@ def create_messages(msg_info):
                 metrics.incr('target_not_found')
                 logger.warn('Failed to notify plan creator; no active target found: %s', name)
     if values_count > 0:
-        # To try to avoid deadlocks, split the inserts into their own session
         retries = 0
         max_retries = 5
         while True:
@@ -414,7 +412,7 @@ def create_messages(msg_info):
                 cursor.execute(msg_sql, query_params)
                 connection.commit()
             except InternalError:
-                logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
+                logger.exception('Failed inserting batch messages for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                 if retries < max_retries:
                     sleep(.2)
                     continue
