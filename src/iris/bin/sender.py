@@ -381,7 +381,7 @@ def create_messages(msg_info):
                                            (plan_notification['plan_id'], plan_notification_id, incident_id,
                                             application_id, target_id, priority_id, body))
                             connection.commit()
-                        except InternalError:
+                        except Exception:
                             logger.exception('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                             if retries < max_retries:
                                 sleep(.2)
@@ -411,7 +411,7 @@ def create_messages(msg_info):
                 msg_sql = BATCH_INSERT_MESSAGE_QUERY + ','.join('(NOW(), %s,%s,%s,%s,%s,%s,%s)' for i in range(values_count))
                 cursor.execute(msg_sql, query_params)
                 connection.commit()
-            except InternalError:
+            except Exception:
                 logger.exception('Failed inserting batch messages for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                 if retries < max_retries:
                     sleep(.2)
