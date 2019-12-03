@@ -23,7 +23,6 @@ def message_change(message_id, change_type, old, new, description):
         with db.guarded_session() as session:
             retries += 1
             try:
-                session = db.Session()
                 session.execute('''
                   INSERT INTO `message_changelog` (`message_id`, `change_type`, `old`, `new`, `description`, `date`)
                   VALUES (:message_id, :change_type, :old, :new, :description, NOW())
