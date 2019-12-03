@@ -58,6 +58,8 @@ class Cache():
                 del self.data[key]
             cursor.close()
             connection.close()
+        else:
+            self.data = {}
 
 
 class DynamicPlanMap(Cache):
@@ -434,10 +436,12 @@ def refresh():
 
 
 def purge():
+    targets.purge()
     target_names.purge()
     targets_for_role.purge()
     incidents.purge()
     dynamic_plan_map.purge()
+    plan_notifications.purge()
 
 
 def init(api_host, config):
@@ -472,9 +476,7 @@ def init(api_host, config):
                       'SELECT * FROM `incident` WHERE `id`=%s',
                       'SELECT `id` from `incident` WHERE `active`=True AND `id` IN %s')
     roles = Cache(db.engine, 'SELECT * FROM `target_role` WHERE `id`=%s', None)
-    # TODO: purge based on target acive column?
     targets = Cache(db.engine, 'SELECT * FROM `target` WHERE `id`=%s', None)
-    # TODO: also purge this cache?
     plan_notifications = Cache(db.engine,
                                'SELECT * FROM `plan_notification` WHERE `id`=%s',
                                ('SELECT `plan_notification`.`id` FROM `plan_notification` '
