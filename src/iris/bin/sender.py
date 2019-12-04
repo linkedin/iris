@@ -31,7 +31,7 @@ from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
 from iris.role_lookup import IrisRoleLookupException
-from pymysql import DataError, IntegrityError, InternalError
+from pymysql import DataError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
@@ -564,17 +564,31 @@ def escalate():
     for incident_id, (plan_id, step) in escalations.items():
         plan = cache.plans[plan_id]
         steps = plan['steps'].get(step, [])
-        if steps:
-            if step == 1 and incident_id in error_incident_ids:
-                # no message created due to role look up failure, reset step to
-                # 0 for retry
-                step = 0
-            cursor.execute(UPDATE_INCIDENT_SQL, (step, incident_id))
-        else:
-            logger.error('plan id %d has no steps, incident id %d is invalid', plan_id, incident_id)
-            cursor.execute(INVALIDATE_INCIDENT, incident_id)
+        retries = 0
+        max_retries = 5
+        while True:
+            retries += 1
+            try:
+                if steps:
+                    if step == 1 and incident_id in error_incident_ids:
+                        # no message created due to role look up failure, reset step to
+                        # 0 for retry
+                        step = 0
+                    cursor.execute(UPDATE_INCIDENT_SQL, (step, incident_id))
+                else:
+                    logger.error('plan id %d has no steps, incident id %d is invalid', plan_id, incident_id)
+                    cursor.execute(INVALIDATE_INCIDENT, incident_id)
 
-    connection.commit()
+                connection.commit()
+            except Exception:
+                logger.exception('Failed updating incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                if retries < max_retries:
+                    sleep(.2)
+                    continue
+                else:
+                    raise Exception('Failed updating batch messages retries exceeded')
+            else:
+                break
     cursor.close()
     connection.close()
 
@@ -1095,16 +1109,27 @@ def update_message_sent_status(message, status):
         return
 
     session = db.Session()
-    try:
-        session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
-                           VALUES (:message_id, :status)
-                           ON DUPLICATE KEY UPDATE `status` =  :status''',
-                        {'message_id': message_id, 'status': status})
-        session.commit()
-    except (DataError, IntegrityError, InternalError):
-        logger.exception('Failed setting message sent status for message %s', message)
-    finally:
-        session.close()
+    retries = 0
+    max_retries = 3
+    while True:
+        retries += 1
+        try:
+            session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
+                        VALUES (:message_id, :status)
+                        ON DUPLICATE KEY UPDATE `status` =  :status''',
+                            {'message_id': message_id, 'status': status})
+            session.commit()
+        except Exception:
+            logger.exception('Failed setting message sent status for message %s (Try %s/%s)', message_id, retries, max_retries)
+            if retries < max_retries:
+                sleep(.2)
+                continue
+            else:
+                raise Exception('Failed setting message sent status for message retries exceeded')
+        else:
+            break
+
+    session.close()
 
 
 def mark_message_has_no_contact(message):
@@ -1115,10 +1140,24 @@ def mark_message_has_no_contact(message):
 
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
-    cursor.execute('UPDATE `message` set `active`=0 WHERE `id`=%s',
-                   message_id)
-    connection.commit()
-    cursor.close()
+    retries = 0
+    max_retries = 3
+    while True:
+        retries += 1
+        try:
+            cursor.execute('UPDATE `message` set `active`=0 WHERE `id`=%s',
+                           message_id)
+            connection.commit()
+            cursor.close()
+        except Exception:
+            logger.exception('Failed setting message %s as not having contact (Try %s/%s)', message_id, retries, max_retries)
+            if retries < max_retries:
+                sleep(.2)
+                continue
+            else:
+                raise Exception('Failed setting message as not having contact')
+        else:
+            break
     connection.close()
     auditlog.message_change(
         message_id, auditlog.MODE_CHANGE, target_fallback_mode, 'invalid',
