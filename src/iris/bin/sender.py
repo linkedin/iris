@@ -610,6 +610,7 @@ def aggregate(now):
     for key in list(queues.keys()):
         aggregation_window = cache.plans[key[0]].get('aggregation_window')
         if aggregation_window is None:
+            logger.error('No aggregation window found for plan %s', key[0])
             aggregation_window = 0
         if now - sent.get(key, 0) >= aggregation_window:
             aggregated_message_ids = queues[key]
