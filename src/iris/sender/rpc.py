@@ -81,13 +81,13 @@ def handle_api_notification_request(socket, address, req):
     if not role and not target_list:
         reject_api_request(socket, address, 'INVALID role')
         logger.warning('Dropping OOB message with invalid role "%s" from app %s',
-                    role, notification['application'])
+                       role, notification['application'])
         return
     target = notification.get('target')
     if not (target or target_list):
         reject_api_request(socket, address, 'INVALID target')
         logger.warning('Dropping OOB message with invalid target "%s" from app %s',
-                    target, notification['application'])
+                       target, notification['application'])
         return
     expanded_targets = None
     # if role is literal_target skip unrolling
@@ -124,7 +124,7 @@ def handle_api_notification_request(socket, address, req):
         if not expanded_targets and not has_literal_target:
             reject_api_request(socket, address, 'INVALID role:target')
             logger.warning('Dropping OOB message with invalid role:target "%s:%s" from app %s',
-                        role, target, notification['application'])
+                           role, target, notification['application'])
             return
 
     sanitize_unicode_dict(notification)
@@ -134,7 +134,7 @@ def handle_api_notification_request(socket, address, req):
     if 'template' in notification:
         if 'context' not in notification:
             logger.warning('Dropping OOB message due to missing context from app %s',
-                        notification['application'])
+                           notification['application'])
             reject_api_request(socket, address, 'INVALID context')
             return
         else:
@@ -143,13 +143,13 @@ def handle_api_notification_request(socket, address, req):
     elif 'email_html' in notification:
         if not isinstance(notification['email_html'], str):
             logger.warning('Dropping OOB message with invalid email_html from app %s: %s',
-                        notification['application'], notification['email_html'])
+                           notification['application'], notification['email_html'])
             reject_api_request(socket, address, 'INVALID email_html')
             return
     elif 'body' not in notification:
         reject_api_request(socket, address, 'INVALID body')
         logger.warning('Dropping OOB message with invalid body from app %s',
-                    notification['application'])
+                       notification['application'])
         return
 
     access_logger.info('-> %s OK, to %s:%s (%s:%s)',

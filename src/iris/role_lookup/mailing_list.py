@@ -40,7 +40,7 @@ class mailing_list(object):
 
         if self.max_list_names > 0 and list_count >= self.max_list_names:
             logger.warning('Not returning any results for list group %s as it contains too many members (%s > %s)',
-                        list_name, list_count, self.max_list_names)
+                           list_name, list_count, self.max_list_names)
             cursor.close()
             connection.close()
             return None

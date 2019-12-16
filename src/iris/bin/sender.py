@@ -1065,7 +1065,7 @@ def mark_message_as_sent(message):
 
     if len(message['body']) > MAX_MESSAGE_BODY_LENGTH:
         logger.warning('Message id %s has a ridiculously long body (%s chars). Truncating it.',
-                    message.get('message_id', '?'), len(message['body']))
+                       message.get('message_id', '?'), len(message['body']))
         message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
     if 'aggregated_ids' in message:
@@ -1271,7 +1271,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
         body_length = len(message['body'])
         if body_length > MAX_MESSAGE_BODY_LENGTH:
             logger.warning('Message id %s has a ridiculously long body (%s chars). Dropping it.',
-                        message['message_id'], body_length)
+                           message['message_id'], body_length)
             spawn(auditlog.message_change,
                   message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to excessive body length (%s > %s chars)' % (

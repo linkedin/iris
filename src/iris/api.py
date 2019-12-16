@@ -847,8 +847,7 @@ class AuthMiddleware(object):
                     logger.warning('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
-                    logger.warning('Unprivileged application %s tried authenticating %s',
-                                app['name'], username_header)
+                    logger.warning('Unprivileged application %s tried authenticating %s', app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 window = int(time.time()) // 5
                 for api_key in (str(app['key']), str(app['secondary_key'])):
@@ -3007,9 +3006,7 @@ class Application(object):
                     # above, avoid the expected integrity error here by bailing
                     # early
                     if new_modes is not None and mode not in new_modes:
-                        logger.warning(('Not setting default priority %s to mode %s for app %s '
-                                     'as this mode was disabled as part of this app update'),
-                                    priority, mode, app_name)
+                        logger.warning(('Not setting default priority %s to mode %s for app %s as this mode was disabled as part of this app update'), priority, mode, app_name)
                         continue
 
                     try:
