@@ -31,7 +31,7 @@ class mailing_list(object):
         list_info = cursor.fetchone()
 
         if not list_info:
-            logger.warn('Invalid mailing list %s', list_name)
+            logger.warning('Invalid mailing list %s', list_name)
             cursor.close()
             connection.close()
             return None
@@ -39,8 +39,8 @@ class mailing_list(object):
         list_id, list_count = list_info
 
         if self.max_list_names > 0 and list_count >= self.max_list_names:
-            logger.warn('Not returning any results for list group %s as it contains too many members (%s > %s)',
-                        list_name, list_count, self.max_list_names)
+            logger.warning('Not returning any results for list group %s as it contains too many members (%s > %s)',
+                           list_name, list_count, self.max_list_names)
             cursor.close()
             connection.close()
             return None

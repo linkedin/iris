@@ -55,7 +55,7 @@ class Authenticator:
         except ldap.INVALID_CREDENTIALS:
             return False
         except (ldap.SERVER_DOWN, ldap.INVALID_DN_SYNTAX) as err:
-            logger.warn("%s", err)
+            logger.warning("%s", err)
             return None
         return True
 

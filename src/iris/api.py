@@ -786,7 +786,7 @@ class AuthMiddleware(object):
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
 
             if app not in cache.applications:
-                logger.warn('Tried authenticating with nonexistent app: "%s"', app)
+                logger.warning('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
             req.context['app'] = cache.applications[app]
@@ -813,7 +813,7 @@ class AuthMiddleware(object):
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
             if not equals(api_key, str(app['key'])) or equals(api_key, str(app['secondary_key'])):
-                logger.warn('Application key invalid')
+                logger.warning('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
 
@@ -844,11 +844,10 @@ class AuthMiddleware(object):
                 app_name, client_digest = auth[5:].split(':', 1)
                 app = cache.applications.get(app_name)
                 if not app:
-                    logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
+                    logger.warning('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
-                    logger.warn('Unprivileged application %s tried authenticating %s',
-                                app['name'], username_header)
+                    logger.warning('Unprivileged application %s tried authenticating %s', app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 window = int(time.time()) // 5
                 for api_key in (str(app['key']), str(app['secondary_key'])):
@@ -879,9 +878,9 @@ class AuthMiddleware(object):
                             return
                 # No successful HMACs match, fail auth.
                 if username_header:
-                    logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                    logger.warning('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
                 else:
-                    logger.warn('HMAC doesn\'t validate for app %s; %s doesn\'t match "%s"', app['name'], client_digest, text)
+                    logger.warning('HMAC doesn\'t validate for app %s; %s doesn\'t match "%s"', app['name'], client_digest, text)
                 raise HTTPUnauthorized('Authentication failure', 'HMAC failed validation. Check API key/clock skew', [])
 
             except (ValueError, KeyError):
@@ -889,7 +888,7 @@ class AuthMiddleware(object):
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
         else:
-            logger.warn('Request has malformed/missing HMAC authorization header')
+            logger.warning('Request has malformed/missing HMAC authorization header')
             raise HTTPUnauthorized('Authentication failure', 'Malformed/missing HMAC authorization header', [])
 
 
@@ -1612,7 +1611,7 @@ class Incidents(object):
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': incident_params['plan']}).scalar()
             if not plan_id:
-                logger.warn('Plan "%s" not found.', incident_params['plan'])
+                logger.warning('Plan "%s" not found.', incident_params['plan'])
                 raise HTTPNotFound()
             num_dynamic = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
                                           'WHERE `plan_id` = :plan_id',
@@ -3007,9 +3006,7 @@ class Application(object):
                     # above, avoid the expected integrity error here by bailing
                     # early
                     if new_modes is not None and mode not in new_modes:
-                        logger.warn(('Not setting default priority %s to mode %s for app %s '
-                                     'as this mode was disabled as part of this app update'),
-                                    priority, mode, app_name)
+                        logger.warning(('Not setting default priority %s to mode %s for app %s as this mode was disabled as part of this app update'), priority, mode, app_name)
                         continue
 
                     try:
@@ -3950,7 +3947,7 @@ class ResponseMixin(object):
             target_id = session.execute(sql, {'destination': dest}).scalar()
             if not target_id:
                 msg = 'Failed to lookup target from destination: %s' % dest
-                logger.warn(msg)
+                logger.warning(msg)
                 raise HTTPBadRequest('Invalid request', msg)
 
             sql = '''INSERT INTO `message` (`created`, `application_id`, `subject`, `target_id`,
@@ -4364,7 +4361,7 @@ class TwilioDeliveryUpdate(object):
             connection.close()
 
         if not affected:
-            logger.warn('No rows changed when updating delivery status for twilio sid: %s', sid)
+            logger.warning('No rows changed when updating delivery status for twilio sid: %s', sid)
 
         resp.status = HTTP_204
 

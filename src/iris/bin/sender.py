@@ -382,7 +382,7 @@ def create_messages(msg_info):
                                             application_id, target_id, priority_id, body))
                             connection.commit()
                         except Exception:
-                            logger.exception('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                            logger.warning('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                             if retries < max_retries:
                                 sleep(.2)
                                 continue
@@ -401,7 +401,7 @@ def create_messages(msg_info):
                 msg_count += 1
             else:
                 metrics.incr('target_not_found')
-                logger.warn('Failed to notify plan creator; no active target found: %s', name)
+                logger.warning('Failed to notify plan creator; no active target found: %s', name)
     if values_count > 0:
         retries = 0
         max_retries = 5
@@ -412,7 +412,7 @@ def create_messages(msg_info):
                 cursor.execute(msg_sql, query_params)
                 connection.commit()
             except Exception:
-                logger.exception('Failed inserting batch messages for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                logger.warning('Failed inserting batch messages for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                 if retries < max_retries:
                     sleep(.2)
                     continue
@@ -447,9 +447,9 @@ def deactivate():
                 break
         except Exception:
             if i == max_retries:
-                logger.exception('Failed running deactivate query. (Try %s/%s)', i, max_retries)
+                logger.warning('Failed running deactivate query. (Try %s/%s)', i, max_retries)
             else:
-                logger.warn('Deadlocked running deactivate query. (Try %s/%s)', i, max_retries)
+                logger.warning('Deadlocked running deactivate query. (Try %s/%s)', i, max_retries)
             sleep(.2)
 
     cursor.close()
@@ -581,7 +581,7 @@ def escalate():
 
                 connection.commit()
             except Exception:
-                logger.exception('Failed updating incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                logger.warning('Failed updating incident %s. (Try %s/%s)', incident_id, retries, max_retries)
                 if retries < max_retries:
                     sleep(.2)
                     continue
@@ -608,7 +608,10 @@ def aggregate(now):
     cursor.close()
     connection.close()
     for key in list(queues.keys()):
-        aggregation_window = cache.plans[key[0]]['aggregation_window']
+        aggregation_window = cache.plans[key[0]].get('aggregation_window')
+        if aggregation_window is None:
+            logger.error('No aggregation window found for plan %s', key[0])
+            aggregation_window = 0
         if now - sent.get(key, 0) >= aggregation_window:
             aggregated_message_ids = queues[key]
             active_message_ids = aggregated_message_ids & all_actives
@@ -932,7 +935,7 @@ def set_target_contact(message):
         if result:
             cache.target_reprioritization(message)
         else:
-            logger.warn('target does not have mode %r', message)
+            logger.warning('target does not have mode %r', message)
             result = set_target_fallback_mode(message)
         return result
     except (ValueError, TypeError):
@@ -1033,7 +1036,7 @@ def mark_message_as_sent(message):
     cursor = connection.cursor()
     if not message['subject']:
         message['subject'] = ''
-        logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
+        logger.warning('Message id %s has blank subject', message.get('message_id', '?'))
 
     max_retries = 3
 
@@ -1044,13 +1047,13 @@ def mark_message_as_sent(message):
             connection.commit()
             break
         except DataError:
-            logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+            logger.warning('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
             break
         except Exception:
             if i == max_retries:
-                logger.exception('Failed running sent message update query. (Try %s/%s)', i, max_retries)
+                logger.warning('Failed running sent message update query. (Try %s/%s)', i, max_retries)
             else:
-                logger.warn('Failed running sent message update query. (Try %s/%s)', i, max_retries)
+                logger.warning('Failed running sent message update query. (Try %s/%s)', i, max_retries)
             sleep(.2)
 
     # Clean messages cache
@@ -1062,8 +1065,8 @@ def mark_message_as_sent(message):
         message['subject'] = message['subject'][:255]
 
     if len(message['body']) > MAX_MESSAGE_BODY_LENGTH:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
-                    message.get('message_id', '?'), len(message['body']))
+        logger.warning('Message id %s has a ridiculously long body (%s chars). Truncating it.',
+                       message.get('message_id', '?'), len(message['body']))
         message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
     if 'aggregated_ids' in message:
@@ -1080,13 +1083,13 @@ def mark_message_as_sent(message):
             connection.commit()
             break
         except DataError:
-            logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+            logger.warning('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
             break
         except Exception:
             if i == max_retries:
-                logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
+                logger.warning('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
             else:
-                logger.warn('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
+                logger.warning('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
             sleep(.2)
 
     cursor.close()
@@ -1120,7 +1123,7 @@ def update_message_sent_status(message, status):
                             {'message_id': message_id, 'status': status})
             session.commit()
         except Exception:
-            logger.exception('Failed setting message sent status for message %s (Try %s/%s)', message_id, retries, max_retries)
+            logger.warning('Failed setting message sent status for message %s (Try %s/%s)', message_id, retries, max_retries)
             if retries < max_retries:
                 sleep(.2)
                 continue
@@ -1135,7 +1138,7 @@ def update_message_sent_status(message, status):
 def mark_message_has_no_contact(message):
     message_id = message.get('message_id')
     if not message_id:
-        logger.warn('Cannot mark message "%s" as not having contact as message_id is missing', message)
+        logger.warning('Cannot mark message "%s" as not having contact as message_id is missing', message)
         return
 
     connection = db.engine.raw_connection()
@@ -1150,7 +1153,7 @@ def mark_message_has_no_contact(message):
             connection.commit()
             cursor.close()
         except Exception:
-            logger.exception('Failed setting message %s as not having contact (Try %s/%s)', message_id, retries, max_retries)
+            logger.warning('Failed setting message %s as not having contact (Try %s/%s)', message_id, retries, max_retries)
             if retries < max_retries:
                 sleep(.2)
                 continue
@@ -1223,7 +1226,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
     if not is_retry and not message_to_slave and not quota.allow_send(message):
-        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
+        logger.warning('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
                   message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
@@ -1268,8 +1271,8 @@ def fetch_and_send_message(send_queue, vendor_manager):
         # body is too long and we were normally going to send it anyway.
         body_length = len(message['body'])
         if body_length > MAX_MESSAGE_BODY_LENGTH:
-            logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
-                        message['message_id'], body_length)
+            logger.warning('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                           message['message_id'], body_length)
             spawn(auditlog.message_change,
                   message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to excessive body length (%s > %s chars)' % (
@@ -1293,7 +1296,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
     try:
         success, sent_locally = distributed_send_message(message, vendor_manager)
     except Exception:
-        logger.exception('Failed to send message: %s', message)
+        logger.warning('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
         if message.get('unexpanded'):
             logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
@@ -1394,7 +1397,7 @@ def maintain_workers(config):
         try:
             email_smtp_workers = iris_smtp.iris_smtp.determine_worker_count(email_vendor)
         except Exception:
-            logger.exception('Failed determining MX records this round')
+            logger.warning('Failed determining MX records this round')
             email_smtp_workers = None
 
         old_email_worker_count = workers_per_mode.pop('email', None)
@@ -1532,7 +1535,7 @@ def prune_old_audit_logs_worker():
             connection.commit()
             cursor.close()
         except Exception:
-            logger.exception('Failed pruning old audit logs')
+            logger.warning('Failed pruning old audit logs')
         finally:
             connection.close()
 

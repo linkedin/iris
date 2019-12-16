@@ -315,7 +315,7 @@ class Login():
             raise HTTPFound('/login')
 
         if not auth.valid_username(username):
-            logger.warn('Tried to login with invalid username %s', username)
+            logger.warning('Tried to login with invalid username %s', username)
             if self.debug:
                 flash_message(req, 'Invalid username', 'danger')
             else:
@@ -326,7 +326,7 @@ class Login():
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
-            logger.warn('Failed login for %s', username)
+            logger.warning('Failed login for %s', username)
             flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
