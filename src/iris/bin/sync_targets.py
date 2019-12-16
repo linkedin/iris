@@ -648,7 +648,7 @@ def sync_ldap_lists(ldap_settings, engine):
                     logger.info('Added %s to list %s', member, list_name)
                 except (IntegrityError, DataError):
                     metrics.incr('ldap_memberships_failed_to_add')
-                    logger.warn('Failed adding %s to %s', member, list_name)
+                    logger.warning('Failed adding %s to %s', member, list_name)
 
                 user_add_count += 1
                 if (ldap_add_pause_interval is not None) and (user_add_count % ldap_add_pause_interval) == 0:

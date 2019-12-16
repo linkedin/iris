@@ -114,7 +114,7 @@ class iris_slack(object):
                 # Slack rate limiting. Sleep for a few seconds (chosen randomly to spread load),
                 # then raise error to retry
                 sleep_time = random.randrange(1, self.sleep_range)
-                logger.warn('Hit slack rate limiting, sleeping for %s', sleep_time)
+                logger.warning('Hit slack rate limiting, sleeping for %s', sleep_time)
                 sleep(sleep_time)
                 response.raise_for_status()
             else:

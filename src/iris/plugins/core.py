@@ -44,7 +44,7 @@ class IrisPlugin(object):
                         self.name, msg_id, digits)
             if digits not in self.phone_response_menu:
                 msg = 'Got unknown option from user: ' + digits
-                logger.warn(msg)
+                logger.warning(msg)
                 return msg
             cmd, args = self.phone_response_menu[digits]['cmd'], None
         else:

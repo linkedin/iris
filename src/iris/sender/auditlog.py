@@ -13,7 +13,7 @@ SENT_CHANGE = 'sent-change'
 
 def message_change(message_id, change_type, old, new, description):
     if not message_id:
-        logger.warn('Not logging %s for message as it does not have an id', change_type)
+        logger.warning('Not logging %s for message as it does not have an id', change_type)
         return
 
     # retry to guard against deadlocks
