@@ -290,6 +290,10 @@ table.dataTable.display tr td:first-child {
     display: none;
 }
 
+#applications-table_filter {
+    display: unset;
+}
+
 .dataTable tbody tr {
     cursor: pointer;
 }
