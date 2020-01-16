@@ -74,27 +74,27 @@ fake_notification = {
 }
 
 fake_plan = {
-    u'name': u'find-test-user',
-    u'threshold_count': 10,
-    u'creator': u'test-user',
-    u'created': 1470444636,
-    u'aggregation_reset': 300,
-    u'aggregation_window': 300,
-    u'threshold_window': 900,
-    u'tracking_type': None,
-    u'steps': [
-        [{u'repeat': 0, u'target': u'test-user', u'id': 178243, u'priority': u'low', u'step': 1,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 0},
-         {u'repeat': 1, u'target': u'test-user', u'id': 178252, u'priority': u'high', u'step': 1,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 300}],
-        [{u'repeat': 3, u'target': u'test-user', u'id': 178261, u'priority': u'urgent', u'step': 2,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 900}]
+    'name': 'find-test-user',
+    'threshold_count': 10,
+    'creator': 'test-user',
+    'created': 1470444636,
+    'aggregation_reset': 300,
+    'aggregation_window': 300,
+    'threshold_window': 900,
+    'tracking_type': None,
+    'steps': [
+        [{'repeat': 0, 'target': 'test-user', 'id': 178243, 'priority': 'low', 'step': 1,
+          'role': 'user', 'template': 'test-app Default', 'wait': 0},
+         {'repeat': 1, 'target': 'test-user', 'id': 178252, 'priority': 'high', 'step': 1,
+          'role': 'user', 'template': 'test-app Default', 'wait': 300}],
+        [{'repeat': 3, 'target': 'test-user', 'id': 178261, 'priority': 'urgent', 'step': 2,
+          'role': 'user', 'template': 'test-app Default', 'wait': 900}]
     ],
-    u'tracking_template': None,
-    u'tracking_key': None,
-    u'active': 1,
-    u'id': 19546,
-    u'description': u"please don't abuse this plan :)"
+    'tracking_template': None,
+    'tracking_key': None,
+    'active': 1,
+    'id': 19546,
+    'description': "please don't abuse this plan :)"
 }
 
 
@@ -330,9 +330,9 @@ def test_generate_slave_message_payload():
     }
     result = generate_msgpack_message_payload(data)
     assert msgpack.unpackb(result) == {
-        'endpoint': 'v0/slave_send',
-        'data': {
-            'ids': [1, 2, 3, 4]
+        b'endpoint': b'v0/slave_send',
+        b'data': {
+            b'ids': [1, 2, 3, 4]
         }
     }
 
@@ -343,8 +343,8 @@ def test_quotas(mocker):
     from gevent import sleep
     mocker.patch('iris.sender.quota.ApplicationQuota.get_new_rules',
                  return_value=[(
-                     u'testapp', 5, 2, 120, 120, u'testuser',
-                     u'user', u'iris-plan', 10
+                     'testapp', 5, 2, 120, 120, 'testuser',
+                     'user', 'iris-plan', 10
                  )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
@@ -376,7 +376,7 @@ def test_quotas(mocker):
     assert stats['app_testapp_quota_hard_usage_pct'] == 100
     assert stats['app_testapp_quota_soft_usage_pct'] == 200
 
-    for _ in xrange(10):
+    for _ in range(10):
         assert quotas.allow_send({'application': 'app_without_quota'})
 
 
@@ -511,16 +511,16 @@ def test_handle_api_notification_request_invalid_message(mocker):
 
 
 def test_sanitize_unicode_dict():
-    import pytest
     from jinja2.sandbox import SandboxedEnvironment
     from iris.utils import sanitize_unicode_dict
 
     # Use jinja the same way as in sender
     env = SandboxedEnvironment(autoescape=False)
     template = env.from_string('{{var}} {{var2}} {{nested.nest}}')
-    bad_context = {'var': '\xe2\x80\x99', 'var2': 2, 'nested': {'nest': '\xe2\x80\x99'}}
+    bad_context = {'var': b'\xe2\x80\x99', 'var2': 2, 'nested': {'nest': b'\xe2\x80\x99'}}
 
-    with pytest.raises(UnicodeDecodeError):
-        template.render(**bad_context)
+    assert '\\xe2' in template.render(**bad_context)
 
-    template.render(**sanitize_unicode_dict(bad_context))
+    good_render = template.render(**sanitize_unicode_dict(bad_context))
+    assert '\\xe2' not in good_render
+    assert b'\xe2\x80\x99'.decode('utf-8') in good_render

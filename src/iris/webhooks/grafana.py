@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import datetime
 import logging
 import ujson
@@ -15,13 +13,13 @@ class grafana(object):
 
     def validate_post(self, body):
         if not all(k in body for k in("ruleName", "state")):
-            logger.warn('missing ruleName and/or state attributes')
+            logger.warning('missing ruleName and/or state attributes')
             raise HTTPBadRequest('missing ruleName and/of state attributes')
 
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
         if len(context_json_str) > 65535:
-            logger.warn('POST to grafana exceeded acceptable size')
+            logger.warning('POST to grafana exceeded acceptable size')
             raise HTTPBadRequest('Context too long')
 
         return context_json_str
@@ -43,7 +41,7 @@ class grafana(object):
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': plan}).scalar()
             if not plan_id:
-                logger.warn('No active plan "%s" found', plan)
+                logger.warning('No active plan "%s" found', plan)
                 raise HTTPInvalidParam('plan does not exist or is not active')
 
             app = req.context['app']
@@ -62,7 +60,7 @@ class grafana(object):
             ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
-                logger.warn('no plan template exists for this app')
+                logger.warning('no plan template exists for this app')
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
             data = {

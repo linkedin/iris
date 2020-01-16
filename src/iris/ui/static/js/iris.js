@@ -38,7 +38,12 @@ iris = {
           this[base_route].init();
         break;
       case 2:
-          this[base_route.slice(0, -1)].init();
+          // Add exception for unsubscribe, which has no plural/singular but requires an app
+          if (base_route === 'unsubscribe') {
+            this.unsubscribe.init();
+          } else {
+            this[base_route.slice(0, -1)].init();
+          }
         break;
     }
   },
@@ -549,7 +554,8 @@ iris = {
       // gets & checks data from plan inputs and prepares model for post.
       var model = this.data.submitModel,
           missingFields = [],
-          $trackingEl = $('#tracking-notification.active');
+          $trackingEl = $('#tracking-notification.active'),
+          planLength = 0;
 
       model.creator = window.appData.user;
       model.name = $('#plan-name').val();
@@ -576,6 +582,15 @@ iris = {
       // validate plan notifications exist.
       if ($('.plan-notification').length === 0) {
         missingFields.push('steps/notifications');
+        model.isValid = false;
+      }
+
+      // validate maximum plan duration
+      $('.step-time').each(function(_, element) {
+        planLength += parseInt($(element).html());
+      });
+      if ( planLength > 1440 ){
+        iris.createAlert('Maximum plan duration exceeded: plan steps must add up to < 24 hours', 'danger', $('.plan-details') );
         model.isValid = false;
       }
 
@@ -1244,11 +1259,16 @@ iris = {
       $table: $('#incidents-table'),
       $filterApp: $('#filter-application'),
       $filterForm: $('#filter-form'),
+      $claimModal: $('#claim-modal'),
+      claimModalBtn: '#show-claim',
+      claimBtn: '#claim-active-btn',
       tableTemplate: $('#incidents-table-template').html(),
       summaryCtxHash: {},
+      incidentData: null,
       DataTable: null,
       dataTableOpts: {
         orderClasses: false,
+        dom: '<"claim-container"><"pull-right"l>tip',
         order: [[0, 'desc']],
         oLanguage: {
           sEmptyTable: "Use the filters above to find incidents",
@@ -1289,6 +1309,7 @@ iris = {
                            self.data.$filterForm.submit();
                         }));
       }
+      $('div.claim-container').html('<button type="button" class="btn btn-default blue btn-sm" id="show-claim">Claim Active Incidents</button>');
     },
     events: function(){
       var data = this.data,
@@ -1309,8 +1330,40 @@ iris = {
         e.stopPropagation();
         self.claimIncident(e);
       });
-
+      data.$page.on('click', self.data.claimModalBtn, self.claimModal.bind(this));
+      data.$claimModal.on('click', self.data.claimBtn, self.claimActive.bind(this));
       data.$filterForm.on('submit', iris.tables.filterTable.bind(this));
+    },
+    claimModal: function(){
+      var actives = this.data.DataTable.rows(function(_, _, x) { return x.getAttribute('data-active') === '1' }),
+          activeCount = actives.flatten().length;
+      if (activeCount > 0) {
+        $('#active-count').html(actives.flatten().length);
+        this.data.$claimModal.modal();
+      } else {
+        iris.createAlert('No active incidents to claim');
+      }
+    },
+    claimActive: function(){
+      var self = this,
+          actives = this.data.DataTable.rows(function(_, _, x) { return x.getAttribute('data-active') === '1' }),
+          activeIds = [];
+      activeIds = Array.from(actives.nodes().map(function(x) { return x.getAttribute('data-route') }));
+       $.ajax({
+        url: self.data.url + 'claim',
+        data: JSON.stringify({
+          owner: window.appData.user,
+          incident_ids: activeIds
+        }),
+      method: 'POST',
+      contentType: 'application/json'
+      }).done(function(data) {
+        iris.createAlert('Successfully claimed ' + data.claimed.length + ' incidents: ' + data.claimed.join(', '), 'success');
+        self.init();
+      }).fail(function() {
+        iris.createAlert('Error: failed to claim incidents');
+      }
+      )
     },
     getData: function(params){
       //merge params and fields
@@ -1409,7 +1462,9 @@ iris = {
         iris.createAlert(message, 'success', null, null, 'fixed');
         $this.attr('data-action', active ? 'claim' : 'unclaim')
           .text(active ? 'Claim Incident' : 'Unclaim Incident')
-          .parents('tr[data-route=' + incidentId + ']').find('.owner').text(active ? 'Unclaimed' : owner);
+          .parents('tr[data-route=' + incidentId + ']')
+          .attr('data-active', active ? 1 : 0)
+          .find('.owner').text(active ? 'Unclaimed' : owner);
       }).fail(function(){
         iris.createAlert('Failed to modify incident', 'danger');
       }).always(function(){
@@ -1832,1320 +1887,1751 @@ iris = {
       });
     }
   },
-  user: {
-    data: {
-      url: '/v0/users/',
-      postModesUrl: '/v0/users/modes/',
-      reprioritizationUrl: '/v0/users/reprioritization/',
-      settingsUrl: '/v0/users/settings/',
-      timezonesUrl: '/v0/timezones',
-      user: window.appData.user,
-      settings: null,
-      reprioritizationSettings: [],
-      supportedTimezones: [],
-      $page: $('.main'),
-      $priority: $('#priority-table'),
-      $batching: $('#batching-table'),
-      $contact: $('.user-contact-module'),
-      $saveBtn: $('#save-settings'),
-      $reprioritizationToggleBtn: $('#reprioritization h4'),
-      $reprioritizationAddBtn: $('#reprio-add-btn'),
-      $reprioritizationTable: $('#reprioritization-table'),
-      $addAppSelect: $('#add-application-select'),
-      $addAppBtn: $('#add-application-button'),
-      appsToDelete: {},
-      priorityTemplate: $('#priority-template').html(),
-      batchingTemplate: $('#batching-template').html(),
-      subheaderTemplate: $('#user-contact-template').html(),
-      reprioritizationTemplate: $('#reprioritization-table-template').html(),
-      postModel: {},
-      $timezoneSelect: $('#timezone-select'),
-      $timezoneSave: $('#timezone-save')
-    },
-    init: function(){
-      iris.changeTitle('Settings');
-      var self = this;
-      this.getUserSettings().done(function(){
-        self.createContactModule();
-        self.createPriorityTable();
-        self.events();
-      });
-      this.getReprioritizationSettings().done(function(){
-        self.populateReprioritization();
-      });
-      this.loadSupportedTimezones().done(function(){
-        self.populateTimezone();
-      });
-    },
-    events: function(){
-      var self = this;
-      this.data.$saveBtn.on('click', function(){
-        self.saveSetting();
-      });
-      this.data.$reprioritizationAddBtn.on('click', function(){
-        $(this).prop('disabled', true);
-        self.saveReprioritizationSettings();
-      });
-      this.data.$reprioritizationToggleBtn.on('click', function(){
-        self.toggleReprioritization();
-      });
-      this.data.$addAppBtn.on('click', function(){
-        self.addApplication();
-      });
-      this.data.$addAppSelect.change(function() {
-        self.data.$addAppBtn.prop('disabled', $(this).val() == '');
-      });
-      this.data.$timezoneSelect.change(function() {
-        self.data.$timezoneSave.prop('disabled', $(this).val() == '');
-      });
-      this.data.$timezoneSave.on('click', function(){
-        self.saveTimezone();
-      });
-      self.data.$saveBtn.prop('disabled', true);
-      self.data.$addAppBtn.prop('disabled', true);
-    },
-    getUserSettings: function(){
-      var self = this;
-      return $.getJSON(this.data.url + this.data.user).done(function(response){
-        self.data.settings = response;
-        //add app data to settings.
-        self.data.settings.priorities = window.appData.priorities;
-        self.data.settings.modeSet = window.appData.modes;
-        self.data.settings.applications = window.appData.applications;
-      }).fail(function(response){
-        iris.createAlert('Error: Failed to load data -' + response.text);
-      });
-    },
-    toggleReprioritization: function() {
-      $('#reprioritization').toggleClass('active')
-    },
-    getReprioritizationSettings: function() {
-      var self = this;
-      return $.getJSON(this.data.reprioritizationUrl + this.data.user).done(function(response){
-        self.data.reprioritizationSettings = response;
-      }).fail(function(response){
-        iris.createAlert('Error: Failed to load reprioritization data -' + response.text);
-      });
-    },
-    saveReprioritizationSettings: function() {
-      var data = {},
-          self = this;
-      $('#reprioritization input, #reprioritization select').each(function() {
-        data[$(this).data('type')] = $(this).val();
-      });
-      data['duration'] *= 60;
-      $.ajax({
-        url: this.data.reprioritizationUrl + this.data.user,
-        data: JSON.stringify(data),
-        method: 'POST',
-        contentType: 'application/json'
-      }).done(function(){
-        iris.createAlert('Reprioritization added.', 'success');
-        self.getReprioritizationSettings().done(function(){
-          self.populateReprioritization();
-        });
-      }).fail(function(response){
-        iris.createAlert('Failed to add reprioritization: ' + response.responseJSON.description, 'danger');
-      }).always(function(){
-        self.data.$reprioritizationAddBtn.prop('disabled', false);
-      });
-    },
-    deleteReprioritizationSetting: function(src_mode) {
-      var self = this;
-      $.ajax({
-        url: this.data.reprioritizationUrl + this.data.user + '/' + src_mode,
-        method: 'DELETE',
-        contentType: 'application/json',
-        data: '{}'
-      }).done(function(){
-        iris.createAlert('Reprioritization rule deleted.', 'success');
-        self.getReprioritizationSettings().done(function(){
-          self.populateReprioritization();
-        });
-      }).fail(function(){
-        iris.createAlert('Failed deleting', 'danger');
-      });
-    },
-    populateReprioritization: function() {
-      $('#reprioritization select').each(function(){
-        var frag = '';
-        window.appData.modes.forEach(function(mode) {
-          frag += ['<option>', mode, '</option>'].join('');
-        });
-        $(this).html(frag)
-      });
-      $('#reprio-dest-mode').val('sms');
+    user: {
+        data: {
+            url: '/v0/users/',
+            modesUrl: '/v0/modes',
+            apiBase: '/v0/',
+            postModesUrl: '/v0/users/modes/',
+            reprioritizationUrl: '/v0/users/reprioritization/',
+            settingsUrl: '/v0/users/settings/',
+            timezonesUrl: '/v0/timezones',
+            user: window.appData.user,
+            settings: null,
+            reprioritizationSettings: [],
+            supportedTimezones: [],
+            supportedOverrideModes: [],
+            $page: $('.main'),
+            $priority: $('#priority-table'),
+            $customOverrideTable: $('#custom-override-table'),
+            $customOverrideModal: $('#custom-override-modal-content'),
+            $batching: $('#batching-table'),
+            $contact: $('.user-contact-module'),
+            $saveBtn: $('#save-settings'),
+            $saveModalBtn: $('#save-custom-override-modal'),
+            $delOverrideBtn: $('#delete-override'),
+            $reprioritizationToggleBtn: $('#reprioritization h4'),
+            $reprioritizationAddBtn: $('#reprio-add-btn'),
+            $reprioritizationTable: $('#reprioritization-table'),
+            $addAppSelect: $('#add-application-select'),
+            $addAppOverrideSelect: $('#add-application-override-select'),
+            $addAppBtn: $('#add-application-button'),
+            $addAppOverrideBtn: $('#add-application-override-button'),
+            appsToDelete: {},
+            priorityTemplate: $('#priority-template').html(),
+            customOverrideTemplate: $('#custom-override-template').html(),
+            createCustomOverrideModalTemplate: $('#custom-override-modal-template').html(),
+            batchingTemplate: $('#batching-template').html(),
+            subheaderTemplate: $('#user-contact-template').html(),
+            reprioritizationTemplate: $('#reprioritization-table-template').html(),
+            postModel: {},
+            $timezoneSelect: $('#timezone-select'),
+            $timezoneSave: $('#timezone-save')
+        },
+        init: function(){
+            iris.changeTitle('Settings');
+            var self = this;
+            this.supportedOverrideModes = window.appData.modes;
+            // drop is ommitted add it for override options
+            this.supportedOverrideModes.push('drop');
+            
+            this.getUserSettings().done(function(){
+                self.getCustomOverrideSettings().done(function(){
+                    self.createCustomOverrideTable();
+                });
+                self.createContactModule();
+                self.createPriorityTable();
+                self.events();
+            });
+            this.getReprioritizationSettings().done(function(){
+                self.populateReprioritization();
+            });
+            this.loadSupportedTimezones().done(function(){
+                self.populateTimezone();
+            });
+        },
+        events: function(){
+            var self = this;
+            this.data.$saveBtn.on('click', function(){
+                self.saveSetting();
+            });
+            this.data.$saveModalBtn.on('click', function(){
+                self.saveModal();
+            });
+            this.data.$delOverrideBtn.on('click', function() {
+                self.deletePerCustomApp($(this).attr('data-app'));
+            });
+            this.data.$reprioritizationAddBtn.on('click', function(){
+                $(this).prop('disabled', true);
+                self.saveReprioritizationSettings();
+            });
+            this.data.$reprioritizationToggleBtn.on('click', function(){
+                self.toggleReprioritization();
+            });
+            this.data.$addAppBtn.on('click', function(){
+                self.addApplication();
+            });
+            this.data.$addAppOverrideBtn.on('click', function(){
+                self.addApplicationOverride();
+                self.data.$addAppOverrideBtn.prop('disabled', true);
+            });
+            this.data.$addAppSelect.change(function() {
+                self.data.$addAppBtn.prop('disabled', $(this).val() == '');
+            });
+            this.data.$addAppOverrideSelect.change(function() {
+                self.data.$addAppOverrideBtn.prop('disabled', $(this).val() == '');
+            });
+            this.data.$timezoneSelect.change(function() {
+                self.data.$timezoneSave.prop('disabled', $(this).val() == '');
+            });
+            this.data.$timezoneSave.on('click', function(){
+                self.saveTimezone();
+            });
+            self.data.$saveBtn.prop('disabled', true);
+            self.data.$addAppOverrideBtn.prop('disabled', true);
+            self.data.$addAppBtn.prop('disabled', true);
+        },
+        getUserSettings: function() {
+            var self = this;
+            return $.getJSON(this.data.url + this.data.user).done(function(response) {
+                self.data.settings = response;
+                //add app data to settings.
+                self.data.settings.priorities = window.appData.priorities;
+                self.data.settings.modeSet = window.appData.modes;
+                self.data.settings.applications = window.appData.applications;
+            }).fail(function(response) {
+                iris.createAlert('Error: Failed to load data -' + response.text);
+            });
+        },
+        toggleReprioritization: function() {
+            $('#reprioritization').toggleClass('active')
+        },
+        getReprioritizationSettings: function() {
+            var self = this;
+            return $.getJSON(this.data.reprioritizationUrl + this.data.user).done(function(response){
+                self.data.reprioritizationSettings = response;
+            }).fail(function(response){
+                iris.createAlert('Error: Failed to load reprioritization data -' + response.text);
+            });
+        },
+        getCustomOverrideSettings: function() {
+            var self = this;
+            return $.getJSON(this.data.url + this.data.user + '/categories').done(function(response){
+                self.data.settings.categories = response;
+                self.data.settings['customApp'] = new Set();
+                self.data.settings.categories.forEach(function (item, index) {
+                    self.data.settings.customApp.add(item['application']);
+                });
 
-      if (!this.data.reprioritizationSettings.length) {
-        this.data.$reprioritizationTable.hide();
-        return;
-      }
+            }).fail(function(response){
+                iris.createAlert('Error: Failed to load notification category data -' + response.text);
+            });
+        },
+        saveReprioritizationSettings: function() {
+            var data = {},
+                self = this;
+            $('#reprioritization input, #reprioritization select').each(function() {
+                data[$(this).data('type')] = $(this).val();
+            });
+            data['duration'] *= 60;
+            $.ajax({
+                url: this.data.reprioritizationUrl + this.data.user,
+                data: JSON.stringify(data),
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function(){
+                iris.createAlert('Reprioritization added.', 'success');
+                self.getReprioritizationSettings().done(function(){
+                    self.populateReprioritization();
+                });
+            }).fail(function(response){
+                iris.createAlert('Failed to add reprioritization: ' + response.responseJSON.description, 'danger');
+            }).always(function(){
+                self.data.$reprioritizationAddBtn.prop('disabled', false);
+            });
+        },
+        deleteReprioritizationSetting: function(src_mode) {
+            var self = this;
+            $.ajax({
+                url: this.data.reprioritizationUrl + this.data.user + '/' + src_mode,
+                method: 'DELETE',
+                contentType: 'application/json',
+                data: '{}'
+            }).done(function(){
+                iris.createAlert('Reprioritization rule deleted.', 'success');
+                self.getReprioritizationSettings().done(function(){
+                    self.populateReprioritization();
+                });
+            }).fail(function(){
+                iris.createAlert('Failed deleting', 'danger');
+            });
+        },
+        populateReprioritization: function() {
+            $('#reprioritization select').each(function(){
+                var frag = '';
+                window.appData.modes.forEach(function(mode) {
+                    frag += ['<option>', mode, '</option>'].join('');
+                });
+                $(this).html(frag)
+            });
+            $('#reprio-dest-mode').val('sms');
 
-      var existingReprioTemplate = Handlebars.compile(this.data.reprioritizationTemplate);
-      this.data.$reprioritizationTable.html(existingReprioTemplate(this.data.reprioritizationSettings));
-      this.data.$reprioritizationTable.show();
+            if (!this.data.reprioritizationSettings.length) {
+                this.data.$reprioritizationTable.hide();
+                return;
+            }
 
-      var self = this;
+            var existingReprioTemplate = Handlebars.compile(this.data.reprioritizationTemplate);
+            this.data.$reprioritizationTable.html(existingReprioTemplate(this.data.reprioritizationSettings));
+            this.data.$reprioritizationTable.show();
 
-      $('#reprioritization-table button').click(function(){
-        self.deleteReprioritizationSetting($(this).data('src-mode'));
-      });
-    },
-    createContactModule: function(){
-      var template = Handlebars.compile(this.data.subheaderTemplate),
-          settings = this.data.settings;
-      this.data.$contact.html(template(settings));
-    },
-    createPriorityTable: function(){
-      var template = Handlebars.compile(this.data.priorityTemplate),
-          $priority = this.data.$priority,
-          settings = this.data.settings,
-          self = this;
-      var global_default_values = {};
-      var app_default_values = {};
-      var app_supported_modes = {};
-      settings.per_app_defaults = {};
-      window.appData.priorities.forEach(function(priority) {
-        global_default_values[priority.name] = priority.default_mode;
-      });
-      window.appData.applications.forEach(function(app) {
-        app_default_values[app.name] = app.default_modes;
-        app_supported_modes[app.name] = app.supported_modes;
-      });
-      settings.per_app_defaults_obj = {};
-      for (var app in settings.per_app_modes) {
-        settings.per_app_defaults[app] = {priorities: [], supported_modes: app_supported_modes[app]};     // Needed for handlebars
-        settings.per_app_defaults_obj[app] = {}; // Needed for JS elsewhere
-        window.appData.priorities.forEach(function(p) {
-          var priority = p.name;
-          var default_mode = app_default_values[app][priority] ? app_default_values[app][priority] : (
-            global_default_values[priority] ? global_default_values[priority] : ''
-          );
-          settings.per_app_defaults[app].priorities.push({
-            priority_name: priority,
-            default_mode: default_mode
-          });
-          settings.per_app_defaults_obj[app][priority] = default_mode;
-        });
-      }
-      this.data.$priority.empty();
-      this.data.$priority.append(template(settings));
-      //load saved user settings to ui, and make changing any of them enable the save button
-      $priority.find('select').each(function(){
-        var priority = $(this).data('type'),
-            app = $(this).data('app'),
-            setting;
-        if (app) {
-          setting = settings.per_app_modes[app][priority] ? settings.per_app_modes[app][priority] : 'default';
-        } else {
-          setting = settings.modes[priority] ? settings.modes[priority] : 'default';
+            var self = this;
+
+            $('#reprioritization-table button').click(function(){
+                self.deleteReprioritizationSetting($(this).data('src-mode'));
+            });
+        },
+        createContactModule: function(){
+            var template = Handlebars.compile(this.data.subheaderTemplate),
+                settings = this.data.settings;
+            this.data.$contact.html(template(settings));
+        },
+        createPriorityTable: function(){
+            var template = Handlebars.compile(this.data.priorityTemplate),
+                $priority = this.data.$priority,
+                settings = this.data.settings,
+                self = this;
+            var global_default_values = {};
+            var app_default_values = {};
+            var app_supported_modes = {};
+            settings.per_app_defaults = {};
+            window.appData.priorities.forEach(function(priority) {
+                global_default_values[priority.name] = priority.default_mode;
+            });
+            window.appData.applications.forEach(function(app) {
+                app_default_values[app.name] = app.default_modes;
+                app_supported_modes[app.name] = app.supported_modes;
+            });
+            settings.per_app_defaults_obj = {};
+            for (var app in settings.per_app_modes) {
+                settings.per_app_defaults[app] = {priorities: [], supported_modes: app_supported_modes[app]};     // Needed for handlebars
+                settings.per_app_defaults_obj[app] = {}; // Needed for JS elsewhere
+                window.appData.priorities.forEach(function(p) {
+                    var priority = p.name;
+                    var default_mode = app_default_values[app][priority] ? app_default_values[app][priority] : (
+                        global_default_values[priority] ? global_default_values[priority] : ''
+                    );
+                    settings.per_app_defaults[app].priorities.push({
+                        priority_name: priority,
+                        default_mode: default_mode
+                    });
+                    settings.per_app_defaults_obj[app][priority] = default_mode;
+                });
+            }
+            this.data.$priority.empty();
+            this.data.$priority.append(template(settings));
+            //load saved user settings to ui, and make changing any of them enable the save button
+            $priority.find('select').each(function(){
+                var priority = $(this).data('type'),
+                    app = $(this).data('app'),
+                    setting;
+                if (app) {
+                    setting = settings.per_app_modes[app][priority] ? settings.per_app_modes[app][priority] : 'default';
+                } else {
+                    setting = settings.modes[priority] ? settings.modes[priority] : 'default';
+                }
+                $(this).val(setting);
+                // On dropdown change state, modify our settings dictionaries so the next table redraw shows
+                // the changed settings
+                $(this).change(function() {
+                    self.data.$saveBtn.prop('disabled', false);
+                    var val = $(this).val();
+                    if (app) {
+                        settings.per_app_modes[app][priority] = val;
+                    } 
+                    else {
+                        // Our per-app dropdowns do not have default, so don't bother
+                        if (val == 'default') {
+                            delete settings.modes[priority];
+                        } else {
+                            settings.modes[priority] = val;
+                        }
+                    }
+                });
+            });
+            $priority.find('button.delete-app-button').each(function() {
+                $(this).click(function() {
+                    self.deletePerApp($(this));
+                });
+            });
+            this.redrawApplicationDropdown();
+        },
+        createCustomOverrideTable: function(){
+            var template = Handlebars.compile(this.data.customOverrideTemplate),
+                settings = this.data.settings,
+                self = this;
+            this.data.$customOverrideTable.empty();
+            this.data.$customOverrideTable.append(template(settings));
+            this.data.$customOverrideTable.find('button.delete-custom-app-button').each(function() {
+                $(this).click(function() {
+                    var appToDelete = $(this).data('app');
+                    $('#app-overrides-to-delete').text(appToDelete);
+                    $('#delete-override').attr('data-app', appToDelete);
+                    $('#confirm-delete-override').modal('show');
+                });
+            });
+
+            this.data.$customOverrideTable.find('button.edit-custom-app-button').each(function() {
+                $(this).click(function() {
+                    self.editPerCustomApp($(this));
+                });
+            });
+
+            this.redrawApplicationOverrideDropdown();
+        },
+        createCustomOverrideModal: function(app){
+
+            var template = Handlebars.compile(this.data.createCustomOverrideModalTemplate),
+                self = this,
+                settings = this.data.settings,
+                customOverrideModal = this.data.$customOverrideModal;
+
+            // call out to the back end to get all categories for this app
+            var appOverrideCategories = [];
+            $.ajax({
+                type: "GET",
+                url: '/v0/categories/' + app
+            }).done(function (resp) {
+                  appOverrideCategories = resp;
+                  appOverrideCategories.forEach(function (appSetting, i) {
+                    settings.categories.forEach(function (userSetting) {
+                      if(appSetting['application'] === userSetting['application'] && appSetting['name'] === userSetting['category']){
+                        //apply user overrides
+                        appOverrideCategories[i]['mode'] = userSetting['mode'];
+                      }
+                    });
+                  });
+                  settings['modalAppName'] = app;
+                  settings['appCategoryData'] = appOverrideCategories;
+                  settings['supported_modes'] = self.supportedOverrideModes;
+                  customOverrideModal.empty();
+                  customOverrideModal.append(template(settings));
+                  $('#custom-override-modal').modal('show');
+            }).fail(function(){
+                iris.createAlert('Failed to fetch category data for this app', 'danger');
+            });
+
+        },
+        createBatchingTable: function(){
+            var template = Handlebars.compile(this.data.batchingTemplate),
+                settings = this.data.settings;
+            this.data.$batching.append(template(settings));
+        },
+        deletePerApp: function(elem) {
+            var self = this,
+                app = elem.data('app');
+            self.data.$saveBtn.prop('disabled', false);
+            delete self.data.settings.per_app_modes[app];
+            self.data.appsToDelete[app] = true;
+            self.createPriorityTable();
+        },
+        deletePerCustomApp: function(app) {
+            var self = this;
+
+            if(self.data.settings.customApp.has(app)){
+                // delete user overrides for application
+                $.ajax({
+                    url: self.data.url + self.data.user + '/categories/' + app,
+                    method: 'DELETE',
+                    contentType: 'text'
+                }).done(function(){
+                    // delete user mode overrides locally 
+                    self.data.settings.categories = self.data.settings.categories.filter(function( obj ) {
+                        return obj.application !== app;
+                    });
+                    self.data.settings.customApp.delete(app);
+                    iris.createAlert('Deleted application succesfully', 'success');
+                    self.createCustomOverrideTable();
+                }).fail(function(){
+                    iris.createAlert('Failed to delete application', 'danger');
+                });
+            }
+        },
+        editPerCustomApp: function(elem) {
+            var app = elem.data('app');
+            this.createCustomOverrideModal(app);
+        },
+        saveSetting: function(){
+            var globalOptions = this.data.postModel,
+                self = this;
+            self.data.$saveBtn.prop('disabled', true);
+            //get form data
+            $('#priority-table select.global-priority').each(function(){
+                var $this = $(this);
+                globalOptions[$this.attr('data-type')] = $this.val();
+            });
+
+            globalOptions.per_app_modes = {};
+
+            $('#priority-table tr.app-row').each(function() {
+                var app = $(this).data('app'),
+                    all_default = true;
+
+                globalOptions.per_app_modes[app] = {};
+
+                $(this).find('select.app-priority').each(function() {
+                    var $this = $(this),
+                        val = $this.val();
+                    globalOptions.per_app_modes[app][$this.attr('data-type')] = val;
+                    if (val != 'default') {
+                        all_default = false;
+                    }
+                });
+
+                // If the user chooses 'default' for all values, set each one to the default value for that app or column to avoid the row
+                // disappearing on reload (as all 'default' deletes the custom setting)
+                if (all_default) {
+                    for (var key in globalOptions.per_app_modes[app]) {
+                        globalOptions.per_app_modes[app][key] = self.data.settings.per_app_defaults_obj[app][key];
+                    }
+                }
+            });
+
+            for (var app in self.data.appsToDelete) {
+                globalOptions.per_app_modes[app] = {};
+                self.data.settings.priorities.forEach(function(p) {
+                    globalOptions.per_app_modes[app][p.name] = 'default';
+                });
+            }
+
+            self.data.appsToDelete = {};
+
+            $.ajax({
+                url: this.data.postModesUrl + this.data.user,
+                data: JSON.stringify(globalOptions),
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function(){
+                iris.createAlert('Settings saved.', 'success');
+            }).fail(function(){
+                iris.createAlert('Failed to save settings', 'danger');
+            });
+        },
+        saveModal: function(){
+            var modalOptions = {},
+                self = this,
+                settings = this.data.settings,
+                app = $('#custom-override-modal-table').data('app');
+
+            $('select.custom-modal-priority').each(function() {
+                var $this = $(this),
+                    val = $this.val();
+                modalOptions[$this.data('category')] = val;
+            });
+
+            $.ajax({
+                url: this.data.url + this.data.user + '/categories/' + app,
+                data: JSON.stringify(modalOptions),
+                method: 'POST',
+                contentType: 'text'
+            }).done(function(){
+                iris.createAlert('Modal settings saved succesfully', 'success');
+                self.data.settings.customApp.add(app);
+    
+                // update user overrides
+                settings.categories.forEach(function(cat, i){
+                    if(cat['application'] == app){
+                        self.data.settings.categories.splice(i,1);
+                    }
+                });
+                Object.keys(modalOptions).forEach(function(key) {
+                    self.data.settings.categories.push({ 'application': app, 'category': key, 'mode': modalOptions[key]});
+                });
+
+                self.createCustomOverrideTable();
+                
+            }).fail(function(){
+                iris.createAlert('Failed to save modal settings', 'danger');
+            });
+        },
+        redrawApplicationDropdown: function() {
+            var self = this;
+            self.data.$addAppSelect.empty();
+            self.data.$addAppSelect.append($('<option value="">').text('Add Application'));
+            var myApps = Object.keys(self.data.settings.per_app_modes);
+            this.data.settings.applications.sort(function(app1, app2) {
+                var app1_name = app1.name.toLowerCase(),
+                    app2_name = app2.name.toLowerCase();
+                if (app1_name > app2_name) {
+                    return 1;
+                } else if (app2_name > app1_name) {
+                    return -1;
+                } else {
+                    return 0;
+                }
+            }).forEach(function(app) {
+                if (myApps.indexOf(app.name) == -1) {
+                    self.data.$addAppSelect.append($('<option>').text(app.name));
+                }
+            });
+        },
+        addApplication: function() {
+            var app = this.data.$addAppSelect.val();
+            this.data.$addAppSelect.val('');
+            this.data.$addAppBtn.prop('disabled', true);
+            if (app == '') {
+                return;
+            }
+            this.data.$saveBtn.prop('disabled', false);
+            this.data.settings.per_app_modes[app] = {};
+            if (app in this.data.appsToDelete) {
+                delete this.data.appsToDelete[app];
+            }
+            this.createPriorityTable();
+        },
+        addApplicationOverride: function() {
+            var app = this.data.$addAppOverrideSelect.val();
+            this.data.$addAppOverrideSelect.val('');
+            this.createCustomOverrideModal(app);
+
+        },
+        redrawApplicationOverrideDropdown: function() {
+            var self = this,
+                customOverrideApps = new Set;
+
+            //fetch apps that have custom categories defined
+            $.ajax({
+                type: "GET",
+                url: '/v0/categories/'
+            }).done(function (resp) {
+                  self.data.$addAppOverrideSelect.empty();
+                  self.data.$addAppOverrideSelect.append($('<option value="">').text('Add Application'));
+                  var appOverrideCategories = resp;
+                  appOverrideCategories.forEach(function (appSetting, i) {
+                    customOverrideApps.add(appSetting['application']);
+                  });
+                  Array.from(customOverrideApps).sort().forEach(function (app) {
+                    self.data.$addAppOverrideSelect.append($('<option>').text(app));
+                  });
+    
+              }).fail(function () {
+                iris.createAlert('Failed to fetch applications for dropdown', 'danger');
+              });
+
+        },
+        loadSupportedTimezones: function() {
+            var self = this;
+            return $.getJSON(this.data.timezonesUrl).done(function(response){
+                self.data.supportedTimezones = response;
+            }).fail(function(response){
+                iris.createAlert('Error: Failed to load supported timezones -' + response.text);
+            });
+        },
+        saveTimezone: function() {
+            $.ajax({
+                url: this.data.settingsUrl + this.data.user,
+                data: JSON.stringify({'timezone': this.data.$timezoneSelect.val()}),
+                method: 'PUT',
+                contentType: 'application/json'
+            }).done(function(){
+                iris.createAlert('Settings saved.', 'success');
+            }).fail(function(){
+                iris.createAlert('Failed to save settings', 'danger');
+            });
+        },
+        populateTimezone: function() {
+            var self = this,
+                configured_timezone = window.appData.user_settings.timezone;
+            self.data.$timezoneSelect.empty();
+            if (!configured_timezone) {
+                self.data.$timezoneSelect.append($('<option value="">').text('Browser Default'));
+                self.data.$timezoneSave.prop('disabled', true);
+            }
+            self.data.supportedTimezones.forEach(function(name) {
+                self.data.$timezoneSelect.append($('<option>').text(name));
+            });
+            if (configured_timezone) {
+                self.data.$timezoneSelect.val(configured_timezone);
+            }
         }
-        $(this).val(setting);
-        // On dropdown change state, modify our settings dictionaries so the next table redraw shows
-        // the changed settings
-        $(this).change(function() {
-          self.data.$saveBtn.prop('disabled', false);
-          var val = $(this).val();
-          if (app) {
-            settings.per_app_modes[app][priority] = val;
-          }
-          else {
-            // Our per-app dropdowns do not have default, so don't bother
-            if (val == 'default') {
-              delete settings.modes[priority];
+    }, //end iris.user
+    applications: {
+        data: {
+            $page: $('.main'),
+            $table: $('#applications-table'),
+            $pageHeader: $('.main h3'),
+            $createAppModal: $('#create-app-modal'),
+            showAppModalButton: '#show-app-modal-button',
+            applicationSubmitButton: '#create-app-submit',
+            tableRows: 'tbody tr',
+            tableTemplate: $('#applications-table-template').html(),
+            headerTemplate: $('#applications-header-template').html(),
+            DataTable: null,
+            dataTableOpts: {
+                orderClasses: false,
+                order: [[0, 'asc']]
+            }
+        },
+        init: function() {
+            iris.changeTitle('Applications');
+
+            this.data.$pageHeader.html(Handlebars.compile(this.data.headerTemplate)({
+                showCreateButton: window.appData.user_admin
+            }));
+
+            iris.tables.createTable.call(this, window.appData.applications);
+            this.events();
+        },
+        events: function() {
+            this.data.$page.on('click', this.data.tableRows, function() {
+                window.location = '/applications/' + $(this).data('application');
+            });
+            this.data.$page.on('click', this.data.showAppModalButton, this.showCreateAppModal.bind(this));
+            this.data.$page.on('click', this.data.applicationSubmitButton, this.createApplication.bind(this));
+        },
+        showCreateAppModal: function() {
+            this.data.$createAppModal.modal();
+        },
+        createApplication: function() {
+            var self = this,
+                $appNameBox = $('#create-app-name'),
+                appName = $.trim($appNameBox.val()),
+                appNameLower = appName.toLowerCase();
+
+            if (appName == '') {
+                $appNameBox.val('');
+                $appNameBox.focus();
+                return;
+            }
+
+            // If this application already exists, just go to its page
+            for (var i = 0; i < window.appData.applications.length; i++) {
+                if (window.appData.applications[i].name.toLowerCase() == appNameLower) {
+                    window.location = '/applications/' + window.appData.applications[i].name;
+                    return;
+                }
+            }
+
+            $.ajax({
+                url: '/v0/applications/',
+                data: JSON.stringify({
+                    name: appName
+                }),
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function() {
+                window.location = '/applications/' + appName
+            }).fail(function(r) {
+                iris.createAlert('Failed creating application: ' + r.responseJSON['title'])
+            }).always(function() {
+                self.data.$createAppModal.modal('hide');
+            });
+        }
+    }, // End iris.applications
+    application: {
+        data: {
+            url: '/v0/applications/',
+            apiBase: '/v0/',
+            $page: $('.main'),
+            $editButton: $('#application-edit-button'),
+            applicationTemplate: $('#application-template').html(),
+            loaderTemplate: $('#loader-template').html(),
+            applicationEditbutton: '#application-edit-button',
+            applicationSavebutton: '#application-save-button',
+            applicationRenameButton: '#application-rename-button',
+            applicationDeleteButton: '#application-delete-button',
+            applicationRekeyButton: '#application-rekey-button',
+            applicationSecondaryKeyButton: '#application-secondary-key-button',
+            showRenameModalButton: '#show-rename-modal-button',
+            showDeleteModalButton: '#show-delete-modal-button',
+            showRekeyModalButton: '#show-rekey-modal-button',
+            showSecondaryKeyModalButton: '#show-secondary-key-modal-button',
+            removeVariableButton: '.remove-variable',
+            removeOwnerButton: '.remove-owner',
+            removeAddressButton: '.remove-address',
+            showApiKeyButton: '#show-api-key-button',
+            showSecondaryKeyButton: '#show-secondary-key-button',
+            addVariableForm: '#add-variable-form',
+            addOwnerForm: '#add-owner-form',
+            addAddressForm: '#add-address-form',
+            addEmailIncidentForm: '#add-email-incident-form',
+            addCustomCategoryForm: '#add-custom-category-form',
+            addDefaultModeForm: '#add-default-mode-form',
+            removeEmailIncidentButton: '.delete-email-incident-button',
+            removeCustomCategoryButton: '.delete-custom-category-button',
+            removeDefaultModeButton: '.delete-default-mode-button',
+            dangerousActionsToggle: '.application-dangerous-actions h4',
+            application: null,
+            model: {}
+        },
+        init: function() {
+            var location = window.location.pathname.split('/'),
+                application = decodeURIComponent(location[location.length - 1]);
+
+            // Register this only for this page because it isn't used anywhere else. Only admins and users
+            // can delete owners, but users who are not admins cannot delete themselves.
+            Handlebars.registerHelper('ifCanShowDeleteUserButton', function(username, opts) {
+                return window.appData.user_admin || username != window.appData.user ? opts.fn(this) : opts.inverse(this);
+            });
+
+            this.data.application = application;
+            this.getApplication(application);
+        },
+        events: function() {
+            var self = this,
+                data = this.data;
+            data.$page.on('click', data.applicationEditbutton, this.editApplication.bind(this));
+            data.$page.on('click', data.applicationSavebutton, this.saveApplication.bind(this));
+            data.$page.on('click', data.showRenameModalButton, this.showRenameModal.bind(this));
+            data.$page.on('click', data.showDeleteModalButton, this.showDeleteModal.bind(this));
+            data.$page.on('click', data.showRekeyModalButton, this.showRekeyModal.bind(this));
+            data.$page.on('click', data.showSecondaryKeyModalButton, this.showSecondaryKeyModal.bind(this));
+            data.$page.on('click', data.applicationRenameButton, this.renameApplication.bind(this));
+            data.$page.on('click', data.applicationDeleteButton, this.deleteApplication.bind(this));
+            data.$page.on('click', data.applicationRekeyButton, this.rekeyApplication.bind(this));
+            data.$page.on('click', data.applicationSecondaryKeyButton, this.genSecondaryKey.bind(this));
+            data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
+            data.$page.on('click', data.showSecondaryKeyButton, this.showSecondaryKey.bind(this));
+            data.$page.on('click', data.dangerousActionsToggle, this.toggleDangerousActions.bind(this));
+            data.$page.on('click', data.removeVariableButton, function() {
+                var variable = $(this).data('variable');
+                var pos = self.data.model.variables.indexOf(variable);
+                if (pos !== -1) {
+                    self.data.model.variables.splice(pos, 1)
+                }
+                $(this).parent().remove();
+            });
+            data.$page.on('click', data.removeOwnerButton, function() {
+                var owner = $(this).data('owner');
+                var pos = self.data.model.owners.indexOf(owner);
+                if (pos !== -1) {
+                    self.data.model.owners.splice(pos, 1)
+                }
+                $(this).parent().remove();
+            });
+            data.$page.on('click', data.removeAddressButton, function(e) {
+                e.preventDefault();
+                self.data.model.custom_sender_addresses.email = null;
+                $("#custom-sender-email-value").text('None (using default sender address)');
+            });
+            data.$page.on('submit', data.addVariableForm, function(e) {
+                e.preventDefault();
+                var variable = $('#add-variable-box').val();
+                if (variable == '') {
+                    iris.createAlert('Cannot add empty variable');
+                    return;
+                }
+                if (self.data.model.variables.indexOf(variable) !== -1) {
+                    iris.createAlert('That variable "' + variable + '" already exists');
+                    return;
+                }
+                $('#add-variable-box').val('');
+                self.data.model.variables.push(variable);
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('submit', data.addOwnerForm, function(e) {
+                e.preventDefault();
+                var owner = $('#add-owner-box').val();
+                if (owner == '') {
+                    iris.createAlert('Cannot add empty owner');
+                    return;
+                }
+                if (self.data.model.owners.indexOf(owner) !== -1) {
+                    iris.createAlert('That owner "' + owner + '" already exists');
+                    return;
+                }
+                $('#add-owner-box').val('');
+                self.data.model.owners.push(owner);
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('submit', data.addAddressForm, function(e) {
+                e.preventDefault();
+                var address = $('#add-address-box').val();
+                if (address === '') {
+                    iris.createAlert('Cannot add empty custom address');
+                    return;
+                }
+                if(self.validateEmail(address) === false){
+                    iris.createAlert('Email address is invalid. Please make sure it is formatted correctly.');
+                    return;
+                }
+
+                $('#add-address-box').val('');
+                self.data.model.custom_sender_addresses.email = address;
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('submit', data.addEmailIncidentForm, function(e) {
+                e.preventDefault();
+                var $email = $('#add-email-incident-email');
+                var $plan = $('#add-email-incident-plan');
+                self.data.model.emailIncidents[$email.val()] = $plan.val();
+                $email.val('');
+                $plan.val('');
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('click', data.removeEmailIncidentButton, function() {
+                delete self.data.model.emailIncidents[$(this).data('email')];
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('submit', data.addCustomCategoryForm, function(e) {
+                e.preventDefault();
+                var $category = $('#add-custom-category');
+                var $description = $('#add-custom-category-description');
+                var $mode = $('#category-default-mode');
+                self.data.model.customCategories.forEach(function(element, i){
+                    // if it already exists, replace with new values
+                    if (element["name"] == $category.val()){
+                        self.data.model.customCategories.splice(i, 1);
+                    }
+                });
+                self.data.model.customCategories.push({"name":$category.val(), "description": $description.val(), "mode": $mode.val()});
+                $category.val('');
+                $description.val('');
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('click', data.removeCustomCategoryButton, function() {
+                var nameToDelete = $(this).data('category');
+                self.data.model.customCategories.forEach(function(element, i){
+                    if(element["name"] == nameToDelete){
+                        self.data.model.customCategories.splice(i, 1);
+                    }
+                });
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('submit', data.addDefaultModeForm, function(e) {
+                e.preventDefault();
+                var $priority = $('#default-mode-form-priority'),
+                    priority_val = $priority.val();
+                var $mode = $('#default-mode-form-mode'),
+                    mode_val = $mode.val();
+                if (priority_val == '') {
+                    $priority.addClass('invalid-input');
+                    return;
+                } else {
+                    $priority.removeClass('invalid-input');
+                }
+                if (mode_val == '') {
+                    $mode.addClass('invalid-input');
+                    return;
+                } else {
+                    $mode.removeClass('invalid-input');
+                }
+                self.data.model.default_modes[priority_val] = mode_val;
+                $priority.val('');
+                $mode.val('');
+                self.modelPersist();
+                self.render();
+            });
+            data.$page.on('click', data.removeDefaultModeButton, function() {
+                delete self.data.model.default_modes[$(this).data('priority')];
+                self.modelPersist();
+                self.render();
+            });
+            window.onbeforeunload = iris.unloadDialog.bind(this);
+        },
+        validateEmail: function(email) {
+            var re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+            return re.test(String(email).toLowerCase());
+        },
+        modelPersist: function() {
+            var self = this;
+            self.data.$page.find('textarea').each(function() {
+                var key = $(this).data('field');
+                if (key && key in self.data.model) {
+                    self.data.model[key] = $(this).val();
+                }
+            });
+        },
+        getApplication: function(application) {
+            var app = null,
+                self = this,
+                applicationLower = application.toLowerCase();
+            for (var i = 0, item; i < window.appData.applications.length; i++) {
+                item = window.appData.applications[i];
+                if (item.name.toLowerCase() == applicationLower) {
+                    app = item;
+                    break;
+                }
+            }
+            if (!app) {
+                iris.createAlert('Application not found');
+                return;
+            }
+            iris.changeTitle('Application ' + app.name);
+
+            self.showLoader();
+
+            $.when($.get(self.data.url + application + '/quota'),
+                $.get(self.data.url + application + '/incident_emails'),
+                $.get(self.data.apiBase + 'categories/' + self.data.application)
+            ).always(function(quota, incident_emails, customCategories) {
+                app.quota = Object.keys(quota[0]).length ? quota[0] : null;
+                app.emailIncidents = incident_emails[0];
+
+                app.customCategories = [];
+                customCategories[0].forEach(function(element){
+                    app.customCategories.push({'name':element['name'], 'description':element['description'], 'mode':element['mode']})
+                });
+
+                // For convenience in setting the below boolean flags, localize
+                // whether the user is an owner of this app or is an admin here.
+                var isOwner = app.owners.indexOf(window.appData.user) !== -1;
+                var isAdmin = window.appData.user_admin;
+
+                // Bunch of boolean flags passed to the template which control what is
+                // seen and how the UI behaves. The entire template is scattered with if
+                // blocks based on these variables.
+                app.isInViewMode = true;
+                app.isEditable = isAdmin || isOwner;
+                app.allowViewingKey = isAdmin || isOwner;
+                app.allowEditingEmailIncidents = isAdmin || isOwner;
+                app.allowEditingCustomCategories = isAdmin || isOwner;
+                app.showEditOwners = isAdmin || isOwner;
+                app.allowDangerousActions = isAdmin || isOwner;
+                app.allowEditingSupportedModes = isAdmin;
+                app.allowEditingTitle = isAdmin || isOwner;
+
+                // This gets turned to true when the edit button is clicked if the user
+                // is an admin
+                app.showEditQuotas = false;
+
+                app.apiKey = false;
+                app.priorities = window.appData.priorities.map(function(priority) {
+                    return priority.name;
+                });
+                app.modes = window.appData.modes;
+                self.data.model = app;
+                self.render();
+                self.events();
+            }).fail(function() {
+                iris.createAlert('Failed loading app settings');
+            });
+        },
+        editApplication: function() {
+            this.data.model.isInViewMode = false;
+            this.data.model.showEditQuotas = window.appData.user_admin;
+            this.render();
+        },
+        showApiKey: function() {
+            var self = this;
+            $(self.data.showApiKeyButton).prop('disabled', true);
+            $.get('/v0/applications/' + self.data.application + '/key').done(function(result) {
+                self.data.model.apiKey = result.key;
+                self.modelPersist();
+                self.render();
+            }).fail(function(result) {
+                iris.createAlert('Unable to get key: ' + result.responseJSON.title);
+            });
+        },
+        showSecondaryKey: function() {
+            var self = this;
+            $(self.data.showSecondaryKeyButton).prop('disabled', true);
+            $.get('/v0/applications/' + self.data.application + '/secondary').done(function(result) {
+                self.data.model.secondaryKey = result.key;
+                if (result.key === null) {
+                    self.data.model.secondaryKey = 'No secondary key exists'
+                }
+                self.modelPersist();
+                self.render();
+            }).fail(function(result) {
+                iris.createAlert('Unable to get key: ' + result.responseJSON.title);
+            });
+        },
+        saveApplication: function() {
+            var self = this,
+                failedCheck = false;
+            $('.application-settings').find('textarea').each(function(k, elem) {
+                var $elem = $(elem),
+                    field = $elem.data('field'),
+                    val = $elem.val();
+                self.data.model[field] = val;
+                $elem.removeClass('invalid-input');
+                if (field == 'context_template' || field == 'summary_template' || field == 'mobile_template') {
+                    try {
+                        Handlebars.compile(val)({})
+                    } catch (e) {
+                        iris.createAlert('Invalid HandleBars syntax for ' + field + '.\n' + e.message);
+                        $elem.addClass('invalid-input');
+                        failedCheck = true;
+                    }
+                } else if (field == 'sample_context' && val != '') {
+                    try {
+                        JSON.parse(val);
+                    } catch (e) {
+                        iris.createAlert('Invalid JSON syntax for sample context.\n' + e.message);
+                        $elem.addClass('invalid-input');
+                        failedCheck = true;
+                    }
+                }
+            });
+            if (failedCheck) {
+                return;
+            }
+            if (self.data.model.sample_context == '') {
+                self.data.model.sample_context = '{}';
+            }
+            var ajaxCalls = [];
+            if (self.data.model.showEditQuotas) {
+                var quotaSettings = {},
+                    deleteQuota = true;
+                $('.application-quota').find('input').each(function(k, elem) {
+                    var $elem = $(elem),
+                        field = $elem.attr('name'),
+                        val = $elem.val();
+                    if (field && val != '' && val != '0') {
+                        if (field != 'target_name' && field != 'plan_name') {
+                            val = parseInt(val);
+                        }
+                        quotaSettings[field] = val;
+                        deleteQuota = false;
+                    }
+                });
+                if (deleteQuota) {
+                    self.data.model.quota = null;
+                    ajaxCalls.push($.ajax({
+                        url: self.data.url + self.data.application + '/quota',
+                        method: 'DELETE',
+                        data: '{}',
+                        contentType: 'application/json'
+                    }));
+                } else {
+                    self.data.model.quota = quotaSettings;
+                    quotaSettings.wait_time = 3600;
+                    // Abstract away the fact that quota durations are really seconds underneath
+                    quotaSettings.hard_quota_duration *= 60;
+                    quotaSettings.soft_quota_duration *= 60;
+                    ajaxCalls.push($.ajax({
+                        url: self.data.url + self.data.application + '/quota',
+                        data: JSON.stringify(quotaSettings),
+                        method: 'POST',
+                        contentType: 'application/json'
+                    }));
+                }
+            }
+            if (self.data.model.allowEditingEmailIncidents) {
+                ajaxCalls.push($.ajax({
+                    url: self.data.url + self.data.application + '/incident_emails',
+                    data: JSON.stringify(self.data.model.emailIncidents),
+                    method: 'PUT',
+                    contentType: 'application/json'
+                }));
+            }
+            if (self.data.model.allowEditingCustomCategories) {
+                ajaxCalls.push($.ajax({
+                    url: self.data.apiBase + 'categories/' + self.data.application,
+                    data: JSON.stringify(self.data.model.customCategories),
+                    method: 'POST',
+                    contentType: 'application/json'
+                }));
+            }
+            if (self.data.model.allowEditingSupportedModes) {
+                self.data.model.supported_modes = [];
+                $('input[name=supported_modes]').each(function(k, elem) {
+                    var $elem = $(elem);
+                    if ($elem.prop('checked')) {
+                        self.data.model.supported_modes.push($elem.val());
+                    }
+                });
+                // Remove any default modes using modes we no longer support
+                for (var priority in self.data.model.default_modes) {
+                    if (self.data.model.supported_modes.indexOf(self.data.model.default_modes[priority]) == -1) {
+                        delete self.data.model.default_modes[priority];
+                    }
+                }
+            }
+
+            if (self.data.model.allowEditingTitle){
+                self.data.model.title_variable = $('#title-variable-select').val();
+                if(self.data.model.title_variable == 'null'){
+                    self.data.model.title_variable = null;
+                }
+            }
+
+            ajaxCalls.push($.ajax({
+                url: self.data.url + self.data.application,
+                data: JSON.stringify(self.data.model),
+                method: 'PUT',
+                contentType: 'application/json'
+            }));
+            $.when.apply(undefined, ajaxCalls).done(function(){
+                self.data.model.isInViewMode = true;
+                self.data.model.showEditQuotas = false;
+                self.data.model.apiKey = false;
+                self.render();
+                iris.createAlert('Settings saved', 'success');
+            }).fail(function(data) {
+                iris.createAlert('Settings failed to save: ' + data.responseJSON.title);
+            });
+        },
+        toggleDangerousActions: function() {
+            $('.application-dangerous-actions').toggleClass('active')
+        },
+        showRenameModal: function() {
+            $('#app-new-name-box').val(this.data.application);
+            $('#rename-app-modal').modal();
+        },
+        showDeleteModal: function() {
+            $('#delete-app-modal').modal();
+        },
+        showRekeyModal: function() {
+            $('#rekey-app-modal').modal();
+        },
+        showSecondaryKeyModal: function() {
+            $('#secondary-key-app-modal').modal();
+        },
+        renameApplication: function() {
+            var $nameBox = $('#app-new-name-box'),
+                newName = $.trim($nameBox.val());
+            if (newName == '' || newName == this.data.application) {
+                $nameBox.focus();
+                return;
+            }
+            var $renameBtn = $(this.data.applicationRenameButton);
+            $renameBtn.prop('disabled', true);
+            $.ajax({
+                url: '/v0/applications/' + this.data.application + '/rename',
+                data: JSON.stringify({
+                    new_name: newName
+                }),
+                method: 'PUT',
+                contentType: 'application/json'
+            }).done(function() {
+                window.onbeforeunload = null;
+                window.location = '/applications/' + newName;
+            }).fail(function(r) {
+                iris.createAlert('Failed renaming application: ' + r.responseJSON['title']);
+                $('body').scrollTop(0);
+                $renameBtn.prop('disabled', false);
+            }).always(function() {
+                $('#rename-app-modal').modal('hide');
+            });
+        },
+        deleteApplication: function() {
+            var $deleteBtn = $(this.data.applicationDeleteButton);
+            $deleteBtn.prop('disabled', true);
+            $.ajax({
+                url: '/v0/applications/' + this.data.application,
+                method: 'DELETE',
+                contentType: 'application/json'
+            }).done(function() {
+                window.onbeforeunload = null;
+                window.location = '/applications/';
+            }).fail(function(r) {
+                iris.createAlert('Failed deleting application: ' + r.responseJSON['title']);
+                $('body').scrollTop(0);
+                $deleteBtn.prop('disabled', false);
+            }).always(function() {
+                $('#delete-app-modal').modal('hide');
+            });
+        },
+        rekeyApplication: function() {
+            var $rekeyBtn = $(this.data.applicationRekeyButton);
+            $rekeyBtn.prop('disabled', true);
+            $.ajax({
+                url: '/v0/applications/' + this.data.application + '/rekey',
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function() {
+                iris.createAlert('Successfully rekey\'d application', 'success')
+            }).fail(function(r) {
+                iris.createAlert('Failed re-keying application: ' + r.responseJSON['title'])
+            }).always(function() {
+                $('#rekey-app-modal').modal('hide');
+                $('body').scrollTop(0);
+                $rekeyBtn.prop('disabled', false);
+            });
+        },
+        genSecondaryKey: function() {
+            var $keyBtn = $(this.data.applicationRekeyButton);
+            $keyBtn.prop('disabled', true);
+            $.ajax({
+                url: '/v0/applications/' + this.data.application + '/secondary',
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function() {
+                iris.createAlert('Successfully generated secondary key', 'success')
+            }).fail(function(r) {
+                iris.createAlert('Failed to generate secondary key: ' + r.responseJSON['title'])
+            }).always(function() {
+                $('#secondary-key-app-modal').modal('hide');
+                $('body').scrollTop(0);
+                $keyBtn.prop('disabled', false);
+            });
+        },
+        showLoader: function() {
+            var template = Handlebars.compile(this.data.loaderTemplate);
+            this.data.$page.html(template(this.data.model));
+        },
+        render: function() {
+            var template = Handlebars.compile(this.data.applicationTemplate);
+            this.data.$page.html(template(this.data.model));
+            if (this.data.model.showEditQuotas || this.data.model.showEditOwners) {
+                iris.typeahead.init('');
             } else {
-              settings.modes[priority] = val;
+                iris.typeahead.destroy();
             }
-          }
-        });
-      });
-      $priority.find('button.delete-app-button').each(function() {
-        $(this).click(function() {
-          self.deletePerApp($(this));
-        });
-      });
-      this.redrawApplicationDropdown();
-    },
-    createBatchingTable: function(){
-      var template = Handlebars.compile(this.data.batchingTemplate),
-          settings = this.data.settings;
-      this.data.$batching.append(template(settings));
-    },
-    deletePerApp: function(elem) {
-      var self = this,
-          app = elem.data('app');
-      self.data.$saveBtn.prop('disabled', false);
-      delete self.data.settings.per_app_modes[app];
-      self.data.appsToDelete[app] = true;
-      self.createPriorityTable();
-    },
-    saveSetting: function(){
-      var globalOptions = this.data.postModel,
-          self = this;
-      self.data.$saveBtn.prop('disabled', true);
-      //get form data
-      $('#priority-table select.global-priority').each(function(){
-        var $this = $(this);
-        globalOptions[$this.attr('data-type')] = $this.val();
-      });
-
-      globalOptions.per_app_modes = {};
-
-      $('#priority-table tr.app-row').each(function() {
-        var app = $(this).data('app'), all_default = true;
-
-        globalOptions.per_app_modes[app] = {};
-
-        $(this).find('select.app-priority').each(function() {
-            var $this = $(this), val = $this.val();
-            globalOptions.per_app_modes[app][$this.attr('data-type')] = val;
-            if (val != 'default') {
-              all_default = false;
+        }
+    }, // End iris.application
+    stats: {
+        data: {
+            url: '/v0/stats',
+            $page: $('.stats'),
+            $table: $('#stats-table'),
+            tableTemplate: $('#stats-table-template').html(),
+            DataTable: null,
+            dataTableOpts: {
+                orderClasses: false,
+                order: [[0, 'asc']],
+                columns: [
+                    null,
+                    null
+                ]
             }
-        });
-
-        // If the user chooses 'default' for all values, set each one to the default value for that app or column to avoid the row
-        // disappearing on reload (as all 'default' deletes the custom setting)
-        if (all_default) {
-          for (var key in globalOptions.per_app_modes[app]) {
-            globalOptions.per_app_modes[app][key] = self.data.settings.per_app_defaults_obj[app][key];
-          }
+        },
+        init: function() {
+            iris.changeTitle('Stats');
+            iris.tables.filterTable.call(this);
+        },
+        events: function() {},
+        getData: function(params) {
+            return $.getJSON(this.data.url, params).fail(function(){
+                iris.createAlert('No stats found');
+            });
         }
-      });
+    }, // End iris.stats
+    stat: {
+        data: {
+            url: '/v0/applications/',
+            $page: $('.stats'),
+            $table: $('#stats-table'),
+            application: null,
+            tableTemplate: $('#stats-table-template').html(),
+            DataTable: null,
+            dataTableOpts: {
+                orderClasses: false,
+                order: [[0, 'asc']],
+                columns: [
+                    null,
+                    null
+                ]
+            }
+        },
+        init: function() {
+            var location = window.location.pathname.split('/'),
+                application = decodeURIComponent(location[location.length - 1]);
 
-      for (var app in self.data.appsToDelete) {
-        globalOptions.per_app_modes[app] = {};
-        self.data.settings.priorities.forEach(function(p) {
-          globalOptions.per_app_modes[app][p.name] = 'default';
-        });
-      }
-
-      self.data.appsToDelete = {};
-
-      $.ajax({
-        url: this.data.postModesUrl + this.data.user,
-        data: JSON.stringify(globalOptions),
-        method: 'POST',
-        contentType: 'application/json'
-      }).done(function(){
-        iris.createAlert('Settings saved.', 'success');
-      }).fail(function(){
-        iris.createAlert('Failed to save settings', 'danger');
-      });
-    },
-    redrawApplicationDropdown: function() {
-      var self = this;
-      self.data.$addAppSelect.empty();
-      self.data.$addAppSelect.append($('<option value="">').text('Add Application'));
-      var myApps = Object.keys(self.data.settings.per_app_modes);
-      this.data.settings.applications.sort(function(app1, app2) {
-        var app1_name = app1.name.toLowerCase(),
-            app2_name = app2.name.toLowerCase();
-        if (app1_name > app2_name) {
-          return 1;
-        } else if (app2_name > app1_name) {
-          return -1;
-        } else {
-          return 0;
+            iris.changeTitle('App Stats');
+            $('#stats-header').text("App Stats: " + application);
+            this.data.application = application;
+            iris.tables.filterTable.call(this);
+        },
+        events: function() {},
+        getData: function(params) {
+            apiUrl = this.data.url + this.data.application + "/stats";
+            return $.getJSON(apiUrl).fail(function(){
+                iris.createAlert('No stats found');
+            });
         }
-      }).forEach(function(app) {
-        if (myApps.indexOf(app.name) == -1) {
-          self.data.$addAppSelect.append($('<option>').text(app.name));
-        }
-      });
-    },
-    addApplication: function() {
-      var app = this.data.$addAppSelect.val();
-      this.data.$addAppSelect.val('');
-      this.data.$addAppBtn.prop('disabled', true);
-      if (app == '') {
-        return;
-      }
-      this.data.$saveBtn.prop('disabled', false);
-      this.data.settings.per_app_modes[app] = {};
-      if (app in this.data.appsToDelete) {
-        delete this.data.appsToDelete[app];
-      }
-      this.createPriorityTable();
-    },
-    loadSupportedTimezones: function() {
-      var self = this;
-      return $.getJSON(this.data.timezonesUrl).done(function(response){
-        self.data.supportedTimezones = response;
-      }).fail(function(response){
-        iris.createAlert('Error: Failed to load supported timezones -' + response.text);
-      });
-    },
-    saveTimezone: function() {
-      $.ajax({
-        url: this.data.settingsUrl + this.data.user,
-        data: JSON.stringify({'timezone': this.data.$timezoneSelect.val()}),
-        method: 'PUT',
-        contentType: 'application/json'
-      }).done(function(){
-        iris.createAlert('Settings saved.', 'success');
-      }).fail(function(){
-        iris.createAlert('Failed to save settings', 'danger');
-      });
-    },
-    populateTimezone: function() {
-      var self = this,
-          configured_timezone = window.appData.user_settings.timezone;
-      self.data.$timezoneSelect.empty();
-      if (!configured_timezone) {
-        self.data.$timezoneSelect.append($('<option value="">').text('Browser Default'));
-        self.data.$timezoneSave.prop('disabled', true);
-      }
-      self.data.supportedTimezones.forEach(function(name) {
-        self.data.$timezoneSelect.append($('<option>').text(name));
-      });
-      if (configured_timezone) {
-        self.data.$timezoneSelect.val(configured_timezone);
-      }
-    }
-  }, //end iris.user
-  applications: {
-    data: {
-      $page: $('.main'),
-      $table: $('#applications-table'),
-      $pageHeader: $('.main h3'),
-      $createAppModal: $('#create-app-modal'),
-      showAppModalButton: '#show-app-modal-button',
-      applicationSubmitButton: '#create-app-submit',
-      tableRows: 'tbody tr',
-      tableTemplate: $('#applications-table-template').html(),
-      headerTemplate: $('#applications-header-template').html(),
-      DataTable: null,
-      dataTableOpts: {
-        orderClasses: false,
-        order: [[0, 'asc']]
-      }
-    },
-    init: function() {
-      iris.changeTitle('Applications');
-
-      this.data.$pageHeader.html(Handlebars.compile(this.data.headerTemplate)({
-        showCreateButton: window.appData.user_admin
-      }));
-
-      iris.tables.createTable.call(this, window.appData.applications);
-      this.events();
-    },
-    events: function() {
-      this.data.$page.on('click', this.data.tableRows, function() {
-        window.location = '/applications/' + $(this).data('application');
-      });
-      this.data.$page.on('click', this.data.showAppModalButton, this.showCreateAppModal.bind(this));
-      this.data.$page.on('click', this.data.applicationSubmitButton, this.createApplication.bind(this));
-    },
-    showCreateAppModal: function() {
-      this.data.$createAppModal.modal();
-    },
-    createApplication: function() {
-      var self = this, $appNameBox = $('#create-app-name'), appName = $.trim($appNameBox.val()),
-          appNameLower = appName.toLowerCase();
-
-      if (appName == '') {
-          $appNameBox.val('');
-          $appNameBox.focus();
-          return;
-      }
-
-      // If this application already exists, just go to its page
-      for (var i = 0; i < window.appData.applications.length; i++) {
-        if (window.appData.applications[i].name.toLowerCase() == appNameLower) {
-          window.location = '/applications/' + window.appData.applications[i].name;
-          return;
-        }
-      }
-
-      $.ajax({
+    }, // End iris.appStats
+    unsubscribe: {
+        data: {
           url: '/v0/applications/',
-          data: JSON.stringify({
-            name: appName
-          }),
-          method: 'POST',
-          contentType: 'application/json'
-      }).done(function() {
-        window.location = '/applications/' + appName
-      }).fail(function(r) {
-        iris.createAlert('Failed creating application: ' + r.responseJSON['title'])
-      }).always(function() {
-        self.data.$createAppModal.modal('hide');
-      });
-    }
-  }, // End iris.applications
-  application: {
-    data: {
-      url: '/v0/applications/',
-      $page: $('.main'),
-      $editButton: $('#application-edit-button'),
-      applicationTemplate: $('#application-template').html(),
-      loaderTemplate: $('#loader-template').html(),
-      applicationEditbutton: '#application-edit-button',
-      applicationSavebutton: '#application-save-button',
-      applicationRenameButton: '#application-rename-button',
-      applicationDeleteButton: '#application-delete-button',
-      applicationRekeyButton: '#application-rekey-button',
-      applicationSecondaryKeyButton: '#application-secondary-key-button',
-      showRenameModalButton: '#show-rename-modal-button',
-      showDeleteModalButton: '#show-delete-modal-button',
-      showRekeyModalButton: '#show-rekey-modal-button',
-      showSecondaryKeyModalButton: '#show-secondary-key-modal-button',
-      removeVariableButton: '.remove-variable',
-      removeOwnerButton: '.remove-owner',
-      showApiKeyButton: '#show-api-key-button',
-      showSecondaryKeyButton: '#show-secondary-key-button',
-      addVariableForm: '#add-variable-form',
-      addOwnerForm: '#add-owner-form',
-      addEmailIncidentForm: '#add-email-incident-form',
-      addDefaultModeForm: '#add-default-mode-form',
-      removeEmailIncidentButton: '.delete-email-incident-button',
-      removeDefaultModeButton: '.delete-default-mode-button',
-      dangerousActionsToggle: '.application-dangerous-actions h4',
-      application: null,
-      model: {}
-    },
-    init: function() {
-      var location = window.location.pathname.split('/'),
-          application = decodeURIComponent(location[location.length - 1]);
-
-      // Register this only for this page because it isn't used anywhere else. Only admins and users
-      // can delete owners, but users who are not admins cannot delete themselves.
-      Handlebars.registerHelper('ifCanShowDeleteUserButton', function(username, opts) {
-        return window.appData.user_admin || username != window.appData.user ? opts.fn(this) : opts.inverse(this);
-      });
-
-      this.data.application = application;
-      this.getApplication(application);
-    },
-    events: function() {
-      var self = this, data = this.data;
-      data.$page.on('click', data.applicationEditbutton, this.editApplication.bind(this));
-      data.$page.on('click', data.applicationSavebutton, this.saveApplication.bind(this));
-      data.$page.on('click', data.showRenameModalButton, this.showRenameModal.bind(this));
-      data.$page.on('click', data.showDeleteModalButton, this.showDeleteModal.bind(this));
-      data.$page.on('click', data.showRekeyModalButton, this.showRekeyModal.bind(this));
-      data.$page.on('click', data.showSecondaryKeyModalButton, this.showSecondaryKeyModal.bind(this));
-      data.$page.on('click', data.applicationRenameButton, this.renameApplication.bind(this));
-      data.$page.on('click', data.applicationDeleteButton, this.deleteApplication.bind(this));
-      data.$page.on('click', data.applicationRekeyButton, this.rekeyApplication.bind(this));
-      data.$page.on('click', data.applicationSecondaryKeyButton, this.genSecondaryKey.bind(this));
-      data.$page.on('click', data.showApiKeyButton, this.showApiKey.bind(this));
-      data.$page.on('click', data.showSecondaryKeyButton, this.showSecondaryKey.bind(this));
-      data.$page.on('click', data.dangerousActionsToggle, this.toggleDangerousActions.bind(this));
-      data.$page.on('click', data.removeVariableButton, function() {
-        var variable = $(this).data('variable');
-        var pos = self.data.model.variables.indexOf(variable);
-        if (pos !== -1) {
-          self.data.model.variables.splice(pos, 1)
+          $page: $('.unsub'),
+          application: null,
+          user: null,
+          unsubscribeButton: $('#unsub-button'),
+          unsubTemplate: $('#unsub-template').html(),
+        },
+        init: function() {
+          var location = window.location.pathname.split('/'),
+              application = decodeURIComponent(location[location.length - 1])
+              self = this;
+    
+          iris.changeTitle('Unsubscribe');
+          this.events()
+          var template = Handlebars.compile(this.data.unsubTemplate);
+          $.when($.get(self.data.url + application), $.get('/v0/users/' + window.appData.user)).then(function(app, user){
+            app = app[0];
+            self.data.application = app;
+            self.data.user = user[0];
+            self.data.$page.html(template({'name': app['name'], 'owners': app['owners'], 'eligible': app.supported_modes.includes('drop')}));
+          }).fail(function(){
+            iris.createAlert('Failed to fetch application data');
+          })
+        },
+        events: function() {
+          this.data.$page.on('click', this.data.unsubscribeButton, this.unsubscribe.bind(this));
+        },
+        unsubscribe: function() {
+          var self = this,
+              modes = self.data.user['modes']
+          // Construct new user modes
+          modes['per_app_modes'] = self.data.user['per_app_modes']
+          modes['per_app_modes'][self.data.application['name']] = {};
+          window.appData.priorities.forEach(function(priority){
+            modes['per_app_modes'][self.data.application['name']][priority['name']] = 'drop';
+          })
+          self.data.unsubscribeButton.prop('disabled', true);
+          $.ajax({
+              url: '/v0/users/modes/' + window.appData.user,
+              data: JSON.stringify(modes),
+              method: 'POST',
+              contentType: 'application/json'
+          }).done(function(r) {
+            iris.createAlert('Successfully unsubscribed from all messages sent by this app!', 'success')
+          }).fail(function(r) {
+            iris.createAlert('Failed to unsubscribe: ' + r.responseJSON['title'])
+          }).always(function(){
+            self.data.unsubscribeButton.prop('disabled', false);
+          })
         }
-        $(this).parent().remove();
-      });
-      data.$page.on('click', data.removeOwnerButton, function() {
-        var owner = $(this).data('owner');
-        var pos = self.data.model.owners.indexOf(owner);
-        if (pos !== -1) {
-          self.data.model.owners.splice(pos, 1)
+      },
+      // Needed for single stats routing
+      singlestats: {},
+      singlestat: {
+        data: {
+          url: '/v0/singlestats/',
+          $page: $('.stats'),
+          $table: $('#stats-table'),
+          tableTemplate: $('#stats-table-template').html(),
+          DataTable: null,
+          statName: null,
+          dataTableOpts: {
+            orderClasses: false,
+            order: [[0, 'asc']],
+            columns: [
+              null,
+              null
+            ]
+          }
+        },
+        init: function() {
+          var location = window.location.pathname.split('/'),
+              statName = decodeURIComponent(location[location.length - 1]);
+          this.data.statName = statName;
+    
+          $('#stats-header').text("Stats: " + statName);
+          iris.tables.filterTable.call(this);
+        },
+        events: function() {},
+        getData: function(params) {
+          dataUrl = this.data.url + this.data.statName;
+          return $.getJSON(dataUrl).fail(function(){
+            iris.createAlert('No stats found');
+          });
         }
-        $(this).parent().remove();
-      });
-      data.$page.on('submit', data.addVariableForm, function(e) {
-        e.preventDefault();
-        var variable = $('#add-variable-box').val();
-        if (variable == '') {
-          iris.createAlert('Cannot add empty variable');
-          return;
-        }
-        if (self.data.model.variables.indexOf(variable) !== -1) {
-          iris.createAlert('That variable "'+variable+'" already exists');
-          return;
-        }
-        $('#add-variable-box').val('');
-        self.data.model.variables.push(variable);
-        self.modelPersist();
-        self.render();
-      });
-      data.$page.on('submit', data.addOwnerForm, function(e) {
-        e.preventDefault();
-        var owner = $('#add-owner-box').val();
-        if (owner == '') {
-          iris.createAlert('Cannot add empty owner');
-          return;
-        }
-        if (self.data.model.owners.indexOf(owner) !== -1) {
-          iris.createAlert('That owner "'+owner+'" already exists');
-          return;
-        }
-        $('#add-owner-box').val('');
-        self.data.model.owners.push(owner);
-        self.modelPersist();
-        self.render();
-      });
-      data.$page.on('submit', data.addEmailIncidentForm, function(e) {
-        e.preventDefault();
-        var $email = $('#add-email-incident-email');
-        var $plan = $('#add-email-incident-plan');
-        self.data.model.emailIncidents[$email.val()] = $plan.val();
-        $email.val('');
-        $plan.val('');
-        self.modelPersist();
-        self.render();
-      });
-      data.$page.on('click', data.removeEmailIncidentButton, function() {
-        delete self.data.model.emailIncidents[$(this).data('email')];
-        self.modelPersist();
-        self.render();
-      });
-      data.$page.on('submit', data.addDefaultModeForm, function(e) {
-        e.preventDefault();
-        var $priority = $('#default-mode-form-priority'), priority_val = $priority.val();
-        var $mode = $('#default-mode-form-mode'), mode_val = $mode.val();
-        if (priority_val == '') {
-          $priority.addClass('invalid-input');
-          return;
-        } else {
-          $priority.removeClass('invalid-input');
-        }
-        if (mode_val == '') {
-          $mode.addClass('invalid-input');
-          return;
-        } else {
-          $mode.removeClass('invalid-input');
-        }
-        self.data.model.default_modes[priority_val] = mode_val;
-        $priority.val('');
-        $mode.val('');
-        self.modelPersist();
-        self.render();
-      });
-      data.$page.on('click', data.removeDefaultModeButton, function() {
-        delete self.data.model.default_modes[$(this).data('priority')];
-        self.modelPersist();
-        self.render();
-      });
-      window.onbeforeunload = iris.unloadDialog.bind(this);
-    },
-    modelPersist: function() {
-      var self = this;
-      self.data.$page.find('textarea').each(function() {
-        var key = $(this).data('field');
-        if (key && key in self.data.model) {
-          self.data.model[key] = $(this).val();
-        }
-      });
-    },
-    getApplication: function(application) {
-      var app = null, self = this, applicationLower = application.toLowerCase();
-      for (var i = 0, item; i < window.appData.applications.length; i++) {
-          item = window.appData.applications[i];
-          if (item.name.toLowerCase() == applicationLower) {
-              app = item;
+      }, // End iris.hpistats
+      tables: {
+        filterTable: function(e){
+          if (e) {
+            // form submitted - serialize and shove into qs
+            var $form = $(e.target);
+            var $btn;
+            $btn = $form.find('button[type="submit"]');
+            $btn.prop('disabled', true);
+            e.preventDefault();
+    
+            var url = window.location.protocol + "//" + window.location.host + window.location.pathname + '?';
+            var qs_form = $form.serializeArray();
+            for (var i = 0; i < qs_form.length; i++) {
+              var k = qs_form[i].name;
+              var v = qs_form[i].value;
+              if (v) {
+                url += k.slice(7) +'=' + encodeURI(v) + '&';
+              }
+            }
+            url = url.slice(0, -1);
+            history.pushState(url, null, url);
+          }
+          var self = this;
+    
+          if (window.location.search) {
+            var qs = {};
+            var qs_parts = decodeURI(window.location.search.substr(1)).split('&');
+            for (i = qs_parts.length - 1; i >= 0; i--) {
+              var qs_pair = qs_parts[i].split('=');
+              qs[qs_pair[0]] = qs_pair[1];
+            }
+          } else {
+            qs = {
+              'active': 'active',
+              'target': appData.user,
+              // Default incident start time to now() - 1 day
+              'incidentStart': moment(Date.now() - 86400000).format('MM/DD/YYYY h:mm A')
+            };
+          }
+          var params = {};
+    
+          // add loading icon
+          this.data.$table.html('<tr><td><i class="loader"></i></td></tr>');
+          $('#filter-form input, #filter-form select').each(function(){
+    
+            var $this = $(this);
+            var name = $this.attr('name');
+            if (typeof(name) != 'undefined') {
+              var qs_name = name.split('-')[1];
+              var qs_value = qs[qs_name];
+            }
+    
+            switch (name) {
+              case 'filter-active':
+                var v = $this.prop('id').slice(7);
+                if ((v == qs_value) || (v=='all' && qs_value === undefined)) {
+                  $this.prop('checked', true);
+                } else {
+                  $this.prop('checked', false);
+                }
+                break;
+              case 'filter-incidentStart':
+              case 'filter-start':
+              case 'filter-end':
+                $this.val(qs_value);
+                if ($this.val().length) {
+                  params[$this.attr('data-param')] = moment(qs_value).unix();
+                }
+                break;
+              case 'filter-target':
+                $this.typeahead('val', qs_value);
+                params[$this.attr('data-param')] = qs_value;
+                break;
+              default:
+                $this.val(qs_value);
+                params[$this.attr('data-param')] = qs_value;
+                break;
+            }
+    
+          });
+    
+          switch (qs['active']) {
+            case 'active':
+              params['active'] = 1;
+              break;
+            case 'inactive':
+              params['active'] = 0;
               break;
           }
-      }
-      if (!app) {
-        iris.createAlert('Application not found');
-        return;
-      }
-      iris.changeTitle('Application ' + app.name);
-
-      self.showLoader();
-
-      $.when($.get(self.data.url + application + '/quota'),
-             $.get(self.data.url + application + '/incident_emails')
-      ).always(function(quota, incident_emails) {
-        app.quota = Object.keys(quota[0]).length ? quota[0] : null;
-        app.emailIncidents = incident_emails[0];
-
-        // For convenience in setting the below boolean flags, localize
-        // whether the user is an owner of this app or is an admin here.
-        var isOwner = app.owners.indexOf(window.appData.user) !== -1;
-        var isAdmin = window.appData.user_admin;
-
-        // Bunch of boolean flags passed to the template which control what is
-        // seen and how the UI behaves. The entire template is scattered with if
-        // blocks based on these variables.
-        app.isInViewMode = true;
-        app.isEditable = isAdmin || isOwner;
-        app.allowViewingKey = isAdmin || isOwner;
-        app.allowEditingEmailIncidents = isAdmin || isOwner;
-        app.showEditOwners = isAdmin || isOwner;
-        app.allowDangerousActions = isAdmin || isOwner;
-        app.allowEditingSupportedModes = isAdmin;
-        app.allowEditingTitle = isAdmin || isOwner;
-
-        // This gets turned to true when the edit button is clicked if the user
-        // is an admin
-        app.showEditQuotas = false;
-
-        app.apiKey = false;
-        app.priorities = window.appData.priorities.map(function(priority) {
-          return priority.name;
-        });
-        app.modes = window.appData.modes;
-        self.data.model = app;
-        self.render();
-        self.events();
-      }).fail(function() {
-        iris.createAlert('Failed loading app settings');
-      });
-    },
-    editApplication: function() {
-      this.data.model.isInViewMode = false;
-      this.data.model.showEditQuotas = window.appData.user_admin;
-      this.render();
-    },
-    showApiKey: function() {
-      var self = this;
-      $(self.data.showApiKeyButton).prop('disabled', true);
-      $.get('/v0/applications/' + self.data.application + '/key').done(function(result) {
-        self.data.model.apiKey = result.key;
-        self.modelPersist();
-        self.render();
-      }).fail(function(result) {
-        iris.createAlert('Unable to get key: ' + result.responseJSON.title);
-      });
-    },
-    showSecondaryKey: function() {
-      var self = this;
-      $(self.data.showSecondaryKeyButton).prop('disabled', true);
-      $.get('/v0/applications/' + self.data.application + '/secondary').done(function(result) {
-        self.data.model.secondaryKey = result.key;
-        if (result.key === null) {
-          self.data.model.secondaryKey = 'No secondary key exists'
-        }
-        self.modelPersist();
-        self.render();
-      }).fail(function(result) {
-        iris.createAlert('Unable to get key: ' + result.responseJSON.title);
-      });
-    },
-    saveApplication: function() {
-      var self = this, failedCheck = false;
-      $('.application-settings').find('textarea').each(function(k, elem) {
-        var $elem = $(elem), field = $elem.data('field'), val = $elem.val();
-        self.data.model[field] = val;
-        $elem.removeClass('invalid-input');
-        if (field == 'context_template' || field == 'summary_template' || field == 'mobile_template') {
-          try {
-            Handlebars.compile(val)({})
-          } catch (e) {
-            iris.createAlert('Invalid HandleBars syntax for ' + field + '.\n' + e.message);
-            $elem.addClass('invalid-input');
-            failedCheck = true;
-          }
-        } else if (field == 'sample_context' && val != '') {
-          try {
-            JSON.parse(val);
-          } catch (e) {
-            iris.createAlert('Invalid JSON syntax for sample context.\n' + e.message);
-            $elem.addClass('invalid-input');
-            failedCheck = true;
-          }
-        }
-      });
-      if (failedCheck) {
-        return;
-      }
-      if (self.data.model.sample_context == '') {
-        self.data.model.sample_context = '{}';
-      }
-      var ajaxCalls = [];
-      if (self.data.model.showEditQuotas) {
-        var quotaSettings = {}, deleteQuota = true;
-        $('.application-quota').find('input').each(function(k, elem) {
-          var $elem = $(elem), field = $elem.attr('name'), val = $elem.val();
-          if (field && val != '' && val != '0') {
-            if (field != 'target_name' && field != 'plan_name') {
-              val = parseInt(val);
+    
+          self.getData(params).done(function(data){
+            if (self.data.DataTable) {
+              self.data.DataTable.destroy();
             }
-            quotaSettings[field] = val;
-            deleteQuota = false;
+            self.data.$table.empty();
+            iris.tables.createTable.call(self, data);
+          }).always(function(){
+            if ($btn && $btn.prop('disabled')) { $btn.prop('disabled', false) }
+          });
+        },
+        createTable: function(data){
+          var template = Handlebars.compile(this.data.tableTemplate),
+              options = this.data.dataTableOpts || { orderClasses: false };
+          if (data.length == iris.data.tableEntryLimit){
+            data.limit = iris.data.tableEntryLimit;
           }
-        });
-        if (deleteQuota) {
-          self.data.model.quota = null;
-          ajaxCalls.push($.ajax({
-            url: self.data.url + self.data.application + '/quota',
-            method: 'DELETE',
-            data: '{}',
-            contentType: 'application/json'
-          }));
-        } else {
-          self.data.model.quota = quotaSettings;
-          quotaSettings.wait_time = 3600;
-          // Abstract away the fact that quota durations are really seconds underneath
-          quotaSettings.hard_quota_duration *= 60;
-          quotaSettings.soft_quota_duration *= 60;
-          ajaxCalls.push($.ajax({
-            url: self.data.url + self.data.application + '/quota',
-            data: JSON.stringify(quotaSettings),
-            method: 'POST',
-            contentType: 'application/json'
-          }));
-        }
-      }
-      if (self.data.model.allowEditingEmailIncidents) {
-        ajaxCalls.push($.ajax({
-          url: self.data.url + self.data.application + '/incident_emails',
-          data: JSON.stringify(self.data.model.emailIncidents),
-          method: 'PUT',
-          contentType: 'application/json'
-        }));
-      }
-      if (self.data.model.allowEditingSupportedModes) {
-        self.data.model.supported_modes = [];
-        $('input[name=supported_modes]').each(function(k, elem) {
-          var $elem = $(elem);
-          if ($elem.prop('checked')) {
-            self.data.model.supported_modes.push($elem.val());
-          }
-        });
-        // Remove any default modes using modes we no longer support
-        for (var priority in self.data.model.default_modes) {
-          if (self.data.model.supported_modes.indexOf(self.data.model.default_modes[priority]) == -1) {
-            delete self.data.model.default_modes[priority];
-          }
-        }
-      }
-
-      if (self.data.model.allowEditingTitle){
-        self.data.model.title_variable = $('#title-variable-select').val();
-        if(self.data.model.title_variable == 'null'){
-          self.data.model.title_variable = null;
-        }
-      }
-
-      ajaxCalls.push($.ajax({
-        url: self.data.url + self.data.application,
-        data: JSON.stringify(self.data.model),
-        method: 'PUT',
-        contentType: 'application/json'
-      }));
-      $.when.apply(undefined, ajaxCalls).done(function(){
-        self.data.model.isInViewMode = true;
-        self.data.model.showEditQuotas = false;
-        self.data.model.apiKey = false;
-        self.render();
-        iris.createAlert('Settings saved', 'success');
-      }).fail(function(data) {
-        iris.createAlert('Settings failed to save: '+data.responseJSON.title);
-      });
-    },
-    toggleDangerousActions: function() {
-      $('.application-dangerous-actions').toggleClass('active')
-    },
-    showRenameModal: function() {
-      $('#app-new-name-box').val(this.data.application);
-      $('#rename-app-modal').modal();
-    },
-    showDeleteModal: function() {
-      $('#delete-app-modal').modal();
-    },
-    showRekeyModal: function() {
-      $('#rekey-app-modal').modal();
-    },
-    showSecondaryKeyModal: function() {
-      $('#secondary-key-app-modal').modal();
-    },
-    renameApplication: function() {
-      var $nameBox = $('#app-new-name-box'),
-          newName = $.trim($nameBox.val());
-      if (newName == '' || newName == this.data.application) {
-        $nameBox.focus();
-        return;
-      }
-      var $renameBtn = $(this.data.applicationRenameButton);
-      $renameBtn.prop('disabled', true);
-      $.ajax({
-        url: '/v0/applications/' + this.data.application + '/rename',
-        data: JSON.stringify({
-          new_name: newName
-        }),
-        method: 'PUT',
-        contentType: 'application/json'
-      }).done(function() {
-        window.onbeforeunload = null;
-        window.location = '/applications/' + newName;
-      }).fail(function(r) {
-        iris.createAlert('Failed renaming application: ' + r.responseJSON['title']);
-        $('body').scrollTop(0);
-        $renameBtn.prop('disabled', false);
-      }).always(function() {
-        $('#rename-app-modal').modal('hide');
-      });
-    },
-    deleteApplication: function() {
-      var $deleteBtn = $(this.data.applicationDeleteButton);
-      $deleteBtn.prop('disabled', true);
-      $.ajax({
-        url: '/v0/applications/' + this.data.application,
-        method: 'DELETE',
-        contentType: 'application/json'
-      }).done(function() {
-        window.onbeforeunload = null;
-        window.location = '/applications/';
-      }).fail(function(r) {
-        iris.createAlert('Failed deleting application: ' + r.responseJSON['title']);
-        $('body').scrollTop(0);
-        $deleteBtn.prop('disabled', false);
-      }).always(function() {
-        $('#delete-app-modal').modal('hide');
-      });
-    },
-    rekeyApplication: function() {
-      var $rekeyBtn = $(this.data.applicationRekeyButton);
-      $rekeyBtn.prop('disabled', true);
-      $.ajax({
-        url: '/v0/applications/' + this.data.application + '/rekey',
-        method: 'POST',
-        contentType: 'application/json'
-      }).done(function() {
-        iris.createAlert('Successfully rekey\'d application', 'success')
-      }).fail(function(r) {
-        iris.createAlert('Failed re-keying application: ' + r.responseJSON['title'])
-      }).always(function() {
-        $('#rekey-app-modal').modal('hide');
-        $('body').scrollTop(0);
-        $rekeyBtn.prop('disabled', false);
-      });
-    },
-    genSecondaryKey: function() {
-      var $keyBtn = $(this.data.applicationRekeyButton);
-      $keyBtn.prop('disabled', true);
-      $.ajax({
-        url: '/v0/applications/' + this.data.application + '/secondary',
-        method: 'POST',
-        contentType: 'application/json'
-      }).done(function() {
-        iris.createAlert('Successfully generated secondary key', 'success')
-      }).fail(function(r) {
-        iris.createAlert('Failed to generate secondary key: ' + r.responseJSON['title'])
-      }).always(function() {
-        $('#secondary-key-app-modal').modal('hide');
-        $('body').scrollTop(0);
-        $keyBtn.prop('disabled', false);
-      });
-    },
-    showLoader: function() {
-      var template = Handlebars.compile(this.data.loaderTemplate);
-      this.data.$page.html(template(this.data.model));
-    },
-    render: function() {
-      var template = Handlebars.compile(this.data.applicationTemplate);
-      this.data.$page.html(template(this.data.model));
-      if (this.data.model.showEditQuotas || this.data.model.showEditOwners) {
-        iris.typeahead.init('');
-      } else {
-        iris.typeahead.destroy();
-      }
-    }
-  }, // End iris.application
-  stats: {
-    data: {
-      url: '/v0/stats',
-      $page: $('.stats'),
-      $table: $('#stats-table'),
-      tableTemplate: $('#stats-table-template').html(),
-      DataTable: null,
-      dataTableOpts: {
-        orderClasses: false,
-        order: [[0, 'asc']],
-        columns: [
-          null,
-          null
-        ]
-      }
-    },
-    init: function() {
-      iris.changeTitle('Stats');
-      iris.tables.filterTable.call(this);
-    },
-    events: function() {},
-    getData: function(params) {
-      return $.getJSON(this.data.url, params).fail(function(){
-        iris.createAlert('No stats found');
-      });
-    }
-  }, // End iris.stats
-  tables: {
-    filterTable: function(e){
-      if (e) {
-        // form submitted - serialize and shove into qs
-        var $form = $(e.target);
-        var $btn;
-        $btn = $form.find('button[type="submit"]');
-        $btn.prop('disabled', true);
-        e.preventDefault();
-
-        var url = window.location.protocol + "//" + window.location.host + window.location.pathname + '?';
-        var qs_form = $form.serializeArray();
-        for (var i = 0; i < qs_form.length; i++) {
-          var k = qs_form[i].name;
-          var v = qs_form[i].value;
-          if (v) {
-            url += k.slice(7) +'=' + encodeURI(v) + '&';
-          }
-        }
-        url = url.slice(0, -1);
-        history.pushState(url, null, url);
-      }
-      var self = this;
-
-      if (window.location.search) {
-        var qs = {};
-        var qs_parts = decodeURI(window.location.search.substr(1)).split('&');
-        for (i = qs_parts.length - 1; i >= 0; i--) {
-          var qs_pair = qs_parts[i].split('=');
-          qs[qs_pair[0]] = qs_pair[1];
-        }
-      } else {
-        qs = {
-          'active': 'active',
-          'target': appData.user,
-          // Default incident start time to now() - 1 day
-          'incidentStart': moment(Date.now() - 86400000).format('MM/DD/YYYY h:mm A')
-        };
-      }
-      var params = {};
-
-      // add loading icon
-      this.data.$table.html('<tr><td><i class="loader"></i></td></tr>');
-      $('#filter-form input, #filter-form select').each(function(){
-
-        var $this = $(this);
-        var name = $this.attr('name');
-        if (typeof(name) != 'undefined') {
-          var qs_name = name.split('-')[1];
-          var qs_value = qs[qs_name];
-        }
-
-        switch (name) {
-          case 'filter-active':
-            var v = $this.prop('id').slice(7);
-            if ((v == qs_value) || (v=='all' && qs_value === undefined)) {
-              $this.prop('checked', true);
-            } else {
-              $this.prop('checked', false);
+          this.data.$table.html(template(data));
+          this.data.DataTable = this.data.$table.DataTable(options);
+          iris.tables.bindArrowKeys(this.data.DataTable);
+          iris.tables.bindUrlPagination(this.data.DataTable);
+        },
+        bindArrowKeys: function(dataTable) {
+          $(document).keydown(function(e) {
+    
+            if (document.activeElement && (document.activeElement.nodeName === 'INPUT'
+                                          || document.activeElement.nodeName === 'TEXTAREA')) {
+              return;
             }
-            break;
-          case 'filter-incidentStart':
-          case 'filter-start':
-          case 'filter-end':
-            $this.val(qs_value);
-            if ($this.val().length) {
-              params[$this.attr('data-param')] = moment(qs_value).unix();
+    
+            if (e.keyCode == 37) {
+              dataTable.page('previous').draw(false);
+            } else if (e.keyCode == 39) {
+              dataTable.page('next').draw(false);
             }
-            break;
-          case 'filter-target':
-            $this.typeahead('val', qs_value);
-            params[$this.attr('data-param')] = qs_value;
-            break;
-          default:
-            $this.val(qs_value);
-            params[$this.attr('data-param')] = qs_value;
-            break;
+          });
+        },
+        bindUrlPagination: function(dataTable) {
+          // If we currently have a page number in URL, use it
+          var parts = window.location.hash.split('-');
+          if (parts.length == 2 && (parts[1] - 1) < dataTable.page.info().pages) {
+              dataTable.page(parts[1] - 1).draw(false);
+          }
+    
+          // Store page number in URL for future refreshes / back buttons
+          dataTable.on('page.dt', function() {
+            var current_page = dataTable.page.info().page + 1;
+            window.history.replaceState(undefined, undefined, '#page-' + current_page)
+          });
         }
-
-      });
-
-      switch (qs['active']) {
-        case 'active':
-          params['active'] = 1;
-          break;
-        case 'inactive':
-          params['active'] = 0;
-          break;
-      }
-
-      self.getData(params).done(function(data){
-        if (self.data.DataTable) {
-          self.data.DataTable.destroy();
-        }
-        self.data.$table.empty();
-        iris.tables.createTable.call(self, data);
-      }).always(function(){
-        if ($btn && $btn.prop('disabled')) { $btn.prop('disabled', false) }
-      });
-    },
-    createTable: function(data){
-      var template = Handlebars.compile(this.data.tableTemplate),
-          options = this.data.dataTableOpts || { orderClasses: false };
-      if (data.length == iris.data.tableEntryLimit){
-        data.limit = iris.data.tableEntryLimit;
-      }
-      this.data.$table.html(template(data));
-      this.data.DataTable = this.data.$table.DataTable(options);
-      iris.tables.bindArrowKeys(this.data.DataTable);
-      iris.tables.bindUrlPagination(this.data.DataTable);
-    },
-    bindArrowKeys: function(dataTable) {
-      $(document).keydown(function(e) {
-
-        if (document.activeElement && (document.activeElement.nodeName === 'INPUT'
-                                      || document.activeElement.nodeName === 'TEXTAREA')) {
-          return;
-        }
-
-        if (e.keyCode == 37) {
-          dataTable.page('previous').draw(false);
-        } else if (e.keyCode == 39) {
-          dataTable.page('next').draw(false);
-        }
-      });
-    },
-    bindUrlPagination: function(dataTable) {
-      // If we currently have a page number in URL, use it
-      var parts = window.location.hash.split('-');
-      if (parts.length == 2 && (parts[1] - 1) < dataTable.page.info().pages) {
-          dataTable.page(parts[1] - 1).draw(false);
-      }
-
-      // Store page number in URL for future refreshes / back buttons
-      dataTable.on('page.dt', function() {
-        var current_page = dataTable.page.info().page + 1;
-        window.history.replaceState(undefined, undefined, '#page-' + current_page)
-      });
-    }
-  },
-  createAlert: function(alertText, type, $el, action, fixed){
-    //params:
-    //-- alertText: content of alert *REQUIRED* --string--
-    //-- type: type of alert (coincides to color) --string--
-      //---- 'danger' - red *default*
-      //---- 'warning' - yellow
-      //---- 'info' - blue
-      //---- 'success' - green
-    //-- $el: DOM element which the alert will be added to. Defaults to body --jQuery element--
-    //-- action: jQuery action on the $el.
-      //---- 'prepend' - inserts alert as first element inside $el *default*
-      //---- 'append' - inserts alert at the end of the $el
-      //---- 'before' - inserts alert as a sibling node before $el
-      //---- 'after' - inserts alert as a sibling node after $el
-    //-- fixed: alternate alert which is absolutely positioned at top center of the screen
-    var alert;
-    type = type || 'danger';
-    $el = $el || $('.main');
-    action = action || 'prepend';
-    if (!$('#iris-alert').length) {
-      alert = '<div id="iris-alert" class="alert alert-'+ type +' alert-dismissible ' + fixed + '" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><span class="alert-content"></span></div>';
-      $el[action](alert);
-    }
-    $('#iris-alert .alert-content').html(alertText);
-  }, //end createAlert
-  dismissAlerts: function() {
-    $('#iris-alert').remove();
-  },
-  typeahead: {
-    data: {
-      targetUrl: '/v0/targets/',
-      planUrl: '/v0/plans?name__startswith=%QUERY&active=1',
-      field: 'input.typeahead'
-    },
-    init: function(urlType){
-      var $field = $(this.data.field),
-          self = this;
-      $field.typeahead('destroy').each(function(){
-        var $this = $(this),
-            type = $this.data('targettype') || (urlType != undefined ? urlType : $this.parents('.plan-notification').find('select[data-type="role"] option:selected').attr('data-url-type')), //get url type from sibling "Role" option
-            itemType = $this.data('typeaheadtype'),
-            results = new Bloodhound({
-              datumTokenizer: Bloodhound.tokenizers.obj.whitespace('value'),
-              queryTokenizer: Bloodhound.tokenizers.whitespace,
-              remote: {
-                url: itemType == 'plan' ? self.data.planUrl : self.data.targetUrl + type + '?startswith=%QUERY&active=1',
-                wildcard: '%QUERY',
-                transform: function(response) {
-                  if (itemType == 'plan') {
-                    var names = [];
-                    response.forEach(function(plan) {
-                      names.push(plan.name);
-                    });
-                    return names;
-                  } else {
-                    return response;
+      },
+      createAlert: function(alertText, type, $el, action, fixed){
+        //params:
+        //-- alertText: content of alert *REQUIRED* --string--
+        //-- type: type of alert (coincides to color) --string--
+          //---- 'danger' - red *default*
+          //---- 'warning' - yellow
+          //---- 'info' - blue
+          //---- 'success' - green
+        //-- $el: DOM element which the alert will be added to. Defaults to body --jQuery element--
+        //-- action: jQuery action on the $el.
+          //---- 'prepend' - inserts alert as first element inside $el *default*
+          //---- 'append' - inserts alert at the end of the $el
+          //---- 'before' - inserts alert as a sibling node before $el
+          //---- 'after' - inserts alert as a sibling node after $el
+        //-- fixed: alternate alert which is absolutely positioned at top center of the screen
+        var alert;
+        type = type || 'danger';
+        $el = $el || $('.main');
+        action = action || 'prepend';
+        $('#iris-alert').remove();
+        alert = '<div id="iris-alert" class="alert alert-'+ type +' alert-dismissible ' + fixed + '" role="alert"><button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button><span class="alert-content"></span></div>';
+        $el[action](alert);
+        $('#iris-alert .alert-content').html(alertText);
+      }, //end createAlert
+      dismissAlerts: function() {
+        $('#iris-alert').remove();
+      },
+      typeahead: {
+        data: {
+          targetUrl: '/v0/targets/',
+          planUrl: '/v0/plans?name__startswith=%QUERY&active=1',
+          field: 'input.typeahead'
+        },
+        init: function(urlType){
+          var $field = $(this.data.field),
+              self = this;
+          $field.typeahead('destroy').each(function(){
+            var $this = $(this),
+                type = $this.data('targettype') || (urlType != undefined ? urlType : $this.parents('.plan-notification').find('select[data-type="role"] option:selected').attr('data-url-type')), //get url type from sibling "Role" option
+                itemType = $this.data('typeaheadtype'),
+                results = new Bloodhound({
+                  datumTokenizer: Bloodhound.tokenizers.obj.whitespace('value'),
+                  queryTokenizer: Bloodhound.tokenizers.whitespace,
+                  remote: {
+                    url: itemType == 'plan' ? self.data.planUrl : self.data.targetUrl + type + '?startswith=%QUERY&active=1',
+                    wildcard: '%QUERY',
+                    transform: function(response) {
+                      if (itemType == 'plan') {
+                        var names = [];
+                        response.forEach(function(plan) {
+                          names.push(plan.name);
+                        });
+                        return names;
+                      } else {
+                        return response;
+                      }
+                    }
                   }
-                }
-              }
+                });
+            $this.typeahead(null, {
+              hint: true,
+              async: true,
+              highlight: true,
+              source: results
+            }).on('typeahead:select', function(){
+              $(this).attr('value', $(this).val());
             });
-        $this.typeahead(null, {
-          hint: true,
-          async: true,
-          highlight: true,
-          source: results
-        }).on('typeahead:select', function(){
-          $(this).attr('value', $(this).val());
+          });
+        },
+        destroy: function() {
+          $(this.data.field).typeahead('destroy');
+        }
+      },
+      unloadDialog: function(){
+        if ( this.data.$page.find('input, textarea').not('[data-default]').not('[disabled]').not('.unload-exclude').filter(function () { return !!this.value }).length > 0 ) {
+          return 'You have unsaved changes';
+        }
+      },
+      versionTour: {
+        type: 'templates',
+        init: function(type){
+          var self = this;
+          this.type = type;
+          if (!localStorage.getItem('tourCompleted')) {
+            hopscotch.startTour(self);
+          }
+          $('.main').on('click', '.start-tour', function(){
+            hopscotch.startTour(self);
+          });
+        },
+        id: "version-tour",
+        steps: [
+          {
+            title: "Changes to versioning",
+            content: "Plans or templates with the same name are now combined into one view. You can click this dropdown to select older versions of this plan or template.",
+            target: ".version-select",
+            placement: "bottom",
+            xOffset: -90,
+            arrowOffset: 'center'
+          },
+          {
+            title: "Activate old plans or templates",
+            content: "If a plan or template is deactivated, you can click here to set it as active. This will deactivate all other plans or templates with this name.",
+            target: ".badge",
+            placement: "bottom"
+          },
+          {
+            title: "Related plans",
+            content: "You can click here to see all plans that are currently using this template. It may be a good idea to review the related plans before activating an older version of a template (it's possible someone else's plan is using your template, and you don't want to ruin their plan!)",
+            target: ".view-related",
+            placement: "bottom"
+          },
+          {
+            title: "Learn about versioning",
+            content: "Click this button to restart this tutorial if you need a reminder.",
+            target: ".start-tour",
+            placement: "bottom",
+            xOffset: -20
+          }
+        ],
+        onEnd: function(){
+          iris.versionTour.saveState();
+        },
+        onClose: function(){
+          iris.versionTour.saveState();
+        },
+        saveState: function(){
+          localStorage.setItem('tourCompleted', true);
+        },
+        showPrevButton: true
+      },
+      registerHandlebarHelpers: function(){
+        // Register handlebars helpers
+        Handlebars.registerHelper('ifNot', function(val, opts){
+          return val ? opts.inverse(this) : opts.fn(this);
         });
-      });
-    },
-    destroy: function() {
-      $(this.data.field).typeahead('destroy');
-    }
-  },
-  unloadDialog: function(){
-    if ( this.data.$page.find('input, textarea').not('[data-default]').not('[disabled]').not('.unload-exclude').filter(function () { return !!this.value }).length > 0 ) {
-      return 'You have unsaved changes';
-    }
-  },
-  versionTour: {
-    type: 'templates',
-    init: function(type){
-      var self = this;
-      this.type = type;
-      if (!localStorage.getItem('tourCompleted')) {
-        hopscotch.startTour(self);
-      }
-      $('.main').on('click', '.start-tour', function(){
-        hopscotch.startTour(self);
-      });
-    },
-    id: "version-tour",
-    steps: [
-      {
-        title: "Changes to versioning",
-        content: "Plans or templates with the same name are now combined into one view. You can click this dropdown to select older versions of this plan or template.",
-        target: ".version-select",
-        placement: "bottom",
-        xOffset: -90,
-        arrowOffset: 'center'
-      },
-      {
-        title: "Activate old plans or templates",
-        content: "If a plan or template is deactivated, you can click here to set it as active. This will deactivate all other plans or templates with this name.",
-        target: ".badge",
-        placement: "bottom"
-      },
-      {
-        title: "Related plans",
-        content: "You can click here to see all plans that are currently using this template. It may be a good idea to review the related plans before activating an older version of a template (it's possible someone else's plan is using your template, and you don't want to ruin their plan!)",
-        target: ".view-related",
-        placement: "bottom"
-      },
-      {
-        title: "Learn about versioning",
-        content: "Click this button to restart this tutorial if you need a reminder.",
-        target: ".start-tour",
-        placement: "bottom",
-        xOffset: -20
-      }
-    ],
-    onEnd: function(){
-      iris.versionTour.saveState();
-    },
-    onClose: function(){
-      iris.versionTour.saveState();
-    },
-    saveState: function(){
-      localStorage.setItem('tourCompleted', true);
-    },
-    showPrevButton: true
-  },
-  registerHandlebarHelpers: function(){
-    // Register handlebars helpers
-    Handlebars.registerHelper('ifNot', function(val, opts){
-      return val ? opts.inverse(this) : opts.fn(this);
-    });
-    Handlebars.registerHelper('ifIn', function(needle, haystack, opts){
-      if (Array.isArray(haystack)) {
-        return haystack.indexOf(needle) != -1 ? opts.fn(this) : opts.inverse(this);
-      } else {
-        return needle in haystack;
-      }
-    });
-    Handlebars.registerHelper('hasKeys', function(val, opts){
-      return Object.keys(val).length ? opts.fn(this) : opts.inverse(this);
-    });
-    Handlebars.registerHelper('isSelected', function(val, check){
-      return val === check ? 'selected': '';
-    });
-    Handlebars.registerHelper('isActive', function(yes){
-      return yes ? 'active': '';
-    });
-    Handlebars.registerHelper('ifExists', function(val, opts){
-      return typeof(val) !== 'undefined' ? opts.fn(this) : opts.inverse(this);
-    });
-    Handlebars.registerHelper('isEqual', function(val1, val2, opts){
-      return val1 === val2 ? opts.fn(this) : opts.inverse(this);
-    });
-    Handlebars.registerHelper('isUser', function(val1, opts){
-      return val1 === window.appData.user ? opts.fn(this) : opts.inverse(this);
-    });
-    Handlebars.registerHelper('divide', function(val1, val2){
-      return val1 / val2;
-    });
-    Handlebars.registerHelper('add', function(val1, val2){
-      return val1 + val2;
-    });
-    Handlebars.registerHelper('markdown', function(val){
-      return new Handlebars.SafeString(marked(val, {sanitize: true}));
-    })
-    Handlebars.registerHelper('prettyPrint', function(val){
-      return typeof(val) === 'string' ? val : "{...}";
-    });
-    Handlebars.registerHelper('secondsToMinutes', function(val){
-      if (val) {
-        return parseFloat((val / 60).toFixed(2));
-      } else {
-        return 0;
-      }
-    });
-    Handlebars.registerHelper('convertToLocal', function(time){
-      if (time) {
-        if (window.appData.user_settings.timezone) {
-          return moment.unix(time).tz(window.appData.user_settings.timezone).toString();
-        } else {
-          return moment.unix(time).local().toString();
-        }
-      }
-    });
-    Handlebars.registerHelper('breakLines', function(text, type){
-      if (text) {
-        text = Handlebars.Utils.escapeExpression(text);
-        if (type && type === 'input') {
-          text = text.replace(/(\r\n|\n|\r)/gm, '&#13;&#10;');
-        } else {
-          text = text.replace(/(\r\n|\n|\r)/gm, '<br />');
-        }
-
-        return new Handlebars.SafeString(text);
-      } else {
-        return '';
-      }
-    });
-    Handlebars.registerHelper('getValForKey', function (obj, val1, val2, breakLines) {
-      //gets nested value from an object with a dynamic key.
-      //obj = object to get val from
-      //val1 = key to get val from
-      //val2 = key within val1 to get the value from
-      //breakLines = replaces \n with <br /> tag for view mode of templates
-      var text = obj[val1][val2];
-      if (breakLines === true) {
-        text = Handlebars.helpers.breakLines(text);
-      } else {
-        text = Handlebars.Utils.escapeExpression(text);
-        text = text.replace(/(\r\n|\n|\r)/gm, '&#13;&#10;');
-      }
-      return new Handlebars.SafeString(text);
-    });
-    Handlebars.registerHelper('trim', function(string, start, end) {
-      if (string) {
-        return string.slice(start, end);
-      } else {
-        return string
-      }
-    });
-    Handlebars.registerHelper('range', function(n, block) {
-      var accum = '';
-      for (var i = 0; i < n; i++) {
-        accum += block.fn(i);
-      }
-      return accum;
-    });
-    Handlebars.registerHelper('regex', function (val, regex) {
-      return (new RegExp(regex).test(val))
-    })
-  } //end registerHandlebarHelpers
-}; //end iris
-
-iris.init();
+        Handlebars.registerHelper('ifIn', function(needle, haystack, opts){
+          if (Array.isArray(haystack)) {
+            return haystack.indexOf(needle) != -1 ? opts.fn(this) : opts.inverse(this);
+          } else {
+            return needle in haystack;
+          }
+        });
+        Handlebars.registerHelper('hasKeys', function(val, opts){
+          return Object.keys(val).length ? opts.fn(this) : opts.inverse(this);
+        });
+        Handlebars.registerHelper('isSelected', function(val, check){
+          return val === check ? 'selected': '';
+        });
+        Handlebars.registerHelper('isActive', function(yes){
+          return yes ? 'active': '';
+        });
+        Handlebars.registerHelper('ifExists', function(val, opts){
+          return typeof(val) !== 'undefined' ? opts.fn(this) : opts.inverse(this);
+        });
+        Handlebars.registerHelper('isEqual', function(val1, val2, opts){
+          return val1 === val2 ? opts.fn(this) : opts.inverse(this);
+        });
+        Handlebars.registerHelper('isUser', function(val1, opts){
+          return val1 === window.appData.user ? opts.fn(this) : opts.inverse(this);
+        });
+        Handlebars.registerHelper('divide', function(val1, val2){
+          return val1 / val2;
+        });
+        Handlebars.registerHelper('add', function(val1, val2){
+          return val1 + val2;
+        });
+        Handlebars.registerHelper('markdown', function(val){
+          return new Handlebars.SafeString(marked(val, {sanitize: true}));
+        })
+        Handlebars.registerHelper('prettyPrint', function(val){
+          return typeof(val) === 'string' ? val : "{...}";
+        });
+        Handlebars.registerHelper('eachInSet', function(context, options) {
+            // handle sets and return them in sorted order
+            var ret = "";
+            values = Array.from(context).sort();
+            values.forEach(function(val) {
+                ret = ret + options.fn({value:val});
+            });
+            return ret;
+        });
+        Handlebars.registerHelper('secondsToMinutes', function(val){
+          if (val) {
+            return parseFloat((val / 60).toFixed(2));
+          } else {
+            return 0;
+          }
+        });
+        Handlebars.registerHelper('convertToLocal', function(time){
+          if (time) {
+            if (window.appData.user_settings.timezone) {
+              return moment.unix(time).tz(window.appData.user_settings.timezone).toString();
+            } else {
+              return moment.unix(time).local().toString();
+            }
+          }
+        });
+        Handlebars.registerHelper('breakLines', function(text, type){
+          if (text) {
+            text = Handlebars.Utils.escapeExpression(text);
+            if (type && type === 'input') {
+              text = text.replace(/(\r\n|\n|\r)/gm, '&#13;&#10;');
+            } else {
+              text = text.replace(/(\r\n|\n|\r)/gm, '<br />');
+            }
+    
+            return new Handlebars.SafeString(text);
+          } else {
+            return '';
+          }
+        });
+        Handlebars.registerHelper('getValForKey', function (obj, val1, val2, breakLines) {
+          //gets nested value from an object with a dynamic key.
+          //obj = object to get val from
+          //val1 = key to get val from
+          //val2 = key within val1 to get the value from
+          //breakLines = replaces \n with <br /> tag for view mode of templates
+          var text = obj[val1][val2];
+          if (breakLines === true) {
+            text = Handlebars.helpers.breakLines(text);
+          } else {
+            text = Handlebars.Utils.escapeExpression(text);
+            text = text.replace(/(\r\n|\n|\r)/gm, '&#13;&#10;');
+          }
+          return new Handlebars.SafeString(text);
+        });
+        Handlebars.registerHelper('trim', function(string, start, end) {
+          if (string) {
+            return string.slice(start, end);
+          } else {
+            return string
+          }
+        });
+        Handlebars.registerHelper('unixToDate', function(val){
+          if (val) {
+            var a = new Date(val * 1000);
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var year = a.getFullYear();
+            var month = months[a.getMonth()];
+            var date = a.getDate();
+            var hour = a.getHours();
+            if(hour < 10){hour = '0' + hour}
+            var min = a.getMinutes();
+            if(min < 10){min = '0' + min}
+            var sec = a.getSeconds();
+            if(sec < 10){sec = '0' + sec}
+            var time = date + ' ' + month + ' ' + year + ' ' + hour + ':' + min + ':' + sec ;
+            return time;
+          } else {
+            return "N/A";
+          }
+        });
+        Handlebars.registerHelper('range', function(n, block) {
+          var accum = '';
+          for (var i = 0; i < n; i++) {
+            accum += block.fn(i);
+          }
+          return accum;
+        });
+        Handlebars.registerHelper('regex', function (val, regex) {
+          return (new RegExp(regex).test(val))
+        })
+      } //end registerHandlebarHelpers
+    }; //end iris
+    
+    iris.init();

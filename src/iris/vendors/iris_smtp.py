@@ -7,6 +7,7 @@ from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
+from iris import cache
 import quopri
 import time
 import markdown
@@ -53,21 +54,20 @@ class iris_smtp(object):
     def send_email(self, message, customizations=None):
         md = markdown.Markdown()
 
-        if isinstance(customizations, dict):
-            from_address = customizations.get('from', self.config['from'])
-        else:
-            from_address = self.config['from']
-
         start = time.time()
         m = MIMEMultipart('alternative')
+
+        from_address = self.config['from']
+        application = message.get('application')
+        if application:
+            m['X-IRIS-APPLICATION'] = application
+            address = cache.applications.get(application, {}).get('custom_sender_addresses', {}).get('email')
+            if address is not None:
+                from_address = address
 
         priority = message.get('priority')
         if priority:
             m['X-IRIS-PRIORITY'] = priority
-
-        application = message.get('application')
-        if application:
-            m['X-IRIS-APPLICATION'] = application
 
         plan = message.get('plan')
         if plan:
@@ -79,7 +79,12 @@ class iris_smtp(object):
 
         m['Date'] = formatdate(localtime=True)
         m['from'] = from_address
-        m['to'] = message['destination']
+        if message.get('multi-recipient'):
+            m['to'] = ','.join(set(message['destination']))
+            if message['bcc_destination']:
+                m['bcc'] = ','.join(set(message['bcc_destination']))
+        else:
+            m['to'] = message['destination']
         if message.get('noreply'):
             m['reply-to'] = m['to']
 
@@ -124,6 +129,10 @@ class iris_smtp(object):
 
         conn = None
 
+        if message.get('multi-recipient'):
+            email_recipients = message['destination'] + message['bcc_destination']
+        else:
+            email_recipients = [message['destination']]
         # Try reusing previous connection in this worker if we have one
         if self.last_conn:
             conn = self.last_conn
@@ -145,7 +154,7 @@ class iris_smtp(object):
             raise Exception('Failed to get smtp connection.')
 
         try:
-            conn.sendmail([from_address], [message['destination']], m.as_string())
+            conn.sendmail([from_address], email_recipients, m.as_string())
         except Exception:
             logger.warning('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
 
@@ -173,7 +182,7 @@ class iris_smtp(object):
                 # If configured, sleep to back-off on connection
                 if self.retry_interval:
                     sleep(self.retry_interval)
-                conn.sendmail([from_address], [message['destination']], m.as_string())
+                conn.sendmail([from_address], email_recipients, m.as_string())
                 logger.info('Message successfully sent through %s after reconnecting', self.last_conn_server)
             except Exception:
                 logger.exception('Failed sending email through %s after trying to reconnect', self.last_conn_server)

@@ -4,7 +4,9 @@
 import ujson
 import logging
 import requests
+import random
 import time
+from gevent import sleep
 from iris.constants import SLACK_SUPPORT
 from iris.custom_import import import_custom_module
 
@@ -28,6 +30,7 @@ class iris_slack(object):
             self.proxy = {'http': 'http://%s:%s' % (host, port),
                           'https': 'https://%s:%s' % (host, port)}
         self.timeout = config.get('timeout', 10)
+        self.sleep_range = config.get('sleep_range', 4)
         self.message_attachments = self.config.get('message_attachments', {})
         push_config = config.get('push_notification', {})
         self.push_active = push_config.get('activated', False)
@@ -107,11 +110,19 @@ class iris_slack(object):
                 #   {u'ok': False, u'error': u'invalid_arg_name'}
                 logger.error('Received an error from slack api: %s',
                              data['error'])
+            elif response.status_code == 429:
+                # Slack rate limiting. Sleep for a few seconds (chosen randomly to spread load),
+                # then raise error to retry
+                sleep_time = random.randrange(1, self.sleep_range)
+                logger.warning('Hit slack rate limiting, sleeping for %s', sleep_time)
+                sleep(sleep_time)
+                response.raise_for_status()
             else:
                 logger.error('Failed to send message to slack: %d',
                              response.status_code)
         except Exception:
             logger.exception('Slack post request failed')
+            raise
 
     def send(self, message, customizations=None):
         return self.modes[message['mode']](message)

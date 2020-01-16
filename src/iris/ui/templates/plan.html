@@ -362,8 +362,8 @@
       </select>
     </p>
     <p>
-      <label class="item-label light" data-toggle="tooltip" title="Time to wait before repeating or moving onto the next escalation step">Wait</label>
-      <input type="text" class="form-control border-bottom notification-wait" placeholder="Wait minutes" data-type="wait" data-default="true" value="{{ secondsToMinutes wait}}">
+      <label class="item-label light" data-toggle="tooltip" title="Minutes to wait before repeating or moving onto the next escalation step">Wait</label>
+      <input type="number" class="form-control border-bottom notification-wait" placeholder="Wait minutes" data-type="wait" data-default="true" value="{{ secondsToMinutes wait}}">
     </p>
     <p>
       <label class="item-label light" data-toggle="tooltip" title="Number of times to execute this notification before escalating to next step">Count</label>

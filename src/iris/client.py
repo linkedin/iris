@@ -11,16 +11,22 @@ logging.getLogger('requests').setLevel(logging.WARNING)
 
 class IrisAuth(requests.auth.AuthBase):
     def __init__(self, app, key):
-        self.header = 'hmac %s:' % app
-        self.HMAC = hmac.new(key, '', hashlib.sha512)
+        if not isinstance(app, bytes):
+            app = app.encode('utf-8')
+        self.header = b'hmac ' + app + b':'
+        if not isinstance(key, bytes):
+            key = key.encode('utf-8')
+        self.HMAC = hmac.new(key, b'', hashlib.sha512)
 
     def __call__(self, request):
         HMAC = self.HMAC.copy()
-        path = request.path_url
-        method = request.method
-        body = request.body or ''
-        window = int(time.time()) // 5
-        HMAC.update('%s %s %s %s' % (window, method, path, body))
+
+        path = request.path_url.encode('utf8')
+        method = request.method.encode('utf8')
+        body = request.body or b''
+        window = str(int(time.time()) // 5).encode('utf8')
+        HMAC.update(b'%s %s %s %s' % (window, method, path, body))
+
         digest = base64.urlsafe_b64encode(HMAC.digest())
         request.headers['Authorization'] = self.header + digest
         return request

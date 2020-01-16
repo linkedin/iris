@@ -15,6 +15,7 @@ import re
 import pyqrcode
 from iris.ui import auth
 from beaker.middleware import SessionMiddleware
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ default_route = '/incidents'
 
 
 jinja2_env.globals['default_route'] = default_route
+jinja2_env.globals['current_year'] = datetime.now().year
 
 
 def build_assets():
@@ -150,12 +152,30 @@ class Index(object):
 
 
 class Stats(object):
-    allow_read_no_auth = False
+    allow_read_no_auth = True
     frontend_route = True
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class AppStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class SingleStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, stat_name):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('singlestat.html').render(request=req)
 
 
 class Plans(object):
@@ -261,6 +281,16 @@ class Application(object):
                                                                        modes=get_local_api(req, 'modes') + ['drop'])
 
 
+class Unsubscribe(object):
+    allow_read_no_auth = False
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('unsubscribe.html').render(request=req,
+                                                                       priorities=get_local_api(req, 'priorities'))
+
+
 class Login():
     allow_read_no_auth = False
     frontend_route = True
@@ -276,7 +306,7 @@ class Login():
                                                                  last_flash=get_flash(req))
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             username = form_body['username']
@@ -285,7 +315,7 @@ class Login():
             raise HTTPFound('/login')
 
         if not auth.valid_username(username):
-            logger.warn('Tried to login with invalid username %s', username)
+            logger.warning('Tried to login with invalid username %s', username)
             if self.debug:
                 flash_message(req, 'Invalid username', 'danger')
             else:
@@ -296,7 +326,7 @@ class Login():
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
-            logger.warn('Failed login for %s', username)
+            logger.warning('Failed login for %s', username)
             flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
@@ -348,7 +378,7 @@ class JinjaValidate():
     frontend_route = True
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             template_subject = form_body['templateSubject']
@@ -432,6 +462,8 @@ def init(config, app):
     app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
     app.add_route('/', Index())
     app.add_route('/stats', Stats())
+    app.add_route('/stats/{application}', AppStats())
+    app.add_route('/singlestats/{stat_name}', SingleStats())
     app.add_route('/plans/', Plans())
     app.add_route('/plans/{plan}', Plan())
     app.add_route('/incidents/', Incidents())
@@ -446,6 +478,7 @@ def init(config, app):
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
+    app.add_route('/unsubscribe/{application}', Unsubscribe())
 
     if(qr_base_url and qr_login_url):
         create_qr_code(qr_base_url, qr_login_url)

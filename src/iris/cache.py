@@ -1,7 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
 from . import db
 import logging
 
@@ -33,6 +32,18 @@ def cache_applications():
                           JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
                           WHERE `application_mode`.`application_id` = %s''', app['id'])
         app['supported_modes'] = [row['name'] for row in cursor]
+        cursor.execute('''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                          FROM `application_custom_sender_address`
+                          JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                          WHERE `application_custom_sender_address`.`application_id` = %s''', app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+        cursor.execute('''SELECT `notification_category`.`id`, `notification_category`.`name`,
+                                 `notification_category`.`description`, `notification_category`.`mode_id`,
+                                 `mode`.`name` AS mode
+                          FROM `notification_category`
+                          JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+                          WHERE `application_id` = %s''', app['id'])
+        app['categories'] = {row['name']: row for row in cursor}
         new_applications[app['name']] = app
     applications = new_applications
     connection.close()

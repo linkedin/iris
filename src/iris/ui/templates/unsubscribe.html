@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main unsub">
+</div>
+{% raw %}
+<script id="unsub-template" type="text/x-handlebars-template">
+    <div class="module unsub-container">
+        <h3> Unsubscribe </h3>
+        {{#if eligible}}
+        <div id="unsub-before">
+            <p>Click the unsubscribe button below to stop recieving all future messages from <b>{{name}}</b>.</p>
+            <button id="unsub-button" class="btn btn-primary btn-sm">Unsubscribe</button>
+        </div>
+        {{else}}
+        <p>
+            The application <b>{{name}}</b> does not support dropping messages. Please reach out to one of the
+            app owners for assistance:
+            <ul>
+                {{#each owners}}
+                    <li>{{this}}</li>
+                {{/each}}
+            </ul>
+        </p>
+        {{/if}}
+    </div>
+</script>
+{% endraw %}
+{% endblock %}

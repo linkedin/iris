@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import datetime
 import logging
 import ujson
@@ -23,7 +21,7 @@ class alertmanager(object):
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
         if len(context_json_str) > 65535:
-            logger.warn('POST to alertmanager exceeded acceptable size')
+            logger.warning('POST to alertmanager exceeded acceptable size')
             raise HTTPBadRequest('Context too long')
 
         return context_json_str
@@ -70,7 +68,7 @@ class alertmanager(object):
             ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
-                logger.warn('no plan template exists for this app')
+                logger.warning('no plan template exists for this app')
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
             data = {

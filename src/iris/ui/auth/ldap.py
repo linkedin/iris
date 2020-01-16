@@ -1,7 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
 import logging
 import ldap
 import os
@@ -59,7 +58,7 @@ class Authenticator:
         except ldap.INVALID_CREDENTIALS:
             return False
         except (ldap.SERVER_DOWN, ldap.INVALID_DN_SYNTAX) as err:
-            logger.warn("%s", err)
+            logger.warning("%s", err)
             return None
         return True
 

@@ -20,6 +20,6 @@ if __name__ == '__main__':
 
     config = load_config(sys.argv[1])
     addr = (config['server']['host'], config['server']['port'])
-    print 'Listening on %s...' % (addr,)
+    print('Listening on %s...' % (addr,))
     application = get_api(config)
     WSGIServer(addr, application).serve_forever()

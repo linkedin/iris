@@ -57,5 +57,5 @@ def test_smtp_unicode(mocker):
     smtp_vendor.send_email({
         'destination': 'foo@bar',
         'subject': 'hello',
-        'body': u'\u201c',
+        'body': '\u201c',
     })

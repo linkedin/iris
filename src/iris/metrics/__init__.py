@@ -40,7 +40,7 @@ def add_new_metrics(default_stats):
     stats_reset.update(default_stats)
 
     # avoid clobbering existing metrics if they are already present
-    for key, default_value in default_stats.iteritems():
+    for key, default_value in default_stats.items():
         stats.setdefault(key, default_value)
 
 

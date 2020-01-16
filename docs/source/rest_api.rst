@@ -35,6 +35,29 @@ Example client implementations:
 * `NodeJS <https://github.com/kripplek/node-iris>`_
 
 
+Query Filters
+-------------
+Iris has a number of search endpoints allowing filtering based on data
+attributes. For each allowable attribute, filters are defined via the
+query string, with syntax in the form of
+:code:`$ATTRIBUTE__$OPERATOR=$ARGUMENT` e.g. :code:`created__ge=123`.
+The following operators are allowed:
+
+  - "eq": :code:`$ATTRIBUTE == $ARGUMENT`
+  - "in": :code:`$ATTRIBUTE` is contained in :code:`$ARGUMENT`, which must be a list
+  - "ne": :code:`$ATTRIBUTE != $ARGUMENT`
+  - "gt": :code:`$ATTRIBUTE > $ARGUMENT`
+  - "ge": :code:`$ATTRIBUTE >= $ARGUMENT`
+  - "lt": :code:`$ATTRIBUTE < $ARGUMENT`
+  - "le": :code:`$ATTRIBUTE <= $ARGUMENT`
+  - "contains": :code:`$ATTRIBUTE` contains the substring :code:`$ARGUMENT`. Only defined on string-like attributes
+  - "startswith": :code:`$ATTRIBUTE` starts with :code:`$ARGUMENT`. Only defined on string-like attributes
+  - "endswith": :code:`$ATTRIBUTE` ends with :code:`$ARGUMENT`. Only defined on string-like attributes
+
+If no operator is defined (e.g. :code:`id=123`), the operator
+is assumed to be "eq" (equality).
+
+
 Routes
 ------
 
