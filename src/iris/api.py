@@ -3933,7 +3933,7 @@ class UserTemplateOverrides(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
         if not isinstance(data.get('template_overrides'), dict):
-            raise HTTPBadRequest('Invalid json in post body')
+            raise HTTPBadRequest('Invalid json in post body: template_overrides parameter is not a dict')
 
         # currently only sms is needed/supported
         override_val = data.get('template_overrides', {}).get('sms')
@@ -3959,7 +3959,7 @@ class UserTemplateOverrides(object):
         else:
             cursor.close()
             connection.close()
-            raise HTTPBadRequest('Invalid sms override setting value')
+            raise HTTPBadRequest(f'Invalid sms override setting value: {override_val}')
 
         cursor.close()
         connection.close()
