@@ -3788,9 +3788,7 @@ class User(object):
                              JOIN `mode` ON `mode`.`id` = `mode_template_override`.`mode_id`
                          WHERE `mode_template_override`.`target_id` = %s'''
         cursor.execute(mode_template_override_query, user_id)
-        user_data['template_overrides'] = []
-        for row in cursor:
-            user_data['template_overrides'].append(row['mode'])
+        user_data['template_overrides'] = [row['mode'] for row in cursor]
 
         # Get user contact modes
         modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
