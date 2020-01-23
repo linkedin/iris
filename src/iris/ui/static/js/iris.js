@@ -1895,6 +1895,7 @@ iris = {
             postModesUrl: '/v0/users/modes/',
             reprioritizationUrl: '/v0/users/reprioritization/',
             settingsUrl: '/v0/users/settings/',
+            overridesUrl: '/v0/users/overrides/',
             timezonesUrl: '/v0/timezones',
             user: window.appData.user,
             settings: null,
@@ -1926,7 +1927,9 @@ iris = {
             reprioritizationTemplate: $('#reprioritization-table-template').html(),
             postModel: {},
             $timezoneSelect: $('#timezone-select'),
-            $timezoneSave: $('#timezone-save')
+            $timezoneSave: $('#timezone-save'),
+            $smsOverrideSelect: $('#sms-override-select'),
+            $smsOverrideSave: $('#sms-override-save')
         },
         init: function(){
             iris.changeTitle('Settings');
@@ -1934,13 +1937,14 @@ iris = {
             this.supportedOverrideModes = window.appData.modes;
             // drop is ommitted add it for override options
             this.supportedOverrideModes.push('drop');
-            
+
             this.getUserSettings().done(function(){
                 self.getCustomOverrideSettings().done(function(){
                     self.createCustomOverrideTable();
                 });
                 self.createContactModule();
                 self.createPriorityTable();
+                self.populateSmsOverride();
                 self.events();
             });
             this.getReprioritizationSettings().done(function(){
@@ -1986,6 +1990,13 @@ iris = {
             });
             this.data.$timezoneSave.on('click', function(){
                 self.saveTimezone();
+            });
+            this.data.$smsOverrideSelect.change(function() {
+              self.data.$smsOverrideSave.prop('disabled', $(this).val() == '');
+            });
+            this.data.$smsOverrideSave.on('click', function(){
+                self.saveSmsOverride();
+                self.data.$smsOverrideSave.prop('disabled', true);
             });
             self.data.$saveBtn.prop('disabled', true);
             self.data.$addAppOverrideBtn.prop('disabled', true);
@@ -2452,6 +2463,37 @@ iris = {
             });
             if (configured_timezone) {
                 self.data.$timezoneSelect.val(configured_timezone);
+            }
+        },
+        saveSmsOverride: function() {
+            $.ajax({
+                url: this.data.overridesUrl + this.data.user,
+                data: JSON.stringify({'template_overrides': {'sms':this.data.$smsOverrideSelect.val()}}),
+                method: 'POST',
+                contentType: 'application/json'
+            }).done(function(){
+                iris.createAlert('Settings saved.', 'success');
+            }).fail(function(){
+                iris.createAlert('Failed to save settings', 'danger');
+            });
+        },
+        populateSmsOverride: function() {
+            var self = this;
+            var overrideBool = false;
+
+            if ('template_overrides' in self.data.settings){
+              overrideBool =  self.data.settings.template_overrides.includes('sms');
+            }
+            self.data.$smsOverrideSelect.empty();
+            if (!overrideBool) {
+              self.data.$smsOverrideSelect.append($('<option value="disabled">').text('Disabled (Default)'));
+              self.data.$smsOverrideSelect.append($('<option value="enabled">').text('Enabled'));
+              self.data.$smsOverrideSave.prop('disabled', true);
+            }
+            else {
+              self.data.$smsOverrideSelect.append($('<option value="enabled">').text('Enabled'));
+              self.data.$smsOverrideSelect.append($('<option value="disabled">').text('Disabled (Default)'));
+              self.data.$smsOverrideSave.prop('disabled', true);
             }
         }
     }, //end iris.user

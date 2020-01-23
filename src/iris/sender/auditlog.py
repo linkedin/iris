@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 MODE_CHANGE = 'mode-change'
 TARGET_CHANGE = 'target-change'
 SENT_CHANGE = 'sent-change'
+CONTENT_CHANGE = 'content-change'
 
 
 def message_change(message_id, change_type, old, new, description):

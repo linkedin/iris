@@ -1603,6 +1603,31 @@ def modify_restricted_calls(message):
         message['body'] = 'Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - ' + message.get('body', '')
 
 
+def modify_restricted_sms(message):
+
+    if message.get('incident_id'):
+        # Alter message to get around SMS restrictions in countries like India
+        # Replace body with pre-registered template so it won't be dropped by carriers
+
+        destination = message['destination']
+        message_id = message['message_id']
+        mode_id = message['mode_id']
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        # only replace messages for users that have opted in
+        cursor.execute('''SELECT count(`mode_template_override`.`target_id`)
+            FROM `mode_template_override` JOIN `target_contact`
+            ON `mode_template_override`.`target_id` = `target_contact`.`target_id`
+            WHERE `target_contact`.`destination` = %s and `target_contact`.`mode_id` = %s''', (destination, mode_id))
+        result = cursor.fetchone()[0]
+        connection.close()
+        if result:
+            body_template = config.get('sms_override_template')
+            message['body'] = body_template % message.get('incident_id')
+            auditlog.message_change(message_id, auditlog.CONTENT_CHANGE, 'sms', 'sms',
+                                    'Replaced SMS body to avoid being blocked by carrier')
+
+
 def message_send_enqueue(message):
 
     # If this message has an ID, avoid queueing it twice, assuming it's not a retry
@@ -1627,6 +1652,9 @@ def message_send_enqueue(message):
         # check for known corner case limitations and correct accordingly
         if message['mode'] == 'call':
             modify_restricted_calls(message)
+
+        if message['mode'] == 'sms':
+            modify_restricted_sms(message)
 
         if message_id is not None:
             message_ids_being_sent.add(message_id)
