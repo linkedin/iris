@@ -41,6 +41,8 @@ supported_timezones:
   - 'Asia/Shanghai'
   - 'UTC'
 
+sms_override_template: "ALERT: Incident %s has been triggered by Iris! Please check Iris for more information. - SMS template override"
+
 healthcheck_path: /tmp/status
 
 allowed_origins:

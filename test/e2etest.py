@@ -2146,7 +2146,7 @@ def test_get_user(sample_user, sample_email, sample_admin_user):
     re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
-    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
+    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name', 'template_overrides'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
 
@@ -3221,6 +3221,35 @@ def test_user_update_timezone(sample_user):
     re = session.get(base_url + 'users/settings/' + sample_user)
     assert re.status_code == 200
     assert re.json()['timezone'] == timezones[1]
+
+
+def test_user_update_sms_override(sample_user):
+
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    # Change it to enabled and see if it sticks
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'sms': 'enabled'}})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    assert 'sms' in re.json()['template_overrides']
+
+    # Change it to disabled and see if it sticks
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'sms': 'disabled'}})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    assert 'sms' not in re.json()['template_overrides']
+
+    # test bad request
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'invalid_mode': 'disabled'}})
+    assert re.status_code == 400
 
 
 def test_comment(sample_user, sample_team, sample_application_name, sample_template_name):
