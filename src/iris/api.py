@@ -525,6 +525,20 @@ WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id
       `priority_id` = (SELECT `id` from `priority` WHERE `name` = :priority) AND
       `application_id` = (SELECT `id` from `application` WHERE `name` = :app)'''
 
+insert_user_modes_template_override_query = '''INSERT
+INTO `mode_template_override` (`target_id`, `mode_id`)
+VALUES (
+    (SELECT `id` from `target` WHERE `name` = %s AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
+    (SELECT `id` from `mode` WHERE `name` = 'sms'))
+ON DUPLICATE KEY UPDATE target_id=target_id'''
+
+delete_user_modes_template_override_query = '''DELETE FROM `mode_template_override`
+WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = %s AND `type_id` =
+                    (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+AND `mode_id` = (SELECT `id` from `mode` WHERE `name` = 'sms')'''
+
 get_applications_query = '''SELECT
     `id`, `name`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
 FROM `application`
@@ -3768,6 +3782,16 @@ class User(object):
         user_data['admin'] = bool(user_data['admin'])
         user_id = user_data.pop('id')
 
+        # get any mode based template override settings
+        mode_template_override_query = '''SELECT `mode`.`name` AS `mode`
+                         FROM `mode_template_override`
+                             JOIN `mode` ON `mode`.`id` = `mode_template_override`.`mode_id`
+                         WHERE `mode_template_override`.`target_id` = %s'''
+        cursor.execute(mode_template_override_query, user_id)
+        user_data['template_overrides'] = []
+        for row in cursor:
+            user_data['template_overrides'].append(row['mode'])
+
         # Get user contact modes
         modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
                          FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
@@ -3892,6 +3916,52 @@ class UserSettings(object):
                 connection.commit()
             except Exception:
                 logger.exception('Failed setting timezone to %s for user %s', chosen_timezone, req.context['username'])
+
+        cursor.close()
+        connection.close()
+
+        resp.body = '[]'
+        resp.status = HTTP_204
+
+
+class UserTemplateOverrides(object):
+    allow_read_no_auth = False
+    enforce_user = True
+
+    def on_post(self, req, resp, username):
+        # check request body integrity
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body')
+        if not isinstance(data.get('template_overrides'), dict):
+            raise HTTPBadRequest('Invalid json in post body')
+
+        # currently only sms is needed/supported
+        override_val = data.get('template_overrides', {}).get('sms')
+        if not override_val:
+            raise HTTPBadRequest('No valid mode override values in post body')
+
+        # update mode template override settings for user
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+
+        if override_val == 'enabled':
+            try:
+                cursor.execute(insert_user_modes_template_override_query, req.context['username'])
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting mode template override for user %s', req.context['username'])
+        elif override_val == 'disabled':
+            try:
+                cursor.execute(delete_user_modes_template_override_query, req.context['username'])
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting mode template override for user %s', req.context['username'])
+        else:
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Invalid sms override setting value')
 
         cursor.close()
         connection.close()
@@ -5124,6 +5194,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}', User())
     api.add_route('/v0/users/settings/{username}', UserSettings(supported_timezones))
     api.add_route('/v0/users/modes/{username}', UserModes())
+    api.add_route('/v0/users/overrides/{username}', UserTemplateOverrides())
     api.add_route('/v0/users/reprioritization/{username}', Reprioritization())
     api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
 

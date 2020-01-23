@@ -816,6 +816,15 @@ CREATE TABLE `notification_category` (
   UNIQUE KEY (`application_id`, `name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `mode_template_override`;
+CREATE TABLE `mode_template_override` (
+  `target_id` BIGINT(20) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`target_id`),
+  CONSTRAINT `target_id_override_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `mode_id_override_ibfk_1`  FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 DROP TABLE IF EXISTS `category_override`;
 CREATE TABLE `category_override` (
   `user_id` BIGINT(20) NOT NULL,

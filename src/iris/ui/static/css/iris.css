@@ -1414,7 +1414,7 @@ table.dataTable thead .sorting_asc {
  */
 
 .user-settings .user-module {
-    min-height: 700px;
+    min-height: 850px;
 }
 
 .user-settings-name {
@@ -1446,6 +1446,10 @@ table.dataTable thead .sorting_asc {
 
 .user-settings-contact ul a:hover {
     text-decoration: underline;
+}
+
+.user-settings-overrides {
+    padding-top: 20px;
 }
 
 .user-settings table {
@@ -1499,6 +1503,14 @@ table.dataTable thead .sorting_asc {
 }
 
 #add-application-select {
+    width: auto;
+}
+
+#timezone-select {
+    width: auto;
+}
+
+#sms-override-select {
     width: auto;
 }
 
@@ -1915,8 +1927,4 @@ span.twitter-typeahead {
 
 .input-group.input-group-sm span.twitter-typeahead .tt-dropdown-menu {
     top: 28px !important;
-}
-
-#timezone-select {
-    width: auto;
 }
