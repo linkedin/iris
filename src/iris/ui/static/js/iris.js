@@ -651,6 +651,12 @@ iris = {
           model.isValid = false;
         }
 
+        if (model.tracking_type === 'slack' && (!model.tracking_key.startsWith('#') && !model.tracking_key.startsWith('@'))) {
+          $trackingEl.find('#tracking-key').addClass('invalid-input');
+          iris.createAlert('Invalid field for slack target: target must start with # for channels or @ for users', 'danger', $('.plan-details'));
+          model.isValid = false;
+        }
+
         if ($('.tracking-template-step').length === 0) {
           missingFields.push('tracking template');
           model.isValid = false;
@@ -2159,7 +2165,7 @@ iris = {
                     var val = $(this).val();
                     if (app) {
                         settings.per_app_modes[app][priority] = val;
-                    } 
+                    }
                     else {
                         // Our per-app dropdowns do not have default, so don't bother
                         if (val == 'default') {
@@ -2256,7 +2262,7 @@ iris = {
                     method: 'DELETE',
                     contentType: 'text'
                 }).done(function(){
-                    // delete user mode overrides locally 
+                    // delete user mode overrides locally
                     self.data.settings.categories = self.data.settings.categories.filter(function( obj ) {
                         return obj.application !== app;
                     });
@@ -2348,7 +2354,7 @@ iris = {
             }).done(function(){
                 iris.createAlert('Modal settings saved succesfully', 'success');
                 self.data.settings.customApp.add(app);
-    
+
                 // update user overrides
                 settings.categories.forEach(function(cat, i){
                     if(cat['application'] == app){
@@ -2360,7 +2366,7 @@ iris = {
                 });
 
                 self.createCustomOverrideTable();
-                
+
             }).fail(function(){
                 iris.createAlert('Failed to save modal settings', 'danger');
             });
@@ -2424,7 +2430,7 @@ iris = {
                   Array.from(customOverrideApps).sort().forEach(function (app) {
                     self.data.$addAppOverrideSelect.append($('<option>').text(app));
                   });
-    
+
               }).fail(function () {
                 iris.createAlert('Failed to fetch applications for dropdown', 'danger');
               });
@@ -3195,7 +3201,7 @@ iris = {
           var location = window.location.pathname.split('/'),
               application = decodeURIComponent(location[location.length - 1])
               self = this;
-    
+
           iris.changeTitle('Unsubscribe');
           this.events()
           var template = Handlebars.compile(this.data.unsubTemplate);
@@ -3258,7 +3264,7 @@ iris = {
           var location = window.location.pathname.split('/'),
               statName = decodeURIComponent(location[location.length - 1]);
           this.data.statName = statName;
-    
+
           $('#stats-header').text("Stats: " + statName);
           iris.tables.filterTable.call(this);
         },
@@ -3279,7 +3285,7 @@ iris = {
             $btn = $form.find('button[type="submit"]');
             $btn.prop('disabled', true);
             e.preventDefault();
-    
+
             var url = window.location.protocol + "//" + window.location.host + window.location.pathname + '?';
             var qs_form = $form.serializeArray();
             for (var i = 0; i < qs_form.length; i++) {
@@ -3293,7 +3299,7 @@ iris = {
             history.pushState(url, null, url);
           }
           var self = this;
-    
+
           if (window.location.search) {
             var qs = {};
             var qs_parts = decodeURI(window.location.search.substr(1)).split('&');
@@ -3310,18 +3316,18 @@ iris = {
             };
           }
           var params = {};
-    
+
           // add loading icon
           this.data.$table.html('<tr><td><i class="loader"></i></td></tr>');
           $('#filter-form input, #filter-form select').each(function(){
-    
+
             var $this = $(this);
             var name = $this.attr('name');
             if (typeof(name) != 'undefined') {
               var qs_name = name.split('-')[1];
               var qs_value = qs[qs_name];
             }
-    
+
             switch (name) {
               case 'filter-active':
                 var v = $this.prop('id').slice(7);
@@ -3348,9 +3354,9 @@ iris = {
                 params[$this.attr('data-param')] = qs_value;
                 break;
             }
-    
+
           });
-    
+
           switch (qs['active']) {
             case 'active':
               params['active'] = 1;
@@ -3359,7 +3365,7 @@ iris = {
               params['active'] = 0;
               break;
           }
-    
+
           self.getData(params).done(function(data){
             if (self.data.DataTable) {
               self.data.DataTable.destroy();
@@ -3383,12 +3389,12 @@ iris = {
         },
         bindArrowKeys: function(dataTable) {
           $(document).keydown(function(e) {
-    
+
             if (document.activeElement && (document.activeElement.nodeName === 'INPUT'
                                           || document.activeElement.nodeName === 'TEXTAREA')) {
               return;
             }
-    
+
             if (e.keyCode == 37) {
               dataTable.page('previous').draw(false);
             } else if (e.keyCode == 39) {
@@ -3402,7 +3408,7 @@ iris = {
           if (parts.length == 2 && (parts[1] - 1) < dataTable.page.info().pages) {
               dataTable.page(parts[1] - 1).draw(false);
           }
-    
+
           // Store page number in URL for future refreshes / back buttons
           dataTable.on('page.dt', function() {
             var current_page = dataTable.page.info().page + 1;
@@ -3616,7 +3622,7 @@ iris = {
             } else {
               text = text.replace(/(\r\n|\n|\r)/gm, '<br />');
             }
-    
+
             return new Handlebars.SafeString(text);
           } else {
             return '';
@@ -3675,5 +3681,5 @@ iris = {
         })
       } //end registerHandlebarHelpers
     }; //end iris
-    
+
     iris.init();
