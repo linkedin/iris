@@ -106,6 +106,9 @@ class iris_slack(object):
                 data = response.json()
                 if data['ok']:
                     return time.time() - start
+                elif data.get('error') == 'channel_not_found':
+                    logger.warning('Slack returned channel_not_found for destination %s', message.get('destination'))
+                    return time.time() - start
                 # If message is invalid:
                 #   {u'ok': False, u'error': u'invalid_arg_name'}
                 logger.error('Received an error from slack api: %s',
