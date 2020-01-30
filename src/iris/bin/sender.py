@@ -1197,7 +1197,7 @@ def distributed_send_message(message, vendor_manager):
     if runtime is not None:
         return True, True
 
-    raise Exception('Failed sending message')
+    return False, False
 
 
 def fetch_and_send_message(send_queue, vendor_manager):
@@ -1298,23 +1298,20 @@ def fetch_and_send_message(send_queue, vendor_manager):
     except Exception:
         logger.warning('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
-        if message.get('unexpanded'):
-            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-        elif message['mode'] == 'email':
-            metrics.incr('task_failure')
-            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-        else:
-            logger.error('reclassifying as email %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-            set_target_fallback_mode(message)
-            render(message)
-            try:
-                success, sent_locally = distributed_send_message(message, vendor_manager)
-            # nope - log and bail
-            except Exception:
-                metrics.incr('task_failure')
-                add_mode_stat(message['mode'], None)
-                logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-                sent_locally = True
+    if not success and not sent_locally:
+        if not message.get('unexpanded') and message['mode'] != 'email':
+            if message.get('target'):
+                logger.error('reclassifying as email %s', message)
+                set_target_fallback_mode(message)
+                render(message)
+                try:
+                    success, sent_locally = distributed_send_message(message, vendor_manager)
+                # nope - log and bail
+                except Exception:
+                    metrics.incr('task_failure')
+                    add_mode_stat(message['mode'], None)
+                    logger.error('unable to send %s', message)
+                    sent_locally = True
 
     # Take it out of our list of active queued messages if it's there
     if message['message_id']:
