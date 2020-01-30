@@ -1298,8 +1298,6 @@ def fetch_and_send_message(send_queue, vendor_manager):
     except Exception:
         logger.warning('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
-        success = False
-        sent_locally = False
     if not success and not sent_locally:
         if not message.get('unexpanded') and message['mode'] != 'email':
             if message.get('target'):
