@@ -7,9 +7,22 @@ import re
 with open('src/iris/__init__.py', 'r') as fd:
     version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', fd.read(), re.MULTILINE).group(1)
 
+with open('README.md', 'r') as fd:
+    long_description = fd.read()
+
 setuptools.setup(
     name='iris',
     version=version,
+    description='Iris is a highly configurable and flexible service for paging and messaging.',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url='https://github.com/linkedin/iris',
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'License :: OSI Approved :: BSD License',
+        'Natural Language :: English',
+        'Programming Language :: Python :: 3'
+    ],
     package_dir={'': 'src'},
     packages=setuptools.find_packages('src'),
     include_package_data=True,
