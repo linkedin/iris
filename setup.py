@@ -11,7 +11,7 @@ with open('README.md', 'r') as fd:
     long_description = fd.read()
 
 setuptools.setup(
-    name='iris',
+    name='irisapi',
     version=version,
     description='Iris is a highly configurable and flexible service for paging and messaging.',
     long_description=long_description,
