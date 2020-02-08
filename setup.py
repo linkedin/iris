@@ -44,7 +44,7 @@ setuptools.setup(
         'SQLAlchemy==1.3.0',
         'Jinja2==2.10.1',
         'Markdown==2.4.1',
-        'click==6.6',
+        'click==6.7',
         'msgpack-python==0.4.5',
         'cssmin==0.2.0',
         'beaker==1.10.0',
