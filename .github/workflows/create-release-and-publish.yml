@@ -3,7 +3,9 @@ name: Create Release and publish to pypi.org on Version Change
 on:
   push:
     paths:
-    - 'src/iris/__init__.py'
+      - 'src/iris/__init__.py'
+    branches:
+      - master
 
 jobs:
   build:
