@@ -51,7 +51,7 @@ setuptools.setup(
         'cryptography==2.3',
         'webassets',
         'python-ldap==3.1.0',
-        'exchangelib==1.10.0',
+        'exchangelib==1.12.5',
         'setproctitle',
         'pyfcm==1.4.3',
         'oncallclient==1.0.0',
