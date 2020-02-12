@@ -41,7 +41,7 @@ setuptools.setup(
         'ujson',
         'requests',
         'PyMySQL',
-        'SQLAlchemy',
+        'SQLAlchemy==1.3.0',
         'Jinja2',
         'Markdown',
         'click',
