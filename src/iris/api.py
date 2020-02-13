@@ -2260,7 +2260,7 @@ class Notifications(object):
             with Timeout(self.timeout, False):
                 sender_addr = self.coordinator.get_current_master()
             if sender_addr:
-                logger.info('Relaying message to current master sender: %s', sender_addr)
+                logger.debug('Relaying message to current master sender: %s', sender_addr)
             else:
                 sender_addr = self.default_sender_addr
                 logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
