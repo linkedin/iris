@@ -1681,9 +1681,8 @@ class Incidents(object):
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
         # To try to avoid deadlocks, split the inserts into their own session
-        # FIXME: Actually resolve deadlock issue by splitting the reads and the writes.
         retries = 0
-        max_retries = 10
+        max_retries = 5
         while True:
             with db.guarded_session() as session:
                 retries += 1
