@@ -15,7 +15,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
@@ -4572,9 +4572,20 @@ class Healthcheck(object):
                 health = f.readline().strip()
         except Exception:
             raise HTTPNotFound()
-        resp.status = HTTP_200
-        resp.content_type = 'text/plain'
-        resp.body = health
+        try:
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT version()')
+            cursor.close()
+            conn.close()
+        except Exception:
+            resp.status = HTTP_503
+            resp.content_type = 'text/plain'
+            resp.body = 'Could not connect to database'
+        else:
+            resp.status = HTTP_200
+            resp.content_type = 'text/plain'
+            resp.body = health
 
 
 class Stats(object):
