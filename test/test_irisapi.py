@@ -35,8 +35,8 @@ class TestHealthcheck(falcon.testing.TestCase):
             self.api.add_route('/healthcheck', Healthcheck('healthcheck_path'))
             result = self.simulate_get(path='/healthcheck')
             m.assert_called_once_with('healthcheck_path')
-        self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.content, b'GOOD')
+        self.assertEqual(result.status_code, 503)
+        self.assertEqual(result.content, b'Could not connect to database')
 
 
 class TestAuth(falcon.testing.TestCase):
