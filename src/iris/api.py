@@ -19,7 +19,7 @@ from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
-from sqlalchemy.exc import IntegrityError, InternalError
+from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
 import falcon.uri
 import falcon
 
@@ -1716,7 +1716,7 @@ class Incidents(object):
 
                     session.commit()
                     session.close()
-                except InternalError:
+                except (InternalError, OperationalError) as e:
                     logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
                     if retries < max_retries:
                         sleep(.2)
