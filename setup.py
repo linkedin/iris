@@ -40,7 +40,7 @@ setuptools.setup(
         'falcon-cors',
         'ujson',
         'requests',
-        'PyMySQL',
+        'PyMySQL==0.9.3',
         'SQLAlchemy==1.3.0',
         'Jinja2',
         'Markdown',
@@ -55,7 +55,7 @@ setuptools.setup(
         'setproctitle',
         'pyfcm==1.4.3',
         'oncallclient==1.0.0',
-        'idna',
+        'idna==2.7',
         'pyqrcode==1.2.1'
     ],
     extras_require={
