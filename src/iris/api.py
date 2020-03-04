@@ -1725,7 +1725,7 @@ class Incidents(object):
                         continue
                     else:
                         logger.error('Breached incident insertion retry quota. Bailing on incident for plan %s', plan_id)
-                        raise
+                        raise HTTPInternalServerError('Failed creating incident')
                 else:
                     break
 
