@@ -9,6 +9,7 @@ import hashlib
 import base64
 import re
 import os
+import random
 import datetime
 import logging
 import jinja2
@@ -1682,7 +1683,7 @@ class Incidents(object):
 
         # To try to avoid deadlocks, split the inserts into their own session
         retries = 0
-        max_retries = 5
+        max_retries = 10
         while True:
             with db.guarded_session() as session:
                 retries += 1
@@ -1719,10 +1720,12 @@ class Incidents(object):
                 except (InternalError, OperationalError) as e:
                     logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
                     if retries < max_retries:
-                        sleep(.2)
+                        sleep_jitter = random.randint(10, 30) / 100
+                        sleep(sleep_jitter)
                         continue
                     else:
-                        raise
+                        logger.error('Breached incident insertion retry quota. Bailing on incident for plan %s', plan_id)
+                        raise HTTPInternalServerError('Failed creating incident')
                 else:
                     break
 
