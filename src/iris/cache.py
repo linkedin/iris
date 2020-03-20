@@ -119,14 +119,11 @@ def check_quota_breach(plan):
     # plans can have spaces and keys can't, hash to normalize keys
     plan_hash = str(hash(plan))
     if not mc.get(plan_hash):
-        print(quota_configs.get('quota_breach_duration'))
         # set expiry to quota_breach_duration seconds, after expiry quota resets
         mc.set(plan_hash, 0, quota_configs.get('quota_breach_duration'))
     # atomic memcached-side increment operation
     mc.incr(plan_hash)
     quota_used = mc.get(plan_hash)
-    print(quota_used)
-    print(quota_configs.get('incident_quota_max'))
     if quota_used > quota_configs.get('incident_quota_max'):
         return True
     else:
