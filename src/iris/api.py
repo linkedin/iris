@@ -268,7 +268,7 @@ plan_filter_types = {
     'aggregation_reset': int,
 }
 
-plan_query = '''SELECT DISTINCT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
+plan_query = '''SELECT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
 LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`'''
 
 plan_target_query = '''SELECT `plan_id` FROM `plan_notification`
