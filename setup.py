@@ -43,7 +43,7 @@ setuptools.setup(
         'PyMySQL==0.9.3',
         'SQLAlchemy==1.3.0',
         'Jinja2',
-        'pylibmc'
+        'pylibmc',
         'Markdown',
         'click',
         'msgpack-python==0.4.5',

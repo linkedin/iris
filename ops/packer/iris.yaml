@@ -89,7 +89,7 @@ provisioners:
 
   - type: "shell"
     inline:
-      - 'sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python uwsgi-plugin-gevent-python mysql-client && sudo rm -rf /var/cache/apt/archives/*'
+      - 'sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev libmemcached-dev zlib1g-dev nginx uwsgi-plugin-python uwsgi-plugin-gevent-python mysql-client && sudo rm -rf /var/cache/apt/archives/*'
       - sudo useradd -m -s /bin/bash iris
       - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
       - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run
