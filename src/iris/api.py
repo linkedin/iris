@@ -16,7 +16,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTP_429, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
@@ -1631,6 +1631,16 @@ class Incidents(object):
             num_dynamic = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
                                           'WHERE `plan_id` = :plan_id',
                                           {'plan_id': plan_id}).scalar()
+
+            # check quota for plan
+            if cache.check_quota_breach(incident_params['plan']):
+                # quota has been exceeded reject this incident
+                session.close()
+                logger.warning("Plan %s has breached its incident creation quota", incident_params['plan'])
+                resp.status = HTTP_429
+                resp.content_type = 'text/plain'
+                resp.body = 'Plan %s has breached its incident creation quota.'
+                return
 
             app = req.context['app']
 

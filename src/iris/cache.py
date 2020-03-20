@@ -1,8 +1,11 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
+import pylibmc
 from . import db
 import logging
+
+from .config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +14,8 @@ priorities = {}    # name -> dict of info
 target_types = {}  # name -> id
 target_roles = {}  # name -> id
 modes = {}         # name -> id
+
+quota_configs = {}
 
 
 def cache_applications():
@@ -92,7 +97,58 @@ def cache_modes():
     connection.close()
 
 
+def check_quota_breach(plan):
+    '''
+        if a plan breaches the quota set by incident_quota_max
+        it will no longer be able to create incidents. After
+        quota_breach_duration amount of seconds from the first incident
+        the plan's quota will reset.
+    '''
+    global quota_configs
+    if quota_configs.get('disable_quota'):
+        # skip quota check
+        return False
+    try:
+        mc = pylibmc.Client([quota_configs.get('memcache_host')], binary=True, behaviors={"cas": True, "tcp_nodelay": True, "ketama": True})
+        mc.get("test-key")
+    except Exception as e:
+        # if connecting to memcache fails disable quota and default to accepting incidents
+        logger.exception('Failed conencting to memcache')
+        quota_configs = {'disable_quota': True}
+        return False
+    # plans can have spaces and keys can't, hash to normalize keys
+    plan_hash = str(hash(plan))
+    if not mc.get(plan_hash):
+        print(quota_configs.get('quota_breach_duration'))
+        # set expiry to quota_breach_duration seconds, after expiry quota resets
+        mc.set(plan_hash, 0, quota_configs.get('quota_breach_duration'))
+    # atomic memcached-side increment operation
+    mc.incr(plan_hash)
+    quota_used = mc.get(plan_hash)
+    print(quota_used)
+    print(quota_configs.get('incident_quota_max'))
+    if quota_used > quota_configs.get('incident_quota_max'):
+        return True
+    else:
+        return False
+
+
+def config_cache(config):
+    global quota_configs
+    if config.get('distributed_quota'):
+        quota_configs = {
+            'disable_quota': config['distributed_quota'].get('disable_quota'),
+            'memcache_host': config['distributed_quota'].get('memcache_host'),
+            'memcache_port': config['distributed_quota'].get('memcache_port'),
+            'incident_quota_max': config['distributed_quota'].get('incident_quota_maximum'),
+            'quota_breach_duration': config['distributed_quota'].get('quota_breach_duration')
+        }
+    else:
+        quota_configs = {'disable_quota': True}
+
+
 def init():
+    config_cache(load_config())
     cache_applications()
     cache_priorities()
     cache_target_types()

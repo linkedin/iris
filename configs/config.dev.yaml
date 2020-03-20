@@ -43,6 +43,14 @@ supported_timezones:
 
 sms_override_template: "ALERT: Incident %s has been triggered by Iris! Please check Iris for more information. - SMS template override"
 
+## settings for incident quota per host
+#distributed_quota:
+#  incident_quota_maximum: 50
+#  memcache_host: 'localhost'
+#  memcache_port: 11211
+#  quota_breach_duration: 60
+#  disable_quota: False
+
 healthcheck_path: /tmp/status
 
 allowed_origins:
