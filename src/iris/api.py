@@ -1718,13 +1718,13 @@ class Incidents(object):
                     session.commit()
                     session.close()
                 except (InternalError, OperationalError) as e:
-                    logger.exception('Failed inserting incident. (Try %s/%s)', retries, max_retries)
+                    logger.error('Failed inserting incident. (Try %s/%s)', retries, max_retries)
                     if retries < max_retries:
                         sleep_jitter = random.randint(10, 30) / 100
                         sleep(sleep_jitter)
                         continue
                     else:
-                        logger.error('Breached incident insertion retry quota. Bailing on incident for plan %s', plan_id)
+                        logger.exception('Breached incident insertion retry quota. Bailing on incident for plan %s', plan_id)
                         raise HTTPInternalServerError('Failed creating incident')
                 else:
                     break
