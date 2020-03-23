@@ -1717,7 +1717,7 @@ class Incidents(object):
 
                     session.commit()
                     session.close()
-                except Exception as e:
+                except (InternalError, OperationalError) as e:
                     logger.error('Failed inserting incident for plan %s. (Try %s/%s)', plan_id, retries, max_retries)
                     if retries < max_retries:
                         sleep_jitter = random.randint(10, 30) / 100
