@@ -668,7 +668,7 @@ def main():
     config = load_config()
     metrics.init(config, 'iris-sync-targets', stats_reset)
 
-    default_ldap_timeout = 20
+    default_ldap_timeout = 60
     default_nap_time = 3600
 
     ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
@@ -698,8 +698,10 @@ def main():
         if not bool(metrics_task):
             logger.error('metrics task failed, %s', metrics_task.exception)
             metrics_task = spawn(metrics.emit_forever)
-
-        sync_from_oncall(config, engine)
+        try:
+            sync_from_oncall(config, engine)
+        except Exception:
+            logger.exception('Error syncing from oncall!')
 
         # Do ldap mailing list sync *after* we do the normal sync, to ensure we have the users
         # which will be in ldap already populated.
@@ -712,9 +714,12 @@ def main():
                     raise IOError
                 else:
                     ldap_lists['cert_path'] = ldap_cert_path
-            list_run_start = time.time()
-            sync_ldap_lists(ldap_lists, engine)
-            logger.info('Ldap mailing list sync took %.2f seconds', time.time() - list_run_start)
+            try:
+                list_run_start = time.time()
+                sync_ldap_lists(ldap_lists, engine)
+                logger.info('Ldap mailing list sync took %.2f seconds', time.time() - list_run_start)
+            except Exception:
+                logger.exception('Error syncing from ldap!')
 
         logger.info('Sleeping for %d seconds' % nap_time)
         sleep(nap_time)
