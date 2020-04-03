@@ -1670,6 +1670,7 @@ def update_api_cache_worker():
         api_cache.cache_modes()
         sleep(60)
 
+
 def log_sender_master():
     while True:
         sender_master = coordinator.get_current_master()
