@@ -25,3 +25,6 @@ class Coordinator():
 
     def am_i_master(self):
         return self.is_master
+
+    def get_current_master(self):
+        return None

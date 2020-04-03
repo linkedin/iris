@@ -1670,6 +1670,13 @@ def update_api_cache_worker():
         api_cache.cache_modes()
         sleep(60)
 
+def log_sender_master():
+    while True:
+        sender_master = coordinator.get_current_master()
+        if sender_master:
+            logger.info("Current sender master: %s" % sender_master)
+        sleep(30)
+
 
 def init_sender(config):
     gevent.signal(signal.SIGINT, sender_shutdown)
@@ -1749,6 +1756,7 @@ def main():
     ))
 
     spawn(coordinator.update_forever)
+    spawn(log_sender_master)
     send_task = spawn(send)
 
     maintain_workers(config)
