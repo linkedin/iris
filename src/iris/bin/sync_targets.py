@@ -414,7 +414,16 @@ def get_ldap_lists(l, search_strings, parent_list=None):
                              serverctrls=[req_ctrl],
                              attrlist=(search_strings['list_cn_field'], search_strings['list_name_field']),
                              filterstr=filterstr)
-        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
+
+        retries = 0
+        while retries < 5:
+            try:
+                rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
+            except Exception:
+                logger.exception('Error getting ldap list memberships')
+                retries += 1
+            else:
+                break
 
         for (dn, data) in rdata:
             cn_field = data[search_strings['list_cn_field']][0]
@@ -454,7 +463,15 @@ def get_ldap_list_membership(l, search_strings, list_name):
                              attrlist=[search_strings['user_mail_field']],
                              filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
                              )
-        rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
+        retries = 0
+        while retries < 5:
+            try:
+                rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
+            except Exception:
+                logger.exception('Error getting ldap list memberships')
+                retries += 1
+            else:
+                break
 
         for data in rdata:
             member = data[1].get(search_strings['user_mail_field'], [None])[0]
