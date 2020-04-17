@@ -286,14 +286,10 @@ table.dataTable.display tr td:first-child {
     background-position: calc(100% - 5px) 13px;
 }
 
-.dataTables_filter {
-    display: none;
+#incidents-table_filter {
+    padding-right:  30px;
+    display: inline;
 }
-
-#applications-table_filter {
-    display: unset;
-}
-
 .dataTable tbody tr {
     cursor: pointer;
 }

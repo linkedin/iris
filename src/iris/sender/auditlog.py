@@ -17,6 +17,10 @@ def message_change(message_id, change_type, old, new, description):
         logger.warning('Not logging %s for message as it does not have an id', change_type)
         return
 
+    old = old[0:250]
+    new = new[0:250]
+    description = description[0:250]
+
     # retry to guard against deadlocks
     retries = 0
     max_retries = 5
