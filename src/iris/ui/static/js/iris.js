@@ -1270,20 +1270,16 @@ iris = {
       claimBtn: '#claim-active-btn',
       tableTemplate: $('#incidents-table-template').html(),
       summaryCtxHash: {},
+      processedIds: {},
       incidentData: null,
       DataTable: null,
       dataTableOpts: {
-        orderClasses: false,
-        dom: '<"claim-container"><"pull-right"l>tip',
+        dom: '<"claim-container"><"pull-right"l>ftip',
         order: [[0, 'desc']],
-        oLanguage: {
-          sEmptyTable: "Use the filters above to find incidents",
-          sZeroRecords: "Use the filters above to find incidents"
-        },
         columns: [
           null,
           null,
-          { width: '25%', orderable: false },
+          {width: '25%'},
           null,
           { width: '10%' },
           { width: '10%' },
@@ -1419,6 +1415,19 @@ iris = {
             }
           });
         } else {
+          var newIds = false;
+          // invalidate datatable so search will work on the dynamic loaded context
+          self.data.DataTable.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
+              if(!(self.data.DataTable.row( this ).data()[0] in self.data.processedIds)){
+                newIds = true;
+                self.data.processedIds[self.data.DataTable.row( this ).data()[0]] = 1;
+                this.invalidate();
+              }
+          } );
+          if(newIds){
+            // redraw datatable only if there is any new data
+            self.data.DataTable.draw();
+          }
           getCtxRequest.resolve(); // resolve promise if all data exists in hash
         }
 
@@ -2135,9 +2144,15 @@ iris = {
                 settings.per_app_defaults_obj[app] = {}; // Needed for JS elsewhere
                 window.appData.priorities.forEach(function(p) {
                     var priority = p.name;
+                    var asm_obj = app_supported_modes[app];
                     var default_mode = app_default_values[app][priority] ? app_default_values[app][priority] : (
                         global_default_values[priority] ? global_default_values[priority] : ''
                     );
+                    // if the default mode is not supported by the app change it to one that is
+                    if(Object.values(asm_obj).indexOf(default_mode) < 0){
+                      console.log(settings.per_app_modes[app]);
+                      default_mode = asm_obj[Object.keys(asm_obj)[0]];
+                    }
                     settings.per_app_defaults[app].priorities.push({
                         priority_name: priority,
                         default_mode: default_mode
@@ -2919,6 +2934,11 @@ iris = {
                     }
                 }
             });
+            checked = $("input[name=supported_modes]:checked").length;
+            if(!checked) {
+              iris.createAlert('Application must have at least one supported mode');
+              failedCheck = true;
+            }
             if (failedCheck) {
                 return;
             }
