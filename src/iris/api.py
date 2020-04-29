@@ -1594,7 +1594,7 @@ class Incidents(object):
 
         - plan name is missing
         - application is invalid
-        - context json blob is longer than 655355 bytes
+        - context json blob is longer than 65535 bytes
         - none of the templates used in the plan supports the given application
 
         To create an incident for a dynamic plan (one that defines dynamic targets), an
@@ -1665,7 +1665,7 @@ class Incidents(object):
             context_json_str = ujson.dumps({variable: context.get(variable)
                                             for variable in app['variables']})
             if len(context_json_str) > 65535:
-                raise HTTPBadRequest('Context too long')
+                raise HTTPBadRequest('Context too large. %d is larger than limit 65535' % len(context_json_str))
 
             app_template_count = session.execute('''
                 SELECT EXISTS (
