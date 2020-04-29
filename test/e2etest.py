@@ -1603,7 +1603,7 @@ def test_large_incident_context(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
 
     assert re.status_code == 400
-    assert re.json()['title'] == 'Context too long'
+    assert re.json()['title'] == 'Context too large. 250198 is larger than limit 65535'
 
 
 def test_get_user_modes(sample_user, sample_application_name):
