@@ -24,7 +24,7 @@ import ldap
 from ldap.controls import SimplePagedResultsControl
 from ldap.filter import escape_filter_chars
 import time
-ldap_pagination_size = 1000
+ldap_pagination_size = None
 ldap_timeout = None
 
 logging.getLogger('requests').setLevel(logging.WARNING)
@@ -441,6 +441,7 @@ def get_ldap_lists(l, search_strings, parent_list=None):
 
         if not pctrls:
             # Paging not supported
+            logger.debug('LDAP pagination not supported')
             break
         cookie = pctrls[0].cookie
         if not cookie:
@@ -484,6 +485,7 @@ def get_ldap_list_membership(l, search_strings, list_name):
 
         if not pctrls:
             # Paging not supported
+            logger.debug('LDAP pagination not supported')
             break
         cookie = pctrls[0].cookie
         if not cookie:
@@ -682,13 +684,16 @@ def sync_ldap_lists(ldap_settings, engine):
 
 def main():
     global ldap_timeout
+    global ldap_pagination_size
     config = load_config()
     metrics.init(config, 'iris-sync-targets', stats_reset)
 
     default_ldap_timeout = 60
+    default_ldap_pagination_size = 400
     default_nap_time = 3600
 
     ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
+    ldap_pagination_size = int(config.get('ldap_pagination_size', default_ldap_pagination_size))
     try:
         nap_time = int(config.get('sync_script_nap_time', default_nap_time))
     except ValueError:
