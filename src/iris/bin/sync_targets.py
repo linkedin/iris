@@ -693,7 +693,7 @@ def main():
     default_nap_time = 3600
 
     ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
-    ldap_pagination_size = int(config.get('ldap_pagination_size', default_ldap_pagination_size))
+    ldap_pagination_size = int(config.get('sync_script_ldap_pagination_size', default_ldap_pagination_size))
     try:
         nap_time = int(config.get('sync_script_nap_time', default_nap_time))
     except ValueError:
