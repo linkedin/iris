@@ -184,10 +184,11 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         return
 
     oncall_team_response = list(zip(*oncall_teams_api_response))
-    oncall_team_names = oncall_team_response[0]
+    oncall_team_names = [name.lower() for name in oncall_team_response[0]]
     oncall_team_ids = oncall_team_response[1]
     oncall_response_dict_name_key = dict(zip(oncall_team_names, oncall_team_ids))
     oncall_response_dict_id_key = dict(zip(oncall_team_ids, oncall_team_names))
+    oncall_case_sensitive_dict = {name.lower(): name for name in oncall_team_response[0]}
 
     if not oncall_team_names:
         logger.warning('We do not have a list of team names')
@@ -229,7 +230,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # get objects needed for insertion
     target_types = {name: target_id for name, target_id in session.execute('SELECT `name`, `id` FROM `target_type`')}  # 'team' and 'user'
     modes = {name: mode_id for name, mode_id in session.execute('SELECT `name`, `id` FROM `mode`')}
-    iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
+    iris_team_names = {name.lower() for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
     target_add_sql = 'INSERT INTO `target` (`name`, `type_id`) VALUES (%s, %s) ON DUPLICATE KEY UPDATE `active` = TRUE'
     oncall_add_sql = 'INSERT INTO `oncall_team` (`target_id`, `oncall_team_id`) VALUES (%s, %s)'
     user_add_sql = 'INSERT IGNORE INTO `user` (`target_id`) VALUES (%s)'
@@ -295,16 +296,17 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # oncall_team_names (names from oncall api call)
     # oncall_response_dict_name_key (key value pairs of oncall team names and ids from api call)
     # oncall_response_dict_id_key same as above but key value inverted
+    # oncall_case_sensitive_dict maps the case insensitive oncall name to the original capitalization
     # iris_team_names (names from target table)
     # iris_target_name_id_dict dictionary of target name -> target_id mappings
     # iris_db_oncall_team_id_name_dict dictionary of oncall team_id -> oncall name mappings
 
 # get all incoming names that match a target check if that target has an entry in oncall table if not make one
-    iris_target_name_id_dict = {name: target_id for name, target_id in engine.execute('''SELECT `name`, `id` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
+    iris_target_name_id_dict = {name.lower(): target_id for name, target_id in engine.execute('''SELECT `name`, `id` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
 
     matching_target_names = iris_team_names.intersection(oncall_team_names)
     if matching_target_names:
-        existing_up_to_date_oncall_teams = {name for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})}
+        existing_up_to_date_oncall_teams = {name.lower() for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})}
         # up to date target names that don't have an entry in the oncall_team table yet
         matching_target_names_no_oncall_entry = matching_target_names - existing_up_to_date_oncall_teams
 
@@ -319,7 +321,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
 # rename all mismatching target names
 
-    iris_db_oncall_team_id_name_dict = {team_id: name for name, team_id in engine.execute('''SELECT target.name, oncall_team.oncall_team_id FROM `target` JOIN `oncall_team` ON oncall_team.target_id = target.id''')}
+    iris_db_oncall_team_id_name_dict = {team_id: name.lower() for name, team_id in engine.execute('''SELECT target.name, oncall_team.oncall_team_id FROM `target` JOIN `oncall_team` ON oncall_team.target_id = target.id''')}
 
     iris_db_oncall_team_ids = {oncall_team_id for (oncall_team_id, ) in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team`''')}
     matching_oncall_ids = oncall_team_ids.intersection(iris_db_oncall_team_ids)
@@ -331,24 +333,27 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
         current_name = iris_db_oncall_team_id_name_dict[oncall_id]
         new_name = oncall_response_dict_id_key[oncall_id]
-        if current_name != new_name:
-            # handle edge case of teams swapping names
-            if not iris_target_name_id_dict.get(new_name, None):
-                target_id_to_rename = iris_target_name_id_dict[current_name]
-                logger.info('Renaming team %s to %s', current_name, new_name)
-                engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
-            else:
-                # there is a team swap so rename to a random name to prevent a violation of unique target name constraint
-                new_name = str(uuid.uuid4())
-                target_id_to_rename = iris_target_name_id_dict[current_name]
-                name_swaps[oncall_id] = target_id_to_rename
-                logger.info('Renaming team %s to %s', current_name, new_name)
-                engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+        try:
+            if current_name != new_name:
+                # handle edge case of teams swapping names
+                if not iris_target_name_id_dict.get(new_name, None):
+                    target_id_to_rename = iris_target_name_id_dict[current_name]
+                    logger.info('Renaming team %s to %s', current_name, new_name)
+                    engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
+                else:
+                    # there is a team swap so rename to a random name to prevent a violation of unique target name constraint
+                    new_name = str(uuid.uuid4())
+                    target_id_to_rename = iris_target_name_id_dict[current_name]
+                    name_swaps[oncall_id] = target_id_to_rename
+                    logger.info('Renaming team %s to %s', current_name, new_name)
+                    engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+        except Exception:
+            logger.exception('Error changing team name of %s to %s', current_name, new_name)
 
     # go back and rename name_swaps to correct value
     for oncall_id, target_id_to_rename in name_swaps.items():
         new_name = oncall_response_dict_id_key[oncall_id]
-        engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+        engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
 
 
 # create new entries for new teams
@@ -358,11 +363,11 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     logger.info('Teams to insert (%d)' % len(new_team_ids))
 
     for team_id in new_team_ids:
-        t = oncall_response_dict_id_key[team_id]
+        t = oncall_case_sensitive_dict[oncall_response_dict_id_key[team_id]]
         new_target_id = None
 
         # add team to target table
-        logger.info('Inserting %s', t)
+        logger.info('Inserting team %s', t)
         try:
             new_target_id = engine.execute(target_add_sql, (t, target_types['team'])).lastrowid
             metrics.incr('teams_added')
@@ -386,10 +391,11 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # mark users/teams inactive
     if purge_old_users:
         # find active teams that don't exist in oncall anymore
-        updated_iris_team_names = {name for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s AND `active` = TRUE''', target_types['team'])}
+        updated_iris_team_names = {name.lower() for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s AND `active` = TRUE''', target_types['team'])}
         teams_to_deactivate = updated_iris_team_names - oncall_team_names
 
         logger.info('Users to mark inactive (%d)' % len(users_to_mark_inactive))
+        logger.info('Teams to mark inactive (%d)' % len(teams_to_deactivate))
         for username in users_to_mark_inactive:
             prune_target(engine, username, 'user')
         for team in teams_to_deactivate:
