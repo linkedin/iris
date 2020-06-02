@@ -341,7 +341,7 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 except Exception:
                     pass
                 cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
-                # try deleting individually to directly identify any issues and prevent single error from stopping clean-up
+                # try deleting individually to directly identify any issues and prevent single error from stopping cleanup
                 deleted_rows = 0
                 for msg_id in message_ids:
                     try:
