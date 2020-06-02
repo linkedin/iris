@@ -138,8 +138,8 @@ BATCH_INSERT_MESSAGE_QUERY = '''INSERT INTO `message`
 VALUES '''
 
 UNSENT_MESSAGES_SQL = '''SELECT
-    `message`.`body`,
-    `message`.`id` as `message_id`,
+    `msg`.`body`,
+    `msg`.`id` as `message_id`,
     `target`.`name` as `target`,
     `priority`.`name` as `priority`,
     `priority`.`id` as `priority_id`,
@@ -151,17 +151,16 @@ UNSENT_MESSAGES_SQL = '''SELECT
     `incident`.`created` as `incident_created`,
     `plan_notification`.`template` as `template`,
     `dynamic_target`.`name` as `dynamic_target`
-FROM `message`
-JOIN `application` ON `message`.`application_id`=`application`.`id`
-JOIN `priority` ON `message`.`priority_id`=`priority`.`id`
-LEFT OUTER JOIN `target` ON `message`.`target_id`=`target`.`id`
-LEFT OUTER JOIN `plan` ON `message`.`plan_id`=`plan`.`id`
-LEFT OUTER JOIN `plan_notification` ON `message`.`plan_notification_id`=`plan_notification`.`id`
-LEFT OUTER JOIN `incident` ON `message`.`incident_id`=`incident`.`id`
+FROM (SELECT * FROM `message` FORCE INDEX (ix_message_active) WHERE `active`=1) AS msg
+JOIN `application` ON `msg`.`application_id`=`application`.`id`
+JOIN `priority` ON `msg`.`priority_id`=`priority`.`id`
+LEFT OUTER JOIN `target` ON `msg`.`target_id`=`target`.`id`
+LEFT OUTER JOIN `plan` ON `msg`.`plan_id`=`plan`.`id`
+LEFT OUTER JOIN `plan_notification` ON `msg`.`plan_notification_id`=`plan_notification`.`id`
+LEFT OUTER JOIN `incident` ON `msg`.`incident_id`=`incident`.`id`
 LEFT OUTER JOIN `dynamic_plan_map` ON `incident`.`id` = `dynamic_plan_map`.`incident_id`
   AND `plan_notification`.`dynamic_index` = `dynamic_plan_map`.`dynamic_index`
-LEFT OUTER JOIN `target` `dynamic_target` ON `dynamic_target`.`id` = `dynamic_plan_map`.`target_id`
-WHERE `message`.`active`=1'''
+LEFT OUTER JOIN `target` `dynamic_target` ON `dynamic_target`.`id` = `dynamic_plan_map`.`target_id`'''
 
 SENT_MESSAGE_BATCH_SQL = '''UPDATE `message`
 SET `destination`=%%s,
@@ -656,7 +655,7 @@ def poll():
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
     if messages:
-        cursor.execute(UNSENT_MESSAGES_SQL + ' AND `message`.`id` NOT IN %s', [tuple(messages)])
+        cursor.execute(UNSENT_MESSAGES_SQL + ' AND `msg`.`id` NOT IN %s', [tuple(messages)])
     else:
         cursor.execute(UNSENT_MESSAGES_SQL)
 

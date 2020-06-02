@@ -252,6 +252,28 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 else:
                     break
 
+        # Kill all dynamic plan maps associated with these incidents
+        while True:
+            try:
+                deleted_rows = cursor.execute('DELETE FROM `dynamic_plan_map` WHERE `incident_id` IN %s', [tuple(incident_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting dynamic plan maps')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+            else:
+                if deleted_rows:
+                    logger.info('Killed %d dynamic plan maps', deleted_rows)
+                    deleted_messages += deleted_rows
+                    sleep(cooldown_time)
+                else:
+                    break
+
         # Archive+Kill all messages in these incidents
         while True:
 
@@ -291,6 +313,23 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
 
             logger.info('Archived %d messages', len(message_ids))
 
+            # explicitly delete all the extra message data
+            try:
+                cursor.execute('DELETE FROM `message_changelog` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `response` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `twilio_delivery_status` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `twilio_retry` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `generic_message_sent_status` WHERE `message_id` IN %s', [tuple(message_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting message child')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+
             try:
                 deleted_rows = cursor.execute('DELETE FROM `message` WHERE `id` IN %s', [tuple(message_ids)])
                 connection.commit()
@@ -302,7 +341,15 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 except Exception:
                     pass
                 cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
-                break
+                # try deleting individually to directly identify any issues and prevent single error from stopping cleanup
+                deleted_rows = 0
+                for msg_id in message_ids:
+                    try:
+                        deleted_rows += cursor.execute('DELETE FROM `message` WHERE `id`=%s', msg_id)
+                        connection.commit()
+                    except Exception:
+                        metrics.incr('sql_errors')
+                        logger.exception('Failed deleting message id: %s', msg_id)
             else:
                 if deleted_rows:
                     logger.info('Killed %d messages from %d incidents', deleted_rows, len(incident_ids))
@@ -323,11 +370,18 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
             except Exception:
                 pass
             cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
-            break
-        else:
-            logger.info('Deleted %s incidents', deleted_rows)
-            deleted_incidents += deleted_rows
-            sleep(cooldown_time)
+            # try deleting individually to directly identify any issues and prevent single error from stopping clean-up
+            deleted_rows = 0
+            for inc_id in incident_ids:
+                try:
+                    deleted_rows += cursor.execute('DELETE FROM `incident` WHERE `id`=%s', inc_id)
+                    connection.commit()
+                except Exception:
+                    metrics.incr('sql_errors')
+                    logger.exception('Failed deleting incident id: %s', inc_id)
+        logger.info('Deleted %s incidents', deleted_rows)
+        deleted_incidents += deleted_rows
+        sleep(cooldown_time)
 
     # Next, kill messages not tied to incidents, like quota notifs or incident tracking emails
     while True:
