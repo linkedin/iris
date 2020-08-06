@@ -433,7 +433,7 @@ def main():
         logger.error('Max days needs to at least be 1')
         return
 
-    cooldown_time = int(retention_settings['cooldown_time'])
+    cooldown_time = float(retention_settings['cooldown_time'])
     batch_size = int(retention_settings['batch_size'])
     run_interval = int(retention_settings['run_interval'])
     archive_path = retention_settings['archive_path']

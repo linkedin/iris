@@ -26,6 +26,7 @@ from ldap.filter import escape_filter_chars
 import time
 ldap_pagination_size = None
 ldap_timeout = None
+update_sleep = None
 
 logging.getLogger('requests').setLevel(logging.WARNING)
 
@@ -241,6 +242,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     # insert users that need to be
     logger.info('Users to insert (%d)', len(users_to_insert))
     for username in users_to_insert:
+        sleep(update_sleep)
         logger.info('Inserting %s', username)
         try:
             target_id = engine.execute(target_add_sql, (username, target_types['user'])).lastrowid
@@ -263,6 +265,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
     logger.info('Users to update (%d)', len(users_to_update))
     for username in users_to_update:
+        sleep(update_sleep)
         try:
             db_contacts = iris_users[username]
             oncall_contacts = oncall_users[username]
@@ -312,6 +315,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
         for t in matching_target_names_no_oncall_entry:
             logger.info('Inserting existing team into oncall_team %s', t)
+            sleep(update_sleep)
             try:
                 engine.execute('''UPDATE `target` SET `active` = TRUE WHERE `id` = %s''', iris_target_name_id_dict[t])
                 engine.execute(oncall_add_sql, (iris_target_name_id_dict[t], oncall_response_dict_name_key[t]))
@@ -347,6 +351,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                     name_swaps[oncall_id] = target_id_to_rename
                     logger.info('Renaming team %s to %s', current_name, new_name)
                     engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
+                sleep(update_sleep)
         except Exception:
             logger.exception('Error changing team name of %s to %s', current_name, new_name)
 
@@ -354,6 +359,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     for oncall_id, target_id_to_rename in name_swaps.items():
         new_name = oncall_response_dict_id_key[oncall_id]
         engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
+        sleep(update_sleep)
 
 
 # create new entries for new teams
@@ -368,6 +374,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
         # add team to target table
         logger.info('Inserting team %s', t)
+        sleep(update_sleep)
         try:
             new_target_id = engine.execute(target_add_sql, (t, target_types['team'])).lastrowid
             metrics.incr('teams_added')
@@ -398,8 +405,10 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         logger.info('Teams to mark inactive (%d)' % len(teams_to_deactivate))
         for username in users_to_mark_inactive:
             prune_target(engine, username, 'user')
+            sleep(update_sleep)
         for team in teams_to_deactivate:
             prune_target(engine, team, 'team')
+            sleep(update_sleep)
 
 
 def get_ldap_lists(l, search_strings, parent_list=None):
@@ -543,6 +552,7 @@ def batch_remove_ldap_memberships(session, list_id, members):
                                       AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
                                       AND `destination` IN :members''',
                                    {'list_id': list_id, 'members': tuple(memberships_this_batch)}).rowcount
+        sleep(update_sleep)
         logger.info('Deleted %s members from list id %s', affected, list_id)
     session.commit()
 
@@ -679,6 +689,8 @@ def sync_ldap_lists(ldap_settings, engine):
                 if (ldap_add_pause_interval is not None) and (user_add_count % ldap_add_pause_interval) == 0:
                     logger.info('Pausing for %s seconds every %s users.', ldap_add_pause_duration, ldap_add_pause_interval)
                     time.sleep(ldap_add_pause_duration)
+                elif ldap_add_pause_interval is None:
+                    sleep(update_sleep)
 
         if kill_members:
             metrics.incr('ldap_memberships_removed', len(kill_members))
@@ -691,15 +703,18 @@ def sync_ldap_lists(ldap_settings, engine):
 def main():
     global ldap_timeout
     global ldap_pagination_size
+    global update_sleep
     config = load_config()
     metrics.init(config, 'iris-sync-targets', stats_reset)
 
     default_ldap_timeout = 60
     default_ldap_pagination_size = 400
+    default_update_sleep = 0
     default_nap_time = 3600
 
     ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
     ldap_pagination_size = int(config.get('sync_script_ldap_pagination_size', default_ldap_pagination_size))
+    update_sleep = float(config.get('target_update_pause', default_update_sleep))
     try:
         nap_time = int(config.get('sync_script_nap_time', default_nap_time))
     except ValueError:

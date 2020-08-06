@@ -198,6 +198,8 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 sync_script_nap_time: 3600 # wait time before syncing again
 # sync_script_ldap_timeout: 60
 # sync_script_ldap_pagination_size: 400
+## add short pauses in seconds between inserting, updating, and deleting rows to allow take pressure off databasee replication
+# target_update_pause: 0.1
 ## use this for LDAP settings for sync script lookup
 # init_config_hook: iris_internal.api.init_config
 
