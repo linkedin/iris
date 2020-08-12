@@ -133,10 +133,6 @@ INSERT_MESSAGE_SQL = '''INSERT INTO `message`
     (`created`, `plan_id`, `plan_notification_id`, `incident_id`, `application_id`, `target_id`, `priority_id`, `body`)
 VALUES (NOW(), %s,%s,%s,%s,%s,%s,%s)'''
 
-BATCH_INSERT_MESSAGE_QUERY = '''INSERT INTO `message`
-    (`created`, `plan_id`, `plan_notification_id`, `incident_id`, `application_id`, `target_id`, `priority_id`, `body`)
-VALUES '''
-
 UNSENT_MESSAGES_SQL = '''SELECT
     `msg`.`body`,
     `msg`.`id` as `message_id`,
@@ -287,8 +283,6 @@ config = None
 # msg_info takes the form [(incident_id, plan_notification_id), ...]
 def create_messages(msg_info):
     msg_count = 0
-    query_params = []
-    values_count = 0
     error_incident_ids = set()
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
@@ -315,7 +309,6 @@ def create_messages(msg_info):
             lookup_fail_reason = None
 
         priority_id = plan_notification['priority_id']
-        redirect_to_plan_owner = False
         body = ''
 
         if not names:
@@ -359,67 +352,41 @@ def create_messages(msg_info):
                     ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
 
             names = [name]
-            redirect_to_plan_owner = True
 
         for name in names:
             t = cache.target_names[name]
             if t:
                 target_id = t['id']
-                # Create message now if it needs to be redirected, otherwise save it for one batched operation
-                if not redirect_to_plan_owner:
-                    query_params += [plan_notification['plan_id'], plan_notification_id, incident_id,
-                                     application_id, target_id, priority_id, body]
-                    values_count += 1
-                else:
-                    retries = 0
-                    max_retries = 5
-                    while True:
-                        retries += 1
-                        try:
-                            cursor.execute(INSERT_MESSAGE_SQL,
-                                           (plan_notification['plan_id'], plan_notification_id, incident_id,
-                                            application_id, target_id, priority_id, body))
-                            connection.commit()
-                        except Exception:
-                            logger.warning('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
-                            if retries < max_retries:
-                                sleep(.2)
-                                continue
-                            else:
-                                raise Exception('Failed inserting message retries exceeded')
+                retries = 0
+                max_retries = 5
+                while True:
+                    retries += 1
+                    try:
+                        cursor.execute(INSERT_MESSAGE_SQL,
+                                       (plan_notification['plan_id'], plan_notification_id, incident_id,
+                                        application_id, target_id, priority_id, body))
+                        connection.commit()
+                    except Exception:
+                        logger.warning('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                        if retries < max_retries:
+                            sleep(.2)
+                            continue
                         else:
-                            # needed for the lastrowid to exist in the DB to satisfy the constraint
-                            auditlog.message_change(
-                                cursor.lastrowid,
-                                auditlog.TARGET_CHANGE,
-                                role + '|' + target,
-                                name,
-                                lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
-                            break
+                            raise Exception('Failed inserting message retries exceeded')
+                    else:
+                        # needed for the lastrowid to exist in the DB to satisfy the constraint
+                        auditlog.message_change(
+                            cursor.lastrowid,
+                            auditlog.TARGET_CHANGE,
+                            role + '|' + target,
+                            name,
+                            lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
+                        break
 
                 msg_count += 1
             else:
                 metrics.incr('target_not_found')
                 logger.warning('Failed to notify plan creator; no active target found: %s', name)
-    if values_count > 0:
-        retries = 0
-        max_retries = 5
-        while True:
-            retries += 1
-            try:
-                msg_sql = BATCH_INSERT_MESSAGE_QUERY + ','.join('(NOW(), %s,%s,%s,%s,%s,%s,%s)' for i in range(values_count))
-                cursor.execute(msg_sql, query_params)
-                connection.commit()
-            except Exception:
-                logger.warning('Failed inserting batch messages for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
-                if retries < max_retries:
-                    sleep(.2)
-                    continue
-                else:
-                    raise Exception('Failed inserting batch messages retries exceeded')
-            else:
-                msg_count += cursor.rowcount
-                break
     cursor.close()
     connection.close()
     return msg_count, error_incident_ids

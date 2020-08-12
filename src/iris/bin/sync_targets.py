@@ -391,8 +391,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             except SQLAlchemyError as e:
                 logger.exception('Error inserting oncall_team %s: %s', t, e)
                 continue
-
-    session.commit()
+        session.commit()
     session.close()
 
     # mark users/teams inactive
@@ -431,6 +430,7 @@ def get_ldap_lists(l, search_strings, parent_list=None):
                              filterstr=filterstr)
 
         retries = 0
+        rdata = None
         while retries < 5:
             try:
                 rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
@@ -439,7 +439,9 @@ def get_ldap_lists(l, search_strings, parent_list=None):
                 retries += 1
             else:
                 break
-
+        # ldap sometimees returns good but does not return rdata
+        if rdata is None:
+            break
         for (dn, data) in rdata:
             cn_field = data[search_strings['list_cn_field']][0]
             name_field = data[search_strings['list_name_field']][0]
@@ -480,6 +482,7 @@ def get_ldap_list_membership(l, search_strings, list_name):
                              filterstr=search_strings['user_membership_filter'] % escape_filter_chars(list_name)
                              )
         retries = 0
+        rdata = None
         while retries < 5:
             try:
                 rtype, rdata, rmsgid, serverctrls = l.result3(msgid, timeout=ldap_timeout, resp_ctrl_classes=known_ldap_resp_ctrls)
@@ -488,7 +491,9 @@ def get_ldap_list_membership(l, search_strings, list_name):
                 retries += 1
             else:
                 break
-
+        # ldap sometimees returns good but does not return rdata
+        if rdata is None:
+            break
         for data in rdata:
             member = data[1].get(search_strings['user_mail_field'], [None])[0]
             if isinstance(member, bytes):
@@ -552,9 +557,9 @@ def batch_remove_ldap_memberships(session, list_id, members):
                                       AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
                                       AND `destination` IN :members''',
                                    {'list_id': list_id, 'members': tuple(memberships_this_batch)}).rowcount
+        session.commit()
         sleep(update_sleep)
         logger.info('Deleted %s members from list id %s', affected, list_id)
-    session.commit()
 
 
 def sync_ldap_lists(ldap_settings, engine):
@@ -614,7 +619,11 @@ def sync_ldap_lists(ldap_settings, engine):
             metrics.incr('ldap_reconnects')
             logger.warning('LDAP server went away for list %s. Reconnecting', list_name)
             l.reconnect(ldap_settings['connection']['url'])
-            members = get_ldap_flat_membership(l, ldap_settings['search_strings'], list_cn, ldap_settings['max_depth'], 0, set())
+            try:
+                members = get_ldap_flat_membership(l, ldap_settings['search_strings'], list_cn, ldap_settings['max_depth'], 0, set())
+            except ldap.SERVER_DOWN:
+                logger.warning('Reconnect failed for ldap list %s, skipping', list_name)
+                continue
 
         if not members:
             logger.info('Ignoring/pruning empty ldap list %s', list_name)
@@ -624,10 +633,9 @@ def sync_ldap_lists(ldap_settings, engine):
         metrics.incr('ldap_memberships_found', num_members)
 
         created = False
-        list_id = session.execute('''SELECT `mailing_list`.`target_id`
-                                     FROM `mailing_list`
-                                     JOIN `target` on `target`.`id` = `mailing_list`.`target_id`
-                                     WHERE `target`.`name` = :name''', {'name': list_name}).scalar()
+
+        list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
+                                       AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': list_name}).scalar()
 
         if not list_id:
             try:
@@ -671,21 +679,22 @@ def sync_ldap_lists(ldap_settings, engine):
 
             for member in add_members:
                 try:
-                    session.execute('''INSERT IGNORE INTO `mailing_list_membership`
-                                       (`list_id`, `user_id`)
-                                       VALUES (:list_id,
-                                               (SELECT `target_id` FROM `target_contact`
+                    user_id = session.execute('''SELECT `target_id` FROM `target_contact`
                                                 JOIN `target` ON `target`.`id` = `target_id`
                                                 WHERE `destination` = :name
                                                 AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                                                AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')))
-                                    ''', {'list_id': list_id, 'name': member})
+                                                AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', {'name': member}).scalar()
+                    if user_id is None:
+                        continue
+                    session.execute('''INSERT INTO `mailing_list_membership` (`list_id`, `user_id`) VALUES (:list_id,:user_id)
+                                    ''', {'list_id': list_id, 'user_id': user_id})
+                    session.commit()
                     logger.info('Added %s to list %s', member, list_name)
+                    user_add_count += 1
                 except (IntegrityError, DataError):
                     metrics.incr('ldap_memberships_failed_to_add')
                     logger.warning('Failed adding %s to %s', member, list_name)
 
-                user_add_count += 1
                 if (ldap_add_pause_interval is not None) and (user_add_count % ldap_add_pause_interval) == 0:
                     logger.info('Pausing for %s seconds every %s users.', ldap_add_pause_duration, ldap_add_pause_interval)
                     time.sleep(ldap_add_pause_duration)
@@ -695,8 +704,6 @@ def sync_ldap_lists(ldap_settings, engine):
         if kill_members:
             metrics.incr('ldap_memberships_removed', len(kill_members))
             batch_remove_ldap_memberships(session, list_id, kill_members)
-
-    session.commit()
     session.close()
 
 
