@@ -4041,18 +4041,8 @@ class ResponseMixin(object):
                 'body': body,
                 'destination': dest
             }
-            retries = 0
-            while retries < 3:
-                try:
-                    message_id = session.execute(sql, data).lastrowid
-                    session.commit()
-                except Exception as e:
-                    retries += 1
-                    if retries == 3:
-                        logger.exception("failed to create email message")
-                    sleep(0.2)
-                else:
-                    break
+            message_id = session.execute(sql, data).lastrowid
+            session.commit()
 
             session.close()
             return True, message_id
