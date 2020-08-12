@@ -391,7 +391,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             except SQLAlchemyError as e:
                 logger.exception('Error inserting oncall_team %s: %s', t, e)
                 continue
-        session.commit()
+    session.commit()
     session.close()
 
     # mark users/teams inactive
