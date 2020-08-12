@@ -4041,8 +4041,19 @@ class ResponseMixin(object):
                 'body': body,
                 'destination': dest
             }
-            message_id = session.execute(sql, data).lastrowid
-            session.commit()
+            retries = 0
+            while retries < 3:
+                try:
+                    message_id = session.execute(sql, data).lastrowid
+                    session.commit()
+                except Exception as e:
+                    retries += 1
+                    if retries == 3:
+                        logger.exception("failed to create email message")
+                    sleep(0.2)
+                else:
+                    break
+
             session.close()
             return True, message_id
 
@@ -4240,7 +4251,7 @@ class ResponseEmail(ResponseMixin):
         try:
             app, response = self.handle_user_response('email', msg_id, source, cmd)
         except Exception:
-            logger.exception('Failed to handle email response: %s' % first_line)
+            logger.warning('Failed to handle email response: %s' % first_line)
             raise
 
         # When processing a claim all scenario, the first item returned by handle_user_response
