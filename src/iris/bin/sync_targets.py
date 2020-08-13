@@ -600,7 +600,7 @@ def sync_ldap_lists(ldap_settings, engine):
     ldap_lists_count = len(ldap_lists)
     metrics.set('ldap_lists_found', ldap_lists_count)
     metrics.set('ldap_memberships_found', 0)
-    logger.debug('Found %s ldap lists', ldap_lists_count)
+    logger.info('Found %s ldap lists', ldap_lists_count)
 
     existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id''', {'type_id': list_type_id})}
     kill_lists = existing_ldap_lists - {item[1] for item in ldap_lists}
@@ -727,13 +727,8 @@ def main():
     except ValueError:
         nap_time = default_nap_time
 
-    # check if we are using special connection settings for this script
-    if config.get('db_target_sync'):
-        engine = create_engine(config['db_target_sync']['conn']['str'] % config['db_target_sync']['conn']['kwargs'],
-                               **config['db_target_sync']['kwargs'])
-    else:
-        engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
-                               **config['db']['kwargs'])
+    engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
+                           **config['db']['kwargs'])
 
     # Optionally, maintain an internal list of mailing lists from ldap that can also be
     # used as targets.
