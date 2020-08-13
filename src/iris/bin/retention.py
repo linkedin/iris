@@ -425,12 +425,8 @@ def main():
         logger.info('Retention not enabled, bailing')
         return
 
-    if config.get('db_retention'):
-        engine = create_engine(config['db_retention']['conn']['str'] % config['db_retention']['conn']['kwargs'],
-                               **config['db_retention']['kwargs'])
-    else:
-        engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
-                               **config['db']['kwargs'])
+    engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
+                           **config['db']['kwargs'])
 
     max_days = int(retention_settings['max_days'])
     if max_days < 1:

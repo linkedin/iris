@@ -25,42 +25,6 @@ db: &db
     max_overflow: 100
     pool_timeout: 60
 
-# # Specify different connection settings for side scripts
-# db_target_sync: &db_target_sync
-#   conn:
-#     kwargs:
-#       scheme: mysql+pymysql
-#       user: iris-target-sync
-#       password: ""
-#       host: 127.0.0.1
-#       database: iris
-#       charset: utf8
-#     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
-#   kwargs:
-#     pool_recycle: 3600
-#     echo: False
-#     pool_size: 100
-#     max_overflow: 100
-#     pool_timeout: 60
-
-
-# db_retention: &db_retention
-#   conn:
-#     kwargs:
-#       scheme: mysql+pymysql
-#       user: iris-retention
-#       password: ""
-#       host: 127.0.0.1
-#       database: iris
-#       charset: utf8
-#     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
-#   kwargs:
-#     pool_recycle: 3600
-#     echo: False
-#     pool_size: 100
-#     max_overflow: 100
-#     pool_timeout: 60
-
 ## Change these to random long values when you run this in production
 user_session:
   encrypt_key: 'abc'
