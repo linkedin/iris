@@ -527,7 +527,7 @@ def get_ldap_flat_membership(l, search_strings, list_name, max_depth, depth=0, s
             else:
                 seen_lists.add(sub_list)
             sub_list_members = get_ldap_flat_membership(l, search_strings, sub_list, max_depth, new_depth, seen_lists)
-            logger.info('Found %s from %s (depth %s/%s)', len(sub_list_members), email, new_depth, max_depth)
+            logger.debug('Found %s from %s (depth %s/%s)', len(sub_list_members), email, new_depth, max_depth)
             members |= sub_list_members
 
     return members
@@ -600,7 +600,7 @@ def sync_ldap_lists(ldap_settings, engine):
     ldap_lists_count = len(ldap_lists)
     metrics.set('ldap_lists_found', ldap_lists_count)
     metrics.set('ldap_memberships_found', 0)
-    logger.debug('Found %s ldap lists', ldap_lists_count)
+    logger.info('Found %s ldap lists', ldap_lists_count)
 
     existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id''', {'type_id': list_type_id})}
     kill_lists = existing_ldap_lists - {item[1] for item in ldap_lists}
