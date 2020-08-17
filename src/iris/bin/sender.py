@@ -309,6 +309,7 @@ def create_messages(msg_info):
             lookup_fail_reason = None
 
         priority_id = plan_notification['priority_id']
+        redirect_to_plan_owner = False
         body = ''
 
         if not names:
@@ -352,6 +353,7 @@ def create_messages(msg_info):
                     ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
 
             names = [name]
+            redirect_to_plan_owner = True
 
         for name in names:
             t = cache.target_names[name]
@@ -374,13 +376,14 @@ def create_messages(msg_info):
                         else:
                             raise Exception('Failed inserting message retries exceeded')
                     else:
-                        # needed for the lastrowid to exist in the DB to satisfy the constraint
-                        auditlog.message_change(
-                            cursor.lastrowid,
-                            auditlog.TARGET_CHANGE,
-                            role + '|' + target,
-                            name,
-                            lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
+                        if redirect_to_plan_owner:
+                            # needed for the lastrowid to exist in the DB to satisfy the constraint
+                            auditlog.message_change(
+                                cursor.lastrowid,
+                                auditlog.TARGET_CHANGE,
+                                role + '|' + target,
+                                name,
+                                lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
                         break
 
                 msg_count += 1
