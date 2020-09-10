@@ -58,7 +58,6 @@ if log_file:
     ch = logging.handlers.RotatingFileHandler(log_file, mode='a', maxBytes=10485760, backupCount=10)
 else:
     ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 logger.setLevel(logging.INFO)
 logger.addHandler(ch)
@@ -522,7 +521,7 @@ def get_ldap_flat_membership(l, search_strings, list_name, max_depth, depth=0, s
     if new_depth <= max_depth:
         for sub_list, email in get_ldap_lists(l, search_strings, list_name):
             if sub_list in seen_lists:
-                logger.warning('avoiding nested list loop with already seen list: %s', sub_list)
+                logger.debug('avoiding nested list loop with already seen list: %s', sub_list)
                 continue
             else:
                 seen_lists.add(sub_list)
@@ -603,11 +602,27 @@ def sync_ldap_lists(ldap_settings, engine):
     logger.info('Found %s ldap lists', ldap_lists_count)
 
     existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id''', {'type_id': list_type_id})}
-    kill_lists = existing_ldap_lists - {item[1] for item in ldap_lists}
+    existing_ldap_lower = {name.lower() for name in existing_ldap_lists}
+    existing_case_sensitive_map = {name.lower(): name for name in existing_ldap_lists}
+    incoming_case_sensitive_map = {item[1].lower(): item[1] for item in ldap_lists}
+    kill_lists = existing_ldap_lower - {item[1].lower() for item in ldap_lists}
     if kill_lists:
         metrics.incr('ldap_lists_removed', len(kill_lists))
         for ldap_list in kill_lists:
-            prune_target(engine, ldap_list, mailing_list_type_name)
+            prune_target(engine, existing_case_sensitive_map[ldap_list], mailing_list_type_name)
+
+    # if only case changed rename the mailing list
+    case_sensitive_kill = existing_ldap_lists - {item[1] for item in ldap_lists}
+    rename_list = {name.lower() for name in case_sensitive_kill} - kill_lists
+    if rename_list:
+        for ldap_list in rename_list:
+            old_name = existing_case_sensitive_map[ldap_list]
+            new_name = incoming_case_sensitive_map[ldap_list]
+            list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
+                                       AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': old_name}).scalar()
+            session.execute('UPDATE `mailing_list` SET `name` = :name WHERE `target_id` = :list_id', {'name': new_name, 'list_id': list_id})
+            session.commit()
+            logger.info('Renamed ldap list %s to %s', old_name, new_name)
 
     user_add_count = 0
 
