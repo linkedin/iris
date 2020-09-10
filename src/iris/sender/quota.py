@@ -248,8 +248,6 @@ class ApplicationQuota(object):
 
         now = time()
         if last_notification_time is not None and (now - last_notification_time) < soft_quota_notification_interval:
-            logger.warning('Application %s breached soft quota. Will NOT notify %s:%s as they will only get a notification once every %s seconds.',
-                           application, target_role, target_name, soft_quota_notification_interval)
             return
 
         self.last_soft_quota_notification_time[application] = now
