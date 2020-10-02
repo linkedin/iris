@@ -35,6 +35,7 @@ setuptools.setup(
         'oauth2client==1.4.12',
         'slackclient==0.16',
         'PyYAML',
+        'greenlet==0.4.16',
         'gevent==1.4.0',
         'falcon==1.4.1',
         'falcon-cors',
