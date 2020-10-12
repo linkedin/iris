@@ -8,7 +8,6 @@ import random
 import time
 from gevent import sleep
 from iris.constants import SLACK_SUPPORT
-from iris.custom_import import import_custom_module
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +31,6 @@ class iris_slack(object):
         self.timeout = config.get('timeout', 10)
         self.sleep_range = config.get('sleep_range', 4)
         self.message_attachments = self.config.get('message_attachments', {})
-        push_config = config.get('push_notification', {})
-        self.push_active = push_config.get('activated', False)
-        if self.push_active:
-            self.notifier = import_custom_module('iris.push', push_config['type'])(push_config)
 
     def construct_attachments(self, message):
         # TODO: Verify title, title_link and text.
@@ -94,8 +89,6 @@ class iris_slack(object):
 
     def send_message(self, message):
         start = time.time()
-        if self.push_active:
-            self.notifier.send_push(message)
         payload = self.get_message_payload(message)
         try:
             response = requests.post(self.config['base_url'],
