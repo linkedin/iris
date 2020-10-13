@@ -460,6 +460,10 @@ def escalate():
                 'application': application,
                 'incident_created': created,
             }
+            if tracking_type == 'call':
+                # in case there are any plans with call tracking type that have not been cleaned up
+                logger.warning('Tracking messages do not support support call mode, ignoring tracking message')
+                continue
             if tracking_type == 'email':
                 tracking_message = {
                     'noreply': True,
