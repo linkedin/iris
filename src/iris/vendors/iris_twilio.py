@@ -105,7 +105,8 @@ class iris_twilio(object):
         return send_time
 
     def send_call(self, message):
-        plugin = find_plugin(message['application'])
+        # tracking messages don't have applications defined so default to generic value
+        plugin = find_plugin(message.get('application', 'iris_incident_tracking'))
         if not plugin:
             raise ValueError('not supported source: %(application)s' % message)
 

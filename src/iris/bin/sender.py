@@ -440,7 +440,9 @@ def escalate():
     cursor.execute(NEW_INCIDENTS)
 
     escalations = {}
+    incident_per_plan_cnt = {}
     for incident_id, created, plan_id, context, application in cursor:
+        incident_per_plan_cnt[plan_id] = incident_per_plan_cnt.get(plan_id, 0) + 1
         escalations[incident_id] = (plan_id, 1)
         # create tracking message if configured
         plan = cache.plans[plan_id]
@@ -506,6 +508,11 @@ def escalate():
     new_incidents_count = len(escalations)
     metrics.set('new_incidents_cnt', new_incidents_count)
     logger.info('[*] %s new incidents', new_incidents_count)
+
+    # log any plan that creates a high volume of incidents
+    for pln_id, cnt in incident_per_plan_cnt.items():
+        if cnt > 10:
+            logger.info("plan with id %d created %d incidents this loop iteration")
 
     # then, fetch message count for current incidents
     msg_count = 0
@@ -1663,6 +1670,7 @@ def init_sender(config):
     db.init(config)
     cache.init(api_host, config)
     metrics.init(config, 'iris-sender', default_sender_metrics)
+    spawn(metrics.emit_forever)
     api_cache.cache_priorities()
     api_cache.cache_applications()
     api_cache.cache_modes()
@@ -1808,10 +1816,9 @@ def main():
 
         metrics.set('message_ids_being_sent_cnt', len(message_ids_being_sent))
 
-        spawn(metrics.emit)
-
         elapsed_time = now - runtime
         nap_time = max(0, interval - elapsed_time)
+        metrics.set('last_completed_sender_loop', int(now))
         logger.info('--> sender loop finished in %s seconds - sleeping %s seconds',
                     elapsed_time, nap_time)
         sleep(nap_time)
