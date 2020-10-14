@@ -1674,7 +1674,6 @@ def init_sender(config):
     db.init(config)
     cache.init(api_host, config)
     metrics.init(config, 'iris-sender', default_sender_metrics)
-    spawn(metrics.emit_forever)
     api_cache.cache_priorities()
     api_cache.cache_applications()
     api_cache.cache_modes()
@@ -1820,9 +1819,11 @@ def main():
 
         metrics.set('message_ids_being_sent_cnt', len(message_ids_being_sent))
 
+        spawn(metrics.emit)
+
         elapsed_time = now - runtime
         nap_time = max(0, interval - elapsed_time)
-        metrics.set('last_completed_sender_loop', int(now))
+
         logger.info('--> sender loop finished in %s seconds - sleeping %s seconds',
                     elapsed_time, nap_time)
         sleep(nap_time)
