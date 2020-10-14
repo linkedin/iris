@@ -190,7 +190,10 @@
             <label data-toggle="tooltip" title="Media type for the tracking message" class="required">Type:</label>
             <select id="tracking-type" class="form-control border-bottom" value="{{tracking_type}}">
               {{#each modes}}
-              <option value="{{this}}" {{isSelected this ../tracking_type}}>{{this}}</option>
+                {{#isEqual this "call"}}
+                  {{ else }}
+                   <option value="{{this}}" {{isSelected this ../tracking_type}}>{{this}}</option>
+                {{/isEqual}}
               {{/each}}
             </select>
           </span>

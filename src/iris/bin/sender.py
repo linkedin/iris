@@ -440,7 +440,9 @@ def escalate():
     cursor.execute(NEW_INCIDENTS)
 
     escalations = {}
+    incident_per_plan_cnt = {}
     for incident_id, created, plan_id, context, application in cursor:
+        incident_per_plan_cnt[plan_id] = incident_per_plan_cnt.get(plan_id, 0) + 1
         escalations[incident_id] = (plan_id, 1)
         # create tracking message if configured
         plan = cache.plans[plan_id]
@@ -458,6 +460,10 @@ def escalate():
                 'application': application,
                 'incident_created': created,
             }
+            if tracking_type == 'call':
+                # in case there are any plans with call tracking type that have not been cleaned up
+                logger.warning('Tracking messages do not support support call mode, ignoring tracking message')
+                continue
             if tracking_type == 'email':
                 tracking_message = {
                     'noreply': True,
@@ -506,6 +512,11 @@ def escalate():
     new_incidents_count = len(escalations)
     metrics.set('new_incidents_cnt', new_incidents_count)
     logger.info('[*] %s new incidents', new_incidents_count)
+
+    # log any plan that creates a high volume of incidents
+    for pln_id, cnt in incident_per_plan_cnt.items():
+        if cnt > 10:
+            logger.info("plan with id %d created %d incidents this loop iteration")
 
     # then, fetch message count for current incidents
     msg_count = 0
@@ -1812,6 +1823,7 @@ def main():
 
         elapsed_time = now - runtime
         nap_time = max(0, interval - elapsed_time)
+
         logger.info('--> sender loop finished in %s seconds - sleeping %s seconds',
                     elapsed_time, nap_time)
         sleep(nap_time)
