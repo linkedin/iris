@@ -313,7 +313,7 @@ def claim_incidents_from_batch_id(batch_id, owner):
 
 
 def msgpack_unpack_msg_from_socket(socket):
-    unpacker = msgpack.Unpacker(encoding='utf-8')
+    unpacker = msgpack.Unpacker()
     while True:
         buf = socket.recv(1024)
         if not buf:
