@@ -46,7 +46,7 @@ setuptools.setup(
         'Jinja2',
         'Markdown',
         'click',
-        'msgpack-python==0.4.5',
+        'msgpack==1.0.0',
         'cssmin',
         'beaker',
         'cryptography==2.3',
