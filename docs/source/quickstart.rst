@@ -332,8 +332,12 @@ Now, we can use the iris\_twilio vendor for sending messages. Let’s
 trigger another incident, using the “Test Plan” button for “Example
 plan” in the same way we did before. Make sure Iris sender is running,
 and wait for Iris to call. After a minute or so, you should receive a
-phone call from your Twilio number saying “test\_call”. ## Customizing
-call content Now that we’ve set up phone calls via Twilio, let’s
+phone call from your Twilio number saying “test\_call”.
+
+Customizing call content
+------------------------
+
+Now that we’ve set up phone calls via Twilio, let’s
 customize the message content to say something a little more useful than
 “test\_call”. To do that, we’ll need to modify the template that our
 escalation plan is using. If we examine the notifications in “Example
