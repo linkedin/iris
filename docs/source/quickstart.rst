@@ -175,7 +175,7 @@ then verify with curl:
 Creating an escalation plan
 ---------------------------
 
-Navigate to the "Plans" page using the top bar. Click “Create New Plan”
+Navigate to the "Plans" page using the top bar. Click "Create New Plan"
 on the top right to make a new escalation plan. |create-plan|
 
 Let's focus on the main content here. There’s additional settings for
@@ -188,29 +188,29 @@ claiming, escalation will stop, and no more messages will be sent.
 Defining terms:
 ---------------
 
-“Role” and “Target” determine the recipient of the message. Here, our
-role is “User”, and our target is “Demo”, meaning that we’re sending a
+"Role" and "Target" determine the recipient of the message. Here, our
+role is "User", and our target is "Demo", meaning that we’re sending a
 message to the demo user. Other roles allow for dynamic definitions in
-escalation plans; for example, the “Oncall-Primary” role allows Iris to
+escalation plans; for example, the "Oncall-Primary" role allows Iris to
 look up the on-call engineer for a target team when escalating. For now,
 we’ll just focus on user, which is the simplest role.
 
-“Priority” determines the importance of the message. Users can map
+"Priority" determines the importance of the message. Users can map
 different priorities to different contact modes. For example, user A
-might decide to map “medium” messages to SMS, while user B might map
+might decide to map "medium" messages to SMS, while user B might map
 medium to emails instead. By default, this mapping is: Low: email
 Medium: email High: sms Urgent: call
 
-“Wait” determines how many minutes to wait after sending a message
-before proceeding to the next one. “Count” determines how many times the
+"Wait" determines how many minutes to wait after sending a message
+before proceeding to the next one. "Count" determines how many times the
 message will be repeated before moving on.
 
-“Template” defines the template used to generate message content. Iris
+"Template" defines the template used to generate message content. Iris
 allows you to customize message content using this template definition.
 To generate the message, Iris will render the template with the incident
 context and pass along the resulting content.
 
-Finally, “Optional” allows messages to fail without raising an alert.
+Finally, "Optional" allows messages to fail without raising an alert.
 Otherwise, if Optional is false, a message that cannot be delivered will
 result in an alerting message sent to the plan creator. Setting this to
 true can be useful for (role, target) combinations that may not always
@@ -226,7 +226,7 @@ Let’s publish the plan with the button on the top right. Back in the
 Iris UI, give your new plan a test by clicking the button on the top
 right. Use the Autoalerts application. |test-incident|
 
-We’ve made an incident! But, if we navigate to the “Incidents” page,
+We’ve made an incident! But, if we navigate to the "Incidents" page,
 we’ll see that there’s no currently active incidents. This is because
 our incident hasn’t yet sent a message. For messages to be sent, we’ll
 need to get the Iris sender daemon running.
@@ -329,8 +329,8 @@ info for the demo user to match the number you verified with Twilio:
     AND mode_id IN (SELECT id FROM mode WHERE name='sms' OR name='call');
 
 Now, we can use the ``iris_twilio`` vendor for sending messages. Let’s
-trigger another incident, using the “Test Plan” button for “Example
-plan” in the same way we did before. Make sure Iris sender is running,
+trigger another incident, using the "Test Plan" button for "Example
+plan" in the same way we did before. Make sure Iris sender is running,
 and wait for Iris to call. After a minute or so, you should receive a
 phone call from your Twilio number saying "test\_call".
 
@@ -339,9 +339,9 @@ Customizing call content
 
 Now that we’ve set up phone calls via Twilio, let’s
 customize the message content to say something a little more useful than
-“test\_call”. To do that, we’ll need to modify the template that our
-escalation plan is using. If we examine the notifications in “Example
-plan”, we see that hey all use the “test\_template” message template.
+"test\_call". To do that, we’ll need to modify the template that our
+escalation plan is using. If we examine the notifications in "Example
+plan", we see that hey all use the "test\_template" message template.
 Let’s make some changes to that. Navigate to the Templates page, and
 click on test\_template in the list on that page. |template| Here, we
 see that test\_template defines message content for a number of
@@ -357,11 +357,11 @@ let’s change the content of the call message to:
     Hello world! {{ notes }}
 
 Clone the template, make the change, then publish the new template. This
-will deactivate the previous version of the template. The “Example plan”
-escalation plan will use the new version of “test\_template” when it
+will deactivate the previous version of the template. The "Example plan"
+escalation plan will use the new version of "test\_template" when it
 creates a message from now on, ignoring the previous version. Let’s
-check it out by testing “Example plan” again. We should get a call now
-saying “Hello world! This is a note.”
+check it out by testing "Example plan" again. We should get a call now
+saying "Hello world! This is a note."
 
 A deeper look at applications
 -----------------------------
@@ -372,7 +372,7 @@ into the concept of an Iris application. Each Iris app represents an
 integration with Iris. To explain this a more clearly, let’s look at
 Autoalerts as an example.
 
-Head to the “Applications” page, and click on Autoalerts in the list
+Head to the "Applications" page, and click on Autoalerts in the list
 that shows up. We should get something that looks like this:
 |application|
 
@@ -380,11 +380,11 @@ At the top, we see that the application defines a number of variables.
 When this application creates an Iris incident, it provides a context
 JSON object that defines these variables. As we saw earlier, this
 incident context is rendered via the escalation plan’s template to
-create the message content. When we trigger an incident with the “Test
-Plan” button, we use the sample context defined on this page as the
+create the message content. When we trigger an incident with the "Test
+Plan" button, we use the sample context defined on this page as the
 incident’s context. For example, in the previous section, we sent a
-phone call using the ``{{notes}}`` variable, which is defined as “This
-is a note” in the Autoalerts sample context.
+phone call using the ``{{notes}}`` variable, which is defined as "This
+is a note" in the Autoalerts sample context.
 
 Applications also define a context template, which defines the content
 of the Incident details page in the Iris UI. We can edit this template
@@ -416,7 +416,7 @@ pretty easy:
     iris.incident('Example plan', {'notes': 'This is a programmatic incident!'})
 
 Remember to make sure the sender is running, and wait for the new phone
-call. This one should now say “This is a programmatic incident”. If we
+call. This one should now say "This is a programmatic incident". If we
 define our message templates properly, our outbound messages can now
 include useful information about each incident.
 
