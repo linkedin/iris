@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>REST API &mdash; Iris 0.0.14 documentation</title>
+  <title>REST API &mdash; Iris 1.0.28 documentation</title>
   
 
   
@@ -23,7 +23,7 @@
       <script type="text/javascript">
           var DOCUMENTATION_OPTIONS = {
               URL_ROOT:'./',
-              VERSION:'0.0.14',
+              VERSION:'1.0.28',
               LANGUAGE:'None',
               COLLAPSE_INDEX:false,
               FILE_SUFFIX:'.html',
@@ -69,7 +69,7 @@
             
             
               <div class="version">
-                0.0.14
+                1.0.28
               </div>
             
           
@@ -106,11 +106,19 @@
 <li class="toctree-l4"><a class="reference internal" href="#v0-incidents">/v0/incidents</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-messages">/v0/messages</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-notifications">/v0/notifications</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-targets">/v0/targets</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-target-roles">/v0/target_roles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-templates">/v0/templates</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-users">/v0/users</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-modes">/v0/modes</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-applications">/v0/applications</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-priorities">/v0/priorities</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-response">/v0/response</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-twilio">/v0/twilio</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#v0-categories">/v0/categories</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-singlestats">/v0/singlestats</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-stats">/v0/stats</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#v0-timezones">/v0/timezones</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#healthcheck">/healthcheck</a></li>
 </ul>
 </li>
@@ -399,6 +407,18 @@ is provided to define the recipient of a message. See incidents POST endpoint fo
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-plans">
+<code class="descname">OPTIONS </code><code class="descname">/v0/plans</code><a class="headerlink" href="#options--v0-plans" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-plans-plan_id">
+<code class="descname">OPTIONS </code><code class="descname">/v0/plans/{plan_id}</code><a class="headerlink" href="#options--v0-plans-plan_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-incidents">
 <h3>/v0/incidents<a class="headerlink" href="#v0-incidents" title="Permalink to this headline">¶</a></h3>
@@ -501,7 +521,7 @@ specified, all fields will be returned.</p>
 <ul class="simple">
 <li>plan name is missing</li>
 <li>application is invalid</li>
-<li>context json blob is longer than 655355 bytes</li>
+<li>context json blob is longer than 65535 bytes</li>
 <li>none of the templates used in the plan supports the given application</li>
 </ul>
 <p>To create an incident for a dynamic plan (one that defines dynamic targets), an
@@ -534,6 +554,12 @@ Consider a dynamic plan defining two dynamic targets, indexed with 0 and 1. The
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-incidents">
+<code class="descname">OPTIONS </code><code class="descname">/v0/incidents</code><a class="headerlink" href="#options--v0-incidents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 <dl class="get">
@@ -618,9 +644,33 @@ any associated messages, preventing further escalation.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-incidents-incident_id">
+<code class="descname">OPTIONS </code><code class="descname">/v0/incidents/{incident_id}</code><a class="headerlink" href="#options--v0-incidents-incident_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-incidents-incident_id-comments">
+<code class="descname">OPTIONS </code><code class="descname">/v0/incidents/{incident_id}/comments</code><a class="headerlink" href="#options--v0-incidents-incident_id-comments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-incidents-claim">
+<code class="descname">OPTIONS </code><code class="descname">/v0/incidents/claim</code><a class="headerlink" href="#options--v0-incidents-claim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-messages">
 <h3>/v0/messages<a class="headerlink" href="#v0-messages" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-messages">
+<code class="descname">OPTIONS </code><code class="descname">/v0/messages</code><a class="headerlink" href="#options--v0-messages" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="get">
 <dt id="get--v0-messages-message_id">
 <code class="descname">GET </code><code class="descname">/v0/messages/{message_id}</code><a class="headerlink" href="#get--v0-messages-message_id" title="Permalink to this definition">¶</a></dt>
@@ -654,6 +704,12 @@ any associated messages, preventing further escalation.</p>
 </div>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-messages-message_id">
+<code class="descname">OPTIONS </code><code class="descname">/v0/messages/{message_id}</code><a class="headerlink" href="#options--v0-messages-message_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="get">
 <dt id="get--v0-messages-message_id-auditlog">
 <code class="descname">GET </code><code class="descname">/v0/messages/{message_id}/auditlog</code><a class="headerlink" href="#get--v0-messages-message_id-auditlog" title="Permalink to this definition">¶</a></dt>
@@ -680,6 +736,12 @@ any associated messages, preventing further escalation.</p>
 </div>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-messages-message_id-auditlog">
+<code class="descname">OPTIONS </code><code class="descname">/v0/messages/{message_id}/auditlog</code><a class="headerlink" href="#options--v0-messages-message_id-auditlog" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-notifications">
 <h3>/v0/notifications<a class="headerlink" href="#v0-notifications" title="Permalink to this headline">¶</a></h3>
@@ -697,8 +759,6 @@ send messages directly to mailing lists or slack channels.
 Note that if you use this role you MUST specify the mode key but not the priority.
 This role will set the destination to the target value so make sure the target
 is a valid email address, slack channel, slack username, etc.</p>
-<p>If you define a category users will be able to define how they wish to receive that notification by category.
-To use a category you must first define it for your application from your application page or through an api call.</p>
 <p>Multi-recipient messages are supported for notifications explicitly specifying the
 &#8220;email&#8221; mode. To send a multi-recipient message, specify a list of objects defining
 &#8220;role&#8221; and &#8220;target&#8221; attributes. All roles, including &#8220;literal_target&#8221;, are
@@ -729,18 +789,6 @@ to true. If no bcc attribute is defined for a target, the default value is false
     <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
     <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
     <span class="nt">&quot;mode&quot;</span><span class="p">:</span> <span class="s2">&quot;email&quot;</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<div class="highlight-http"><div class="highlight"><pre><span></span><span class="nf">POST</span> <span class="nn">/v0/notifications</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
-<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
-
-<span class="p">{</span>
-    <span class="nt">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
-    <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_user&quot;</span><span class="p">,</span>
-    <span class="nt">&quot;subject&quot;</span><span class="p">:</span> <span class="s2">&quot;wake up&quot;</span><span class="p">,</span>
-    <span class="nt">&quot;body&quot;</span><span class="p">:</span> <span class="s2">&quot;something is on fire&quot;</span><span class="p">,</span>
-    <span class="nt">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;category_name&quot;</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -823,6 +871,33 @@ Content-Type: application/json
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-notifications">
+<code class="descname">OPTIONS </code><code class="descname">/v0/notifications</code><a class="headerlink" href="#options--v0-notifications" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-targets">
+<h3>/v0/targets<a class="headerlink" href="#v0-targets" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-targets">
+<code class="descname">OPTIONS </code><code class="descname">/v0/targets</code><a class="headerlink" href="#options--v0-targets" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-targets-target_type">
+<code class="descname">OPTIONS </code><code class="descname">/v0/targets/{target_type}</code><a class="headerlink" href="#options--v0-targets-target_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-targets-target_type-exists">
+<code class="descname">OPTIONS </code><code class="descname">/v0/targets/{target_type}/exists</code><a class="headerlink" href="#options--v0-targets-target_type-exists" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-target-roles">
 <h3>/v0/target_roles<a class="headerlink" href="#v0-target-roles" title="Permalink to this headline">¶</a></h3>
@@ -852,9 +927,42 @@ Content-Type: application/json
 </div>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-target_roles">
+<code class="descname">OPTIONS </code><code class="descname">/v0/target_roles</code><a class="headerlink" href="#options--v0-target_roles" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-templates">
+<h3>/v0/templates<a class="headerlink" href="#v0-templates" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-templates">
+<code class="descname">OPTIONS </code><code class="descname">/v0/templates</code><a class="headerlink" href="#options--v0-templates" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-templates-template_id">
+<code class="descname">OPTIONS </code><code class="descname">/v0/templates/{template_id}</code><a class="headerlink" href="#options--v0-templates-template_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-users">
 <h3>/v0/users<a class="headerlink" href="#v0-users" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-users-username">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/{username}</code><a class="headerlink" href="#options--v0-users-username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-username-in_lists">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/{username}/in_lists</code><a class="headerlink" href="#options--v0-users-username-in_lists" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="delete">
 <dt id="delete--v0-users-username-categories">
 <code class="descname">DELETE </code><code class="descname">/v0/users/{username}/categories</code><a class="headerlink" href="#delete--v0-users-username-categories" title="Permalink to this definition">¶</a></dt>
@@ -965,6 +1073,12 @@ another setting.</p>
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-username-categories">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/{username}/categories</code><a class="headerlink" href="#options--v0-users-username-categories" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 <dl class="delete">
@@ -1079,6 +1193,18 @@ another setting.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-users-username-categories-application">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/{username}/categories/{application}</code><a class="headerlink" href="#options--v0-users-username-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-settings-username">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/settings/{username}</code><a class="headerlink" href="#options--v0-users-settings-username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="get">
 <dt id="get--v0-users-modes-username">
 <code class="descname">GET </code><code class="descname">/v0/users/modes/{username}</code><a class="headerlink" href="#get--v0-users-modes-username" title="Permalink to this definition">¶</a></dt>
@@ -1190,6 +1316,24 @@ the URL, to admins, and to apps that can authenticate as users.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-users-modes-username">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/modes/{username}</code><a class="headerlink" href="#options--v0-users-modes-username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-overrides-username">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/overrides/{username}</code><a class="headerlink" href="#options--v0-users-overrides-username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-reprioritization-username">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/reprioritization/{username}</code><a class="headerlink" href="#options--v0-users-reprioritization-username" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="delete">
 <dt id="delete--v0-users-reprioritization-username-src_mode_name">
 <code class="descname">DELETE </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#delete--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
@@ -1219,6 +1363,12 @@ the URL, to admins, and to apps that can authenticate as users.</p>
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-users-reprioritization-username-src_mode_name">
+<code class="descname">OPTIONS </code><code class="descname">/v0/users/reprioritization/{username}/{src_mode_name}</code><a class="headerlink" href="#options--v0-users-reprioritization-username-src_mode_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 </div>
@@ -1255,9 +1405,57 @@ the URL, to admins, and to apps that can authenticate as users.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-modes">
+<code class="descname">OPTIONS </code><code class="descname">/v0/modes</code><a class="headerlink" href="#options--v0-modes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="v0-applications">
 <h3>/v0/applications<a class="headerlink" href="#v0-applications" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-applications">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications</code><a class="headerlink" href="#options--v0-applications" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}</code><a class="headerlink" href="#options--v0-applications-app_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-quota">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/quota</code><a class="headerlink" href="#options--v0-applications-app_name-quota" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-stats">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/stats</code><a class="headerlink" href="#options--v0-applications-app_name-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-key">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/key</code><a class="headerlink" href="#options--v0-applications-app_name-key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-rekey">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/rekey</code><a class="headerlink" href="#options--v0-applications-app_name-rekey" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-secondary">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/secondary</code><a class="headerlink" href="#options--v0-applications-app_name-secondary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="get">
 <dt id="get--v0-applications-app_name-incident_emails">
 <code class="descname">GET </code><code class="descname">/v0/applications/{app_name}/incident_emails</code><a class="headerlink" href="#get--v0-applications-app_name-incident_emails" title="Permalink to this definition">¶</a></dt>
@@ -1290,6 +1488,18 @@ the URL, to admins, and to apps that can authenticate as users.</p>
 </tr>
 </tbody>
 </table>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-incident_emails">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/incident_emails</code><a class="headerlink" href="#options--v0-applications-app_name-incident_emails" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-rename">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/rename</code><a class="headerlink" href="#options--v0-applications-app_name-rename" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 <dl class="get">
@@ -1325,6 +1535,69 @@ that defines content for that application.</p>
 <span class="p">]</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-applications-app_name-plans">
+<code class="descname">OPTIONS </code><code class="descname">/v0/applications/{app_name}/plans</code><a class="headerlink" href="#options--v0-applications-app_name-plans" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-priorities">
+<h3>/v0/priorities<a class="headerlink" href="#v0-priorities" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-priorities">
+<code class="descname">OPTIONS </code><code class="descname">/v0/priorities</code><a class="headerlink" href="#options--v0-priorities" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-response">
+<h3>/v0/response<a class="headerlink" href="#v0-response" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-response-gmail">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/gmail</code><a class="headerlink" href="#options--v0-response-gmail" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-response-email">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/email</code><a class="headerlink" href="#options--v0-response-email" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-response-gmail-oneclick">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/gmail-oneclick</code><a class="headerlink" href="#options--v0-response-gmail-oneclick" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-response-twilio-calls">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/twilio/calls</code><a class="headerlink" href="#options--v0-response-twilio-calls" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-response-twilio-messages">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/twilio/messages</code><a class="headerlink" href="#options--v0-response-twilio-messages" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--v0-response-slack">
+<code class="descname">OPTIONS </code><code class="descname">/v0/response/slack</code><a class="headerlink" href="#options--v0-response-slack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-twilio">
+<h3>/v0/twilio<a class="headerlink" href="#v0-twilio" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-twilio-deliveryupdate">
+<code class="descname">OPTIONS </code><code class="descname">/v0/twilio/deliveryupdate</code><a class="headerlink" href="#options--v0-twilio-deliveryupdate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 </div>
@@ -1412,6 +1685,12 @@ the app&#8217;s categories to match the list passed in.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-categories">
+<code class="descname">OPTIONS </code><code class="descname">/v0/categories</code><a class="headerlink" href="#options--v0-categories" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 <dl class="get">
 <dt id="get--v0-categories-application">
 <code class="descname">GET </code><code class="descname">/v0/categories/{application}</code><a class="headerlink" href="#get--v0-categories-application" title="Permalink to this definition">¶</a></dt>
@@ -1494,6 +1773,39 @@ the app&#8217;s categories to match the list passed in.</p>
 </table>
 </dd></dl>
 
+<dl class="options">
+<dt id="options--v0-categories-application">
+<code class="descname">OPTIONS </code><code class="descname">/v0/categories/{application}</code><a class="headerlink" href="#options--v0-categories-application" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-singlestats">
+<h3>/v0/singlestats<a class="headerlink" href="#v0-singlestats" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-singlestats-stat_name">
+<code class="descname">OPTIONS </code><code class="descname">/v0/singlestats/{stat_name}</code><a class="headerlink" href="#options--v0-singlestats-stat_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-stats">
+<h3>/v0/stats<a class="headerlink" href="#v0-stats" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-stats">
+<code class="descname">OPTIONS </code><code class="descname">/v0/stats</code><a class="headerlink" href="#options--v0-stats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="v0-timezones">
+<h3>/v0/timezones<a class="headerlink" href="#v0-timezones" title="Permalink to this headline">¶</a></h3>
+<dl class="options">
+<dt id="options--v0-timezones">
+<code class="descname">OPTIONS </code><code class="descname">/v0/timezones</code><a class="headerlink" href="#options--v0-timezones" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="healthcheck">
 <h3>/healthcheck<a class="headerlink" href="#healthcheck" title="Permalink to this headline">¶</a></h3>
@@ -1512,6 +1824,12 @@ the app&#8217;s categories to match the list passed in.</p>
 GOOD
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="options">
+<dt id="options--healthcheck">
+<code class="descname">OPTIONS </code><code class="descname">/healthcheck</code><a class="headerlink" href="#options--healthcheck" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default options responder.</p>
 </dd></dl>
 
 </div>

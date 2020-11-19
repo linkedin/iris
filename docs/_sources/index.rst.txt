@@ -41,6 +41,7 @@ Table of contents
    :maxdepth: 2
 
    user_manual
+   quickstart
    admin_manual
    api
 
