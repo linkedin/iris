@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>HTTP Routing Table &mdash; Iris 0.0.14 documentation</title>
+  <title>HTTP Routing Table &mdash; Iris 1.0.28 documentation</title>
   
 
   
@@ -23,7 +23,7 @@
       <script type="text/javascript">
           var DOCUMENTATION_OPTIONS = {
               URL_ROOT:'./',
-              VERSION:'0.0.14',
+              VERSION:'1.0.28',
               LANGUAGE:'None',
               COLLAPSE_INDEX:false,
               FILE_SUFFIX:'.html',
@@ -74,7 +74,7 @@
             
             
               <div class="version">
-                0.0.14
+                1.0.28
               </div>
             
           
@@ -180,6 +180,11 @@
        <td>
        <a href="rest_api.html#get--healthcheck"><code class="xref">GET /healthcheck</code></a></td><td>
        <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--healthcheck"><code class="xref">OPTIONS /healthcheck</code></a></td><td>
+       <em></em></td></tr>
      <tr class="pcap"><td></td><td>&#160;</td><td></td></tr>
      <tr class="cap" id="cap-/v0"><td></td><td>
        <strong>/v0</strong></td><td></td></tr>
@@ -192,6 +197,16 @@
        <td></td>
        <td>
        <a href="rest_api.html#get--v0-applications-app_name-plans"><code class="xref">GET /v0/applications/{app_name}/plans</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#get--v0-categories"><code class="xref">GET /v0/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#get--v0-categories-application"><code class="xref">GET /v0/categories/{application}</code></a></td><td>
        <em></em></td></tr>
      <tr>
        <td></td>
@@ -231,6 +246,31 @@
      <tr>
        <td></td>
        <td>
+       <a href="rest_api.html#get--v0-users-modes-username"><code class="xref">GET /v0/users/modes/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#get--v0-users-username-categories"><code class="xref">GET /v0/users/{username}/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#get--v0-users-username-categories-application"><code class="xref">GET /v0/users/{username}/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#post--v0-categories"><code class="xref">POST /v0/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#post--v0-categories-application"><code class="xref">POST /v0/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
        <a href="rest_api.html#post--v0-incidents"><code class="xref">POST /v0/incidents</code></a></td><td>
        <em></em></td></tr>
      <tr>
@@ -251,7 +291,277 @@
      <tr>
        <td></td>
        <td>
+       <a href="rest_api.html#post--v0-users-modes-username"><code class="xref">POST /v0/users/modes/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#post--v0-users-username-categories"><code class="xref">POST /v0/users/{username}/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#post--v0-users-username-categories-application"><code class="xref">POST /v0/users/{username}/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
        <a href="rest_api.html#delete--v0-users-reprioritization-username-src_mode_name"><code class="xref">DELETE /v0/users/reprioritization/{username}/{src_mode_name}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#delete--v0-users-username-categories"><code class="xref">DELETE /v0/users/{username}/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#delete--v0-users-username-categories-application"><code class="xref">DELETE /v0/users/{username}/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications"><code class="xref">OPTIONS /v0/applications</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name"><code class="xref">OPTIONS /v0/applications/{app_name}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-incident_emails"><code class="xref">OPTIONS /v0/applications/{app_name}/incident_emails</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-key"><code class="xref">OPTIONS /v0/applications/{app_name}/key</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-plans"><code class="xref">OPTIONS /v0/applications/{app_name}/plans</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-quota"><code class="xref">OPTIONS /v0/applications/{app_name}/quota</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-rekey"><code class="xref">OPTIONS /v0/applications/{app_name}/rekey</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-rename"><code class="xref">OPTIONS /v0/applications/{app_name}/rename</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-secondary"><code class="xref">OPTIONS /v0/applications/{app_name}/secondary</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-applications-app_name-stats"><code class="xref">OPTIONS /v0/applications/{app_name}/stats</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-categories"><code class="xref">OPTIONS /v0/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-categories-application"><code class="xref">OPTIONS /v0/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-incidents"><code class="xref">OPTIONS /v0/incidents</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-incidents-claim"><code class="xref">OPTIONS /v0/incidents/claim</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-incidents-incident_id"><code class="xref">OPTIONS /v0/incidents/{incident_id}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-incidents-incident_id-comments"><code class="xref">OPTIONS /v0/incidents/{incident_id}/comments</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-messages"><code class="xref">OPTIONS /v0/messages</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-messages-message_id"><code class="xref">OPTIONS /v0/messages/{message_id}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-messages-message_id-auditlog"><code class="xref">OPTIONS /v0/messages/{message_id}/auditlog</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-modes"><code class="xref">OPTIONS /v0/modes</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-notifications"><code class="xref">OPTIONS /v0/notifications</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-plans"><code class="xref">OPTIONS /v0/plans</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-plans-plan_id"><code class="xref">OPTIONS /v0/plans/{plan_id}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-priorities"><code class="xref">OPTIONS /v0/priorities</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-email"><code class="xref">OPTIONS /v0/response/email</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-gmail"><code class="xref">OPTIONS /v0/response/gmail</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-gmail-oneclick"><code class="xref">OPTIONS /v0/response/gmail-oneclick</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-slack"><code class="xref">OPTIONS /v0/response/slack</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-twilio-calls"><code class="xref">OPTIONS /v0/response/twilio/calls</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-response-twilio-messages"><code class="xref">OPTIONS /v0/response/twilio/messages</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-singlestats-stat_name"><code class="xref">OPTIONS /v0/singlestats/{stat_name}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-stats"><code class="xref">OPTIONS /v0/stats</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-target_roles"><code class="xref">OPTIONS /v0/target_roles</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-targets"><code class="xref">OPTIONS /v0/targets</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-targets-target_type"><code class="xref">OPTIONS /v0/targets/{target_type}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-targets-target_type-exists"><code class="xref">OPTIONS /v0/targets/{target_type}/exists</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-templates"><code class="xref">OPTIONS /v0/templates</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-templates-template_id"><code class="xref">OPTIONS /v0/templates/{template_id}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-timezones"><code class="xref">OPTIONS /v0/timezones</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-twilio-deliveryupdate"><code class="xref">OPTIONS /v0/twilio/deliveryupdate</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-modes-username"><code class="xref">OPTIONS /v0/users/modes/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-overrides-username"><code class="xref">OPTIONS /v0/users/overrides/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-reprioritization-username"><code class="xref">OPTIONS /v0/users/reprioritization/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-reprioritization-username-src_mode_name"><code class="xref">OPTIONS /v0/users/reprioritization/{username}/{src_mode_name}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-settings-username"><code class="xref">OPTIONS /v0/users/settings/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-username"><code class="xref">OPTIONS /v0/users/{username}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-username-categories"><code class="xref">OPTIONS /v0/users/{username}/categories</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-username-categories-application"><code class="xref">OPTIONS /v0/users/{username}/categories/{application}</code></a></td><td>
+       <em></em></td></tr>
+     <tr>
+       <td></td>
+       <td>
+       <a href="rest_api.html#options--v0-users-username-in_lists"><code class="xref">OPTIONS /v0/users/{username}/in_lists</code></a></td><td>
        <em></em></td></tr>
    </table>
 
