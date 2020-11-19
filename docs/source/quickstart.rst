@@ -9,12 +9,12 @@ installed/configured properly:
 
  - Git
  - MySQL 5.7
- - Python 2.7
+ - Python 3.x
 
 Setting things up
 -----------------
 
-First thing's first: clone the Iris repo:
+First thing's first, clone the Iris repo:
 
 .. code:: sh
 
@@ -63,9 +63,10 @@ then run:
     mysql -u iris -p < ./db/schema_0.sql
     mysql -u iris -p -o iris < ./db/dummy_data.sql
 
-dummy\_data.sql contains the following entities: - user demo with
-password demo - team demo\_team - application Autoalerts with key:
-a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49
+``dummy_data.sql`` contains the following entities:
+ - user ``demo`` with password ``demo``
+ - team ``demo_team``
+ - application Autoalerts with key: ``a7a9d7657ac8837cd7dfed0b93f4b8b864007724d7fa21422c24f4ff0adb2e49``
 
 Confirm that this is successful:
 
@@ -263,7 +264,7 @@ claim the incident from the UI to stop further escalation.
 
 Sending a real message If we want to send a real message, we’ll first
 need to configure Iris sender to use a different message vendor.
-Currently, the config is set up to use the iris\_dummy vendor, which
+Currently, the config is set up to use the ``iris_dummy`` vendor, which
 logs messages without actually sending anything. Instead of that, let’s
 set up something using Twilio, which provides call and SMS services. You
 can set up a free Twilio account pretty easily at `this
@@ -297,28 +298,27 @@ configuration for the Twilio message vendor:
     #  twilio_number: ''
     #  relay_base_url: ''
 
-Change this to match below, filling in the account\_sid, auth\_token,
-and twilio\_number fields appropriately. We’ll also need to fill in the
-relay\_base\_url with the url of our TwiML bin, and configure the
-say/gather endpoints to the empty string. This way, Twilio will hit the
+Change this to match below, filling in the ``account_sid``, ``auth_token``,
+and ``twilio_number`` fields appropriately. We’ll also need to fill in the
+``relay_base_url`` with the url of our TwiML bin, and configure the
+``say``/``gather`` endpoints to the empty string. This way, Twilio will hit the
 TwiML bin URL without any trailing endpoint, which is needed for this to
 work properly. When you’re done, the config should look like this:
 
-.. raw:: html
+::
 
    - type: iris_twilio
      name: twilio_1
-     account_sid: ‘AC123…’
-     auth_token: ‘abc…’
-     twilio_number: ‘+11234567890’
+     account_sid: 'AC123…'
+     auth_token: 'abc…'
+     twilio_number: '+11234567890'
      relay_base_url: 'https://handler.twilio.com/abc'
-     say_endpoint: ‘’
-     gather_endpoint: ‘'
-   </pre>
+     say_endpoint: ''
+     gather_endpoint: ''
 
-We’ll need to remove the “[]” from the ``vendors: []`` line on 118, and
-set ``debug: False`` in the sender settings on line 59. Re-run make/make
-sender to pick up the new configurations. Finally, change the contact
+We’ll need to remove the ``[]`` from the ``vendors: []`` line on 118, and
+set ``debug: False`` in the sender settings on line 59. Re-run ``make``/``make
+sender`` to pick up the new configurations. Finally, change the contact
 info for the demo user to match the number you verified with Twilio:
 
 .. code:: sql
@@ -328,11 +328,11 @@ info for the demo user to match the number you verified with Twilio:
     WHERE target_id = (SELECT id FROM target WHERE name = 'demo' AND type_id = 1)
     AND mode_id IN (SELECT id FROM mode WHERE name='sms' OR name='call');
 
-Now, we can use the iris\_twilio vendor for sending messages. Let’s
+Now, we can use the ``iris_twilio`` vendor for sending messages. Let’s
 trigger another incident, using the “Test Plan” button for “Example
 plan” in the same way we did before. Make sure Iris sender is running,
 and wait for Iris to call. After a minute or so, you should receive a
-phone call from your Twilio number saying “test\_call”.
+phone call from your Twilio number saying "test\_call".
 
 Customizing call content
 ------------------------
@@ -389,8 +389,8 @@ is a note” in the Autoalerts sample context.
 Applications also define a context template, which defines the content
 of the Incident details page in the Iris UI. We can edit this template
 here and see the result when we navigate back to the incident detail
-page. For example, try adding a “<h2> Hello World! </h2>” below the
-“{{#context}}” line. When we take a look at any of our previous
+page. For example, try adding a ``<h2> Hello World! </h2>`` below the
+``{{#context}}`` line. When we take a look at any of our previous
 incidents, we get: |hello-context|
 
 Finally, the summary template defines the content on the incident list
@@ -448,7 +448,7 @@ Adding authentication
 
 At LinkedIn, we use LDAP for authentication. We’ve provided an
 authentication module that leverages this, with example configuration
-values in configs/config.dev.yaml. In addition, in src/iris/ui/auth, we
+values in configs/config.dev.yaml. In addition, in ``src/iris/ui/auth``, we
 define several sample Authenticator classes, which define a constructor
 and the ``authenticate(user, password)`` method. Using this interface,
 custom authentication can be implemented with a variety of different
