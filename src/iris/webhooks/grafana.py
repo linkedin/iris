@@ -46,6 +46,9 @@ class grafana(object):
 
             app = req.context['app']
 
+            if not session.execute('SELECT EXISTS(SELECT 1 FROM `application` WHERE id = :id)', {'id': app['id']}).scalar():
+                raise HTTPBadRequest('Invalid application')
+
             context_json_str = self.create_context(alert_params)
 
             app_template_count = session.execute('''
