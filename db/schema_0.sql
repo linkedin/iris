@@ -65,10 +65,7 @@ CREATE TABLE `incident` (
   KEY `ix_incident_owner_id` (`owner_id`),
   KEY `ix_incident_active` (`active`),
   KEY `ix_incident_application_id` (`application_id`),
-  KEY `ix_incident_created` (`created`),
-  CONSTRAINT `incident_ibfk_1` FOREIGN KEY (`plan_id`) REFERENCES `plan` (`id`),
-  CONSTRAINT `incident_ibfk_2` FOREIGN KEY (`owner_id`) REFERENCES `user` (`target_id`),
-  CONSTRAINT `incident_ibfk_3` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
+  KEY `ix_incident_created` (`created`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -108,15 +105,7 @@ CREATE TABLE `message` (
   KEY `ix_message_target_id` (`target_id`),
   KEY `ix_message_mode_id` (`mode_id`),
   KEY `ix_message_active` (`active`),
-  KEY `message_ibfk_8` (`template_id`),
-  CONSTRAINT `message_ibfk_1` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`),
-  CONSTRAINT `message_ibfk_2` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`),
-  CONSTRAINT `message_ibfk_3` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`),
-  CONSTRAINT `message_ibfk_4` FOREIGN KEY (`plan_id`) REFERENCES `plan` (`id`),
-  CONSTRAINT `message_ibfk_5` FOREIGN KEY (`priority_id`) REFERENCES `priority` (`id`),
-  CONSTRAINT `message_ibfk_6` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`),
-  CONSTRAINT `message_ibfk_7` FOREIGN KEY (`plan_notification_id`) REFERENCES `plan_notification` (`id`),
-  CONSTRAINT `message_ibfk_8` FOREIGN KEY (`template_id`) REFERENCES `template` (`id`)
+  KEY `message_ibfk_8` (`template_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
