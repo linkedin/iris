@@ -1660,9 +1660,9 @@ def log_sender_master():
 
 
 def init_sender(config):
-    gevent.signal(signal.SIGINT, sender_shutdown)
-    gevent.signal(signal.SIGTERM, sender_shutdown)
-    gevent.signal(signal.SIGQUIT, sender_shutdown)
+    gevent.signal_handler(signal.SIGINT, sender_shutdown)
+    gevent.signal_handler(signal.SIGTERM, sender_shutdown)
+    gevent.signal_handler(signal.SIGQUIT, sender_shutdown)
 
     process_title = config['sender'].get('process_title')
 
