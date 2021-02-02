@@ -36,7 +36,7 @@ setuptools.setup(
         'slackclient==0.16',
         'PyYAML',
         'greenlet==0.4.16',
-        'gevent==1.4.0',
+        'gevent==1.5.0',
         'falcon==1.4.1',
         'falcon-cors',
         'ujson==1.35',
