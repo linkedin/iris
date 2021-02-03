@@ -5021,7 +5021,8 @@ class UserToSlackID(object):
 
         # check if slack integration is enabled
         if not self.slack_cfg:
-            raise HTTPNotFound('Slack integration is not configured')
+            resp.body = 'Slack integration is not configured'
+            raise HTTPNotFound()
 
         if username in cache.slack_ids:
             slack_id = cache.slack_ids.get(username)
@@ -5043,17 +5044,22 @@ class UserToSlackID(object):
         cursor.close()
         conn.close()
         if user_email is None:
-            raise HTTPBadRequest('User does not exist in Iris')
+            resp.body = 'User does not exist in Iris'
+            raise HTTPBadRequest()
 
         # query slack for user id from email address
         slack_vendor = iris_slack(self.slack_cfg)
-        slack_id = slack_vendor.lookup_by_email(user_email['destination'])
+        try:
+            slack_id = slack_vendor.lookup_by_email(user_email['destination'])
+        except Exception as e:
+            raise HTTPInternalServerError()
         if slack_id:
             cache.add_slack_id(username, slack_id)
             resp.status = HTTP_201
             resp.body = ujson.dumps({'slack_id': slack_id})
         else:
-            raise HTTPNotFound('could not find a slack id for this user')
+            resp.body = 'Failed to get id from Slack'
+            raise HTTPNotFound()
 
 
 class CategoryOverrides(object):
