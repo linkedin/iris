@@ -4987,6 +4987,7 @@ class NotificationCategories(object):
             cursor.close()
             conn.close()
 
+
 class UserToSlackID(object):
     allow_read_no_auth = True
 
@@ -5043,9 +5044,10 @@ class UserToSlackID(object):
         slack_id = slack_vendor.lookup_by_email(user_email['destination'])
         if slack_id:
             resp.status = HTTP_201
-            resp.body = ujson.dumps({'slack_id':slack_id})
+            resp.body = ujson.dumps({'slack_id': slack_id})
         else:
             raise HTTPNotFound('could not find a slack id for this user')
+
 
 class CategoryOverrides(object):
     enforce_user = True

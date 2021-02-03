@@ -32,7 +32,7 @@ class iris_slack(object):
         self.sleep_range = config.get('sleep_range', 4)
         self.message_attachments = self.config.get('message_attachments', {})
 
-    def lookup_by_email(self,email):
+    def lookup_by_email(self, email):
         lookup_endpoint = self.config['base_url'] + "/users.lookupByEmail"
         payload = {'token': self.config['auth_token'], 'email': email}
         try:
