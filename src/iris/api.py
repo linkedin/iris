@@ -5023,6 +5023,12 @@ class UserToSlackID(object):
         if not self.slack_cfg:
             raise HTTPNotFound('Slack integration is not configured')
 
+        if username in cache.slack_ids:
+            slack_id = cache.slack_ids.get(username)
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({'slack_id': slack_id})
+            return
+
         # get user's email address
         query = '''
             SELECT `target_contact`.`destination`
@@ -5043,6 +5049,7 @@ class UserToSlackID(object):
         slack_vendor = iris_slack(self.slack_cfg)
         slack_id = slack_vendor.lookup_by_email(user_email['destination'])
         if slack_id:
+            cache.add_slack_id(username, slack_id)
             resp.status = HTTP_201
             resp.body = ujson.dumps({'slack_id': slack_id})
         else:
