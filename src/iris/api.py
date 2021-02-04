@@ -5052,7 +5052,7 @@ class UserToSlackID(object):
         try:
             slack_id = slack_vendor.lookup_by_email(user_email['destination'])
         except Exception as e:
-            raise HTTPInternalServerError()
+            raise HTTPInternalServerError(description=e)
         if slack_id:
             cache.add_slack_id(username, slack_id)
             resp.status = HTTP_201
