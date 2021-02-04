@@ -32,6 +32,26 @@ class iris_slack(object):
         self.sleep_range = config.get('sleep_range', 4)
         self.message_attachments = self.config.get('message_attachments', {})
 
+    def lookup_by_email(self, email):
+        lookup_endpoint = self.config['base_url'] + "/users.lookupByEmail"
+        payload = {'token': self.config['auth_token'], 'email': email}
+        try:
+            response = requests.post(lookup_endpoint,
+                                     data=payload,
+                                     proxies=self.proxy,
+                                     timeout=self.timeout)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('ok') and data.get('user'):
+                    if data['user'].get('id'):
+                        return data['user']['id']
+
+            logger.error('Failed resolve user id from email: %d', response.status_code)
+            return False
+        except Exception:
+            logger.exception('Slack post request failed')
+            raise
+
     def construct_attachments(self, message):
         # TODO: Verify title, title_link and text.
         att_json = {
@@ -90,8 +110,9 @@ class iris_slack(object):
     def send_message(self, message):
         start = time.time()
         payload = self.get_message_payload(message)
+        message_endpoint = self.config['base_url'] + "/chat.postMessage"
         try:
-            response = requests.post(self.config['base_url'],
+            response = requests.post(message_endpoint,
                                      data=payload,
                                      proxies=self.proxy,
                                      timeout=self.timeout)

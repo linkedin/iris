@@ -11,6 +11,7 @@ priorities = {}    # name -> dict of info
 target_types = {}  # name -> id
 target_roles = {}  # name -> id
 modes = {}         # name -> id
+slack_ids = {}     # name -> id
 
 
 def cache_applications():
@@ -90,6 +91,12 @@ def cache_modes():
     modes = dict(cursor)
     cursor.close()
     connection.close()
+
+
+def add_slack_id(username, slack_id):
+    global slack_ids
+    # slack ids shouldn't change so we don't have to worry about refreshing them
+    slack_ids[username] = slack_id
 
 
 def init():

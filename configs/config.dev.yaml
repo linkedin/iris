@@ -176,7 +176,7 @@ vendors: []
 #- type: iris_slack
 #  name: slack
 #  auth_token: ''
-#  base_url: 'https://slack.com/api/chat.postMessage'
+#  base_url: 'https://slack.com/api'
 #  iris_incident_url: ''
 #  proxy: *proxy_shared
 #  message_attachments:

@@ -33,6 +33,7 @@ from . import cache
 from . import ui
 from . import app_stats
 from .config import load_config
+from iris.vendors.iris_slack import iris_slack
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
@@ -4987,6 +4988,80 @@ class NotificationCategories(object):
             conn.close()
 
 
+class UserToSlackID(object):
+    allow_read_no_auth = True
+
+    def __init__(self, config):
+        cfg = config.get('vendors', [])
+        self.slack_cfg = {}
+        for vendor in cfg:
+            if vendor.get('name') == "slack":
+                self.slack_cfg = vendor
+
+    def on_get(self, req, resp, username):
+        '''
+        Retrieve the slack user ID that corresponds to an Iris username.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/jdoe/slackid HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+                {
+                    "slack_id": "12345ABCD",
+                }
+        '''
+
+        # check if slack integration is enabled
+        if not self.slack_cfg:
+            resp.body = 'Slack integration is not configured'
+            raise HTTPNotFound()
+
+        if username in cache.slack_ids:
+            slack_id = cache.slack_ids.get(username)
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({'slack_id': slack_id})
+            return
+
+        # get user's email address
+        query = '''
+            SELECT `target_contact`.`destination`
+            FROM `target_contact` JOIN `mode` ON `mode`.`id` = `target_contact`.`mode_id`
+            JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
+            WHERE `target`.`name` = %s AND `mode`.`name` = "email"'''
+        query_params = [username]
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(query, query_params)
+        user_email = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if user_email is None:
+            resp.body = 'User does not exist in Iris'
+            raise HTTPBadRequest()
+
+        # query slack for user id from email address
+        slack_vendor = iris_slack(self.slack_cfg)
+        try:
+            slack_id = slack_vendor.lookup_by_email(user_email['destination'])
+        except Exception as e:
+            raise HTTPInternalServerError(description=e)
+        if slack_id:
+            cache.add_slack_id(username, slack_id)
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({'slack_id': slack_id})
+        else:
+            resp.body = 'Failed to get id from Slack'
+            raise HTTPNotFound()
+
+
 class CategoryOverrides(object):
     enforce_user = True
     allow_read_no_auth = False
@@ -5240,6 +5315,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/categories', NotificationCategories())
     api.add_route('/v0/categories/{application}', NotificationCategories())
     api.add_route('/v0/users/{username}/categories', CategoryOverrides())
+    api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     mobile_config = config.get('iris-mobile', {})
