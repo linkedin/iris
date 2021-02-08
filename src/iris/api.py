@@ -161,7 +161,8 @@ incident_columns = {
     'created': 'UNIX_TIMESTAMP(`incident`.`created`) as `created`',
     'owner': '`target`.`name` as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
-    'title_variable_name': '`template_variable`.`name` as `title_variable_name`'
+    'title_variable_name': '`template_variable`.`name` as `title_variable_name`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filters = {
@@ -175,6 +176,7 @@ incident_filters = {
     'created': '`incident`.`created`',
     'owner': '`target`.`name`',
     'current_step': '`incident`.`current_step`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filter_types = {
@@ -200,7 +202,8 @@ single_incident_query = '''SELECT `incident`.`id` as `id`,
     `target`.`name` as `owner`,
     `application`.`name` as `application`,
     `incident`.`current_step` as `current_step`,
-    `incident`.`active` as `active`
+    `incident`.`active` as `active`,
+    `incident`.`resolved` as `resolved`
 FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
@@ -1871,6 +1874,24 @@ class Incident(object):
         resp.body = ujson.dumps({'incident_id': incident_id,
                                  'owner': owner,
                                  'active': is_active})
+
+
+class Resolved(object):
+    allow_read_no_auth = False
+
+    def on_post(self, req, resp, incident_id):
+
+        incident_params = ujson.loads(req.context['body'])
+        if 'resolved' not in incident_params:
+            raise HTTPBadRequest('resolved field required')
+        resolved = incident_params.get('resolved')
+        try:
+            utils.resolve_incident(incident_id, resolved)
+        except Exception as e:
+            raise HTTPInternalServerError(description=e)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'incident_id': incident_id,
+                                 'resolved': resolved})
 
 
 class ClaimIncidents(object):
@@ -5263,6 +5284,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/incidents/{incident_id}', Incident())
     api.add_route('/v0/incidents', Incidents())
     api.add_route('/v0/incidents/claim', ClaimIncidents())
+    api.add_route('/v0/incidents/{incident_id}/resolve', Resolved())
     api.add_route('/v0/incidents/{incident_id}/comments', Comments())
 
     api.add_route('/v0/messages/{message_id}', Message())

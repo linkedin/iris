@@ -312,6 +312,30 @@ def claim_incidents_from_batch_id(batch_id, owner):
     connection.close()
 
 
+def resolve_incident(incident_id, resolved_state):
+
+    now = datetime.datetime.utcnow()
+    resolved = 1
+    if not resolved_state:
+        resolved = 0
+
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute('''UPDATE `incident`
+                        SET `incident`.`updated` = %(updated)s,
+                            `incident`.`resolved` = %(resolved)s
+                            WHERE `incident`.`id` = %(incident_id)s''',
+                       {'incident_id': incident_id, 'resolved': resolved, 'updated': now})
+
+        connection.commit()
+    except Exception:
+        logger.exception('failed updating resolved state for incident %s', incident_id)
+    finally:
+        cursor.close()
+        connection.close()
+
+
 def msgpack_unpack_msg_from_socket(socket):
     unpacker = msgpack.Unpacker()
     while True:

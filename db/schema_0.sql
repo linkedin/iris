@@ -59,6 +59,7 @@ CREATE TABLE `incident` (
   `application_id` int(11) NOT NULL,
   `current_step` int(11) NOT NULL,
   `active` tinyint(1) NOT NULL,
+  `resolved` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ix_incident_plan_id` (`plan_id`),
   KEY `ix_incident_updated` (`updated`),
