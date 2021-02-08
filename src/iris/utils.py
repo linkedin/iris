@@ -331,6 +331,7 @@ def resolve_incident(incident_id, resolved_state):
         connection.commit()
     except Exception:
         logger.exception('failed updating resolved state for incident %s', incident_id)
+        raise
     finally:
         cursor.close()
         connection.close()
