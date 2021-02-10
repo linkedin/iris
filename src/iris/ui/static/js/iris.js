@@ -1260,7 +1260,7 @@ iris = {
     initialized: false,
     data: {
       url: '/v0/incidents/',
-      fields: ['id', 'owner', 'application', 'plan', 'plan_id', 'created', 'updated', 'active', 'current_step'],
+      fields: ['id', 'owner', 'application', 'plan', 'plan_id', 'created', 'updated', 'active', 'current_step', 'resolved'],
       $page: $('.main'),
       $table: $('#incidents-table'),
       $filterApp: $('#filter-application'),
@@ -1283,6 +1283,7 @@ iris = {
           null,
           { width: '10%' },
           { width: '10%' },
+          null,
           null,
           null
         ]
@@ -1501,6 +1502,7 @@ iris = {
       reescalateBtn: '#re-escalate-btn',
       reescalatePlanContainer: '.re-escalate-plan-container',
       claimIncidentBtn: '#claim-incident',
+      resolveIncidentBtn: '#resolve-incident',
       showAddCommentBtn: '#show-comment',
       hideAddCommentBtn: '#cancel-comment',
       addCommentBtn: '#comment-incident',
@@ -1537,6 +1539,7 @@ iris = {
       data.$page.on('click', data.showReescalateBtn, this.reescalateModal.bind(this));
       data.$page.on('click', data.selectPlanBtn, this.selectPlan.bind(this));
       data.$page.on('click', data.reescalateBtn, this.reescalateIncident.bind(this));
+      data.$page.on('click', data.resolveIncidentBtn, this.resolveIncident.bind(this));
     },
     showComment: function() {
       $(this.data.addCommentContainer).show();
@@ -1616,6 +1619,27 @@ iris = {
         iris.createAlert('Failed to modify incident', 'danger');
       }).always(function(){
         $this.prop('disabled', false);
+      });
+    },
+    resolveIncident: function(e){
+      var $this = $(e.target),
+          resolved = $this.attr('data-action') === 'resolve' ? true : false,
+          self = this,
+          incidentId = $this.attr('data-id');
+      $.ajax({
+        url: self.data.url + incidentId + '/resolve',
+        data: JSON.stringify({
+          resolved: resolved
+        }),
+        method: 'POST',
+        contentType: 'application/json'
+      }).done(function(){
+        self.getIncident(incidentId).done(function(){
+          var message = resolved ? 'Incident ' + incidentId + ' marked as resolved.' : 'Incident ' + incidentId + ' marked as unresolved.';
+          iris.createAlert(message, 'success');
+        });
+      }).fail(function(){
+        iris.createAlert('Failed to modify incident', 'danger');
       });
     },
     reescalateModal: function() {

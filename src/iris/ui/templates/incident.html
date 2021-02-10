@@ -13,10 +13,10 @@
         <span class="light"> Owner:</span> {{#if owner}} {{owner}} {{else}} Unclaimed {{/if}}
       </span>
       {{#isUser owner}}
-        <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unclaim">Unclaim Incident</button>
+        <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unclaim" data-toggle="tooltip" data-placement="right" title="This will cause the incident to continue escalating where it left off at the time it was claimed">Unclaim Incident</button>
       {{else}}
         {{#if active}}
-          <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="claim">Claim Incident</button>
+          <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="claim" data-toggle="tooltip" data-placement="right" title="This stops any further escalation and marks you as the owner of the incident">Claim Incident</button>
         {{else}}
           {{#if owner}}
             <button type="button" id="claim-incident" class="pull-right btn btn-default btn-sm disabled" disabled data-id="{{id}}" data-action="claim">Claimed</button>
@@ -25,8 +25,18 @@
           {{/if}}
         {{/if}}
       {{/isUser}}
-      <button type="button" id="re-escalate-modal-btn" class="pull-right btn btn-default blue btn-sm">Re-escalate</button>
+      <button type="button" id="re-escalate-modal-btn" class="pull-right btn btn-default blue btn-sm" data-toggle="tooltip" data-placement="left" title="Re-raise this incident using a different plan">Re-escalate</button>
     </h3>
+    <h4>
+      {{#if owner}}
+        {{#if resolved}} <i>Resolved</i> {{else}} Unresolved{{/if}}
+          {{#if resolved}}
+            <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unresolve" data-toggle="tooltip" data-placement="right" title="This removes a semantic tag that indicates the underlying issue is mitigated">Mark Unresolved</button>
+          {{else}}
+            <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="resolve" data-toggle="tooltip" data-placement="right" title="This applies a semantic tag that indicates the underlying issue is mitigated">Mark Resolved</button>
+          {{/if}}
+        {{/if}}
+    </h4>
     <span class="light italic"><small>created at {{convertToLocal created}}</small></span>
     {{#if updated}}
       <span class="light">|</span>
