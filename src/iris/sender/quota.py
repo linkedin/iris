@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime
 import iris.cache
 from iris import metrics
+from iris.api import load_config
 import logging
 import ujson
 
@@ -61,6 +62,22 @@ class ApplicationQuota(object):
 
     def __init__(self, db, expand_targets, message_send_enqueue, sender_app):
         self.db = db
+        config = load_config()
+
+        # configure default rate limiting params for messages
+        hard_limit = config['sender'].get('default_rate_def', {}).get('hard_limit', 600)
+        soft_limit = config['sender'].get('default_rate_def', {}).get('soft_limit', 60)
+        hard_duration = config['sender'].get('default_rate_def', {}).get('hard_duration', 1)
+        soft_duration = config['sender'].get('default_rate_def', {}).get('soft_duration', 1)
+        wait_time = config['sender'].get('default_rate_def', {}).get('wait_time', 3600)
+        plan_name = config['sender'].get('default_rate_def', {}).get('plan_name', None)
+        target_name = config['sender'].get('default_rate_def', {}).get('target_name', None)
+        target_role = config['sender'].get('default_rate_def', {}).get('target_role', None)
+        target = None
+        if target_name and target_role:
+            target = (target_name, target_role)
+        self.default_rate_def = (hard_limit, soft_limit, hard_duration, soft_duration, wait_time, plan_name, target)
+
         self.expand_targets = expand_targets
         self.message_send_enqueue = message_send_enqueue
         self.iris_application = None
@@ -94,6 +111,11 @@ class ApplicationQuota(object):
 
             for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in self.get_new_rules():
                 new_rates[application] = (hard_limit, soft_limit, hard_duration // 60, soft_duration // 60, wait_time, plan_name, (target_name, target_role))
+
+            # for any application that does not have a quota defined set it to a default value
+            for app in iris.cache.applications:
+                if not new_rates.get(app):
+                    new_rates[app] = self.default_rate_def
 
             old_keys = self.rates.keys()
             new_keys = new_rates.keys()
@@ -163,8 +185,9 @@ class ApplicationQuota(object):
 
         if hard_quota_usage > hard_limit:
             metrics.incr('quota_hard_exceed_cnt')
-            with self.last_incidents_mutex:
-                self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
+            if plan_name:
+                with self.last_incidents_mutex:
+                    self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
             return False
 
         # If soft limit breached, just notify owner and still send
@@ -177,8 +200,9 @@ class ApplicationQuota(object):
 
         if soft_quota_usage > soft_limit:
             metrics.incr('quota_soft_exceed_cnt')
-            with self.last_soft_quota_notification_time_mutex:
-                self.notify_target(application, soft_limit, len(soft_buckets), *target)
+            if target:
+                with self.last_soft_quota_notification_time_mutex:
+                    self.notify_target(application, soft_limit, len(soft_buckets), *target)
             return True
 
         return True
