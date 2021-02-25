@@ -135,6 +135,23 @@ sender:
   ## slaves to be cycled through
   is_master: True
 
+  # default_rate_def:
+  #   # how many messages in a period before they are dropped
+  #   hard_limit: 30
+  #   # how many messages in a period before notification is sent out
+  #   soft_limit: 20
+  #   # period length for hard limit
+  #   hard_duration: 1
+  #   # period length for soft limit
+  #   soft_duration: 1
+  #   # time to wait before messages can be created again
+  #   wait_time: 3600
+  #   # target that will receive notification for soft quota breaches
+  #   target_name: foo_team
+  #   target_role: team
+  #   # plan for incident that will be raised if there is a hard quota breach
+  #   plan_name: bar_plan
+
 #slaves:
 #  - host: 127.0.0.1
 #    port: 2322

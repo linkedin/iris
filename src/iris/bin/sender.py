@@ -1695,7 +1695,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'))
+    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'), config['sender'].get('default_rate_def', {}))
 
     global coordinator
     zk_hosts = config['sender'].get('zookeeper_cluster', False)

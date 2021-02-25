@@ -348,7 +348,7 @@ def test_quotas(mocker):
                  )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
-    quotas = ApplicationQuota(None, None, None, None)
+    quotas = ApplicationQuota(None, None, None, None, {})
     sleep(1)
 
     # ensure drop messages don't count
