@@ -136,8 +136,6 @@ sender:
   is_master: True
 
   # default_rate_def:
-  #   # hard quota 60 messages in a period, soft quota 30 messages in a period, 1 minute HQ period length, 1 minute SQ period length, no plans/targets
-  #   #self.default_rate_def = (40,30,1,1,3600,None,None)
   #   # how many messages in a period before they are dropped
   #   hard_limit: 30
   #   # how many messages in a period before notification is sent out
