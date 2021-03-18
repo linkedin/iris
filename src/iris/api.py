@@ -12,6 +12,7 @@ import os
 import random
 import datetime
 import logging
+import importlib
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
@@ -1466,6 +1467,14 @@ class Plans(object):
 class Incidents(object):
     allow_read_no_auth = True
 
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
+
     def on_get(self, req, resp):
         '''
         Search for incidents. Returns a list of incidents matching specified parameters.
@@ -1736,6 +1745,15 @@ class Incidents(object):
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
+
+        # optional incident handler to do additional tasks after the incident has been created
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+            cursor.execute(single_incident_query, int(incident_id))
+            incident = cursor.fetchone()
+            connection.close()
+            self.custom_incident_handler_module.process(incident)
 
 
 class Incident(object):
@@ -5282,7 +5300,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/plans', Plans())
 
     api.add_route('/v0/incidents/{incident_id}', Incident())
-    api.add_route('/v0/incidents', Incidents())
+    api.add_route('/v0/incidents', Incidents(config))
     api.add_route('/v0/incidents/claim', ClaimIncidents())
     api.add_route('/v0/incidents/{incident_id}/resolve', Resolved())
     api.add_route('/v0/incidents/{incident_id}/comments', Comments())

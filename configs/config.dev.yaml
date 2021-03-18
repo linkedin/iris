@@ -96,6 +96,9 @@ qr_login_url: Null
 webhooks:
   - alertmanager
 
+## custom incident handler can be created to do additional tasks after incident creation
+#custom_incident_handler_module: iris.custom_incident_handler
+
 #####################
 ### Iris-sender
 #####################
