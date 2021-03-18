@@ -2,6 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class IncidentHandler:
     def __init__(self, config):
         pass
