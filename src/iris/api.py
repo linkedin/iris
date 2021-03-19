@@ -1694,7 +1694,6 @@ class Incidents(object):
             if not app_template_count:
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
-
         # To try to avoid deadlocks, split the inserts into their own session
         retries = 0
         max_retries = 10
@@ -1746,7 +1745,6 @@ class Incidents(object):
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
-
 
         incident_data = {
             'id': incident_id,
