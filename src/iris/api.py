@@ -1694,6 +1694,13 @@ class Incidents(object):
             if not app_template_count:
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
+        incident_data = {
+            'plan': incident_params['plan'],
+            'created': int(time.time()),
+            'application': req.context['app']['name'],
+            'context': context
+        }
+
         # To try to avoid deadlocks, split the inserts into their own session
         retries = 0
         max_retries = 10
@@ -1750,10 +1757,28 @@ class Incidents(object):
         if self.custom_incident_handler_module is not None:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
-            cursor.execute(single_incident_query, int(incident_id))
-            incident = cursor.fetchone()
+
+            # get plan info
+            query = single_plan_query + 'WHERE `plan`.`id` = %s'
+            cursor.execute(query, plan_id)
+            plan_details = cursor.fetchone()
+
+            # get plan steps info
+            step = 0
+            steps = []
+            cursor.execute(single_plan_query_steps, plan_id)
+            for notification in cursor:
+                s = notification['step']
+                if s != step:
+                    l = [notification]
+                    steps.append(l)
+                    step = s
+                else:
+                    l.append(notification)
+            plan_details['steps'] = steps
             connection.close()
-            self.custom_incident_handler_module.process(incident)
+            incident_data["plan_details"] = plan_details
+            self.custom_incident_handler_module.process(incident_data)
 
 
 class Incident(object):
