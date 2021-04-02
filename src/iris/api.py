@@ -1779,11 +1779,19 @@ class Incidents(object):
             plan_details['steps'] = steps
             connection.close()
             incident_data["plan_details"] = plan_details
-            self.custom_incident_handler_module.process(incident_data)
+            self.custom_incident_handler_module.process_create(incident_data)
 
 
 class Incident(object):
     allow_read_no_auth = True
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
 
     def on_get(self, req, resp, incident_id):
         '''
@@ -1899,6 +1907,11 @@ class Incident(object):
                 raise HTTPUnauthorized('Invalid claimer for this app/user')
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
+
+            cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+            if not cursor.fetchone()[0]:
+                raise HTTPBadRequest('Invalid claim: no matching incident id')
+
             cursor.execute(
                 '''SELECT EXISTS(
                      SELECT 1
@@ -1919,9 +1932,34 @@ class Incident(object):
                                  'owner': owner,
                                  'active': is_active})
 
+        # optional incident handler to do additional tasks after the incident has been claimed
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            cursor.execute(single_incident_query, int(incident_id))
+            incident_data = cursor.fetchone()
+
+            cursor.execute(single_incident_query_comments, incident_id)
+            incident_data['comments'] = cursor.fetchall()
+            connection.close()
+
+            incident_data['context'] = ujson.loads(incident_data['context'])
+
+            connection.close()
+            self.custom_incident_handler_module.process_claim(incident_data)
+
 
 class Resolved(object):
     allow_read_no_auth = False
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
 
     def on_post(self, req, resp, incident_id):
 
@@ -1929,6 +1967,15 @@ class Resolved(object):
         if 'resolved' not in incident_params:
             raise HTTPBadRequest('resolved field required')
         resolved = incident_params.get('resolved')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+        if not cursor.fetchone()[0]:
+            raise HTTPBadRequest('Invalid claim: no matching incident id')
+        cursor.close()
+        connection.close()
+
         try:
             utils.resolve_incident(incident_id, resolved)
         except Exception as e:
@@ -1937,9 +1984,35 @@ class Resolved(object):
         resp.body = ujson.dumps({'incident_id': incident_id,
                                  'resolved': resolved})
 
+        # optional incident handler to do additional tasks after the incident has been resolved
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            cursor.execute(single_incident_query, int(incident_id))
+            incident_data = cursor.fetchone()
+
+            cursor.execute(single_incident_query_comments, incident_id)
+            incident_data['comments'] = cursor.fetchall()
+            connection.close()
+
+            incident_data['context'] = ujson.loads(incident_data['context'])
+
+            cursor.close()
+            connection.close()
+            self.custom_incident_handler_module.process_resolve(incident_data)
+
 
 class ClaimIncidents(object):
     allow_read_no_auth = False
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
 
     def on_post(self, req, resp):
         params = ujson.loads(req.context['body'])
@@ -1951,6 +2024,11 @@ class ClaimIncidents(object):
         if owner is not None:
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
+            for incident_id in incident_ids:
+                cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+                if not cursor.fetchone()[0]:
+                    raise HTTPBadRequest('Invalid claim: no matching incident id')
+
             cursor.execute(
                 '''SELECT EXISTS(
                      SELECT 1
@@ -1969,6 +2047,24 @@ class ClaimIncidents(object):
         resp.body = ujson.dumps({'owner': owner,
                                  'claimed': claimed,
                                  'unclaimed': unclaimed})
+
+        # optional incident handler to do additional tasks after the incidents have been claimed
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+            for incident_id in incident_ids:
+
+                cursor.execute(single_incident_query, int(incident_id))
+                incident_data = cursor.fetchone()
+
+                cursor.execute(single_incident_query_comments, incident_id)
+                incident_data['comments'] = cursor.fetchall()
+                connection.close()
+
+                incident_data['context'] = ujson.loads(incident_data['context'])
+                self.custom_incident_handler_module.process_claim(incident_data)
+            cursor.close()
+            connection.close()
 
 
 class Message(object):
@@ -5325,10 +5421,10 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/plans/{plan_id}', Plan())
     api.add_route('/v0/plans', Plans())
 
-    api.add_route('/v0/incidents/{incident_id}', Incident())
+    api.add_route('/v0/incidents/{incident_id}', Incident(config))
     api.add_route('/v0/incidents', Incidents(config))
-    api.add_route('/v0/incidents/claim', ClaimIncidents())
-    api.add_route('/v0/incidents/{incident_id}/resolve', Resolved())
+    api.add_route('/v0/incidents/claim', ClaimIncidents(config))
+    api.add_route('/v0/incidents/{incident_id}/resolve', Resolved(config))
     api.add_route('/v0/incidents/{incident_id}/comments', Comments())
 
     api.add_route('/v0/messages/{message_id}', Message())
