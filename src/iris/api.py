@@ -1942,10 +1942,9 @@ class Incident(object):
 
             cursor.execute(single_incident_query_comments, incident_id)
             incident_data['comments'] = cursor.fetchall()
-            connection.close()
 
             incident_data['context'] = ujson.loads(incident_data['context'])
-
+            cursor.close()
             connection.close()
             self.custom_incident_handler_module.process_claim(incident_data)
 
@@ -1994,8 +1993,6 @@ class Resolved(object):
 
             cursor.execute(single_incident_query_comments, incident_id)
             incident_data['comments'] = cursor.fetchall()
-            connection.close()
-
             incident_data['context'] = ujson.loads(incident_data['context'])
 
             cursor.close()
@@ -2059,8 +2056,6 @@ class ClaimIncidents(object):
 
                 cursor.execute(single_incident_query_comments, incident_id)
                 incident_data['comments'] = cursor.fetchall()
-                connection.close()
-
                 incident_data['context'] = ujson.loads(incident_data['context'])
                 self.custom_incident_handler_module.process_claim(incident_data)
             cursor.close()
