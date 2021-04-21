@@ -97,7 +97,12 @@ webhooks:
   - alertmanager
 
 ## custom incident handler can be created to do additional tasks after incident creation
-#custom_incident_handler_module: iris.custom_incident_handler
+# custom_incident_handler_module: iris.custom_incident_handler
+
+## allows listed applications to access internal API endpoints that return sensitive data including application API keys
+## this should only be used by applications that are essentially extensions of iris itself like a custom sender
+# allowlisted_internal_apps:
+#   - iris-internal-application
 
 #####################
 ### Iris-sender

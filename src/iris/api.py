@@ -5388,6 +5388,60 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
+class InternalApplications(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+
+    def on_get(self, req, resp, app_name):
+        if req.context['app']['name'] not in self.allowlisted_apps:
+            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        app_query = '''SELECT
+            `id`, `name`, `key`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
+            FROM `application`
+            WHERE `auth_only` is False AND `application`.`name` = %s'''
+        cursor.execute(app_query, app_name)
+        app = cursor.fetchone()
+        if not app:
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Application %s not found' % app_name)
+
+        cursor.execute(get_vars_query, app['id'])
+        app['variables'] = []
+        app['required_variables'] = []
+        app['title_variable'] = None
+        for row in cursor:
+            app['variables'].append(row['name'])
+            if row['required']:
+                app['required_variables'].append(row['name'])
+            if row['title_variable']:
+                app['title_variable'] = row['name']
+
+        cursor.execute(get_default_application_modes_query, app_name)
+        app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+
+        cursor.execute(get_supported_application_modes_query, app['id'])
+        app['supported_modes'] = [row['name'] for row in cursor]
+
+        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+        cursor.execute(get_application_categories, app['id'])
+        app['categories'] = [row for row in cursor]
+
+        cursor.close()
+        connection.close()
+
+        payload = app
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -5474,6 +5528,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/categories', CategoryOverrides())
     api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
+
+    api.add_route('/v0/internal/applications/{app_name}', InternalApplications(config))
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
