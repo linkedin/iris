@@ -3950,6 +3950,18 @@ class User(object):
         cursor.execute(mode_template_override_query, user_id)
         user_data['template_overrides'] = [row['mode'] for row in cursor]
 
+        # get any category override settings
+        category_override_query = '''SELECT `application`.`name` AS `application_name`, `mode`.`name` AS `mode`, `notification_category`.`name` AS `category`
+                                     FROM `category_override`
+                                     JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                                     JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+                                     JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+                                     WHERE `category_override`.`user_id` = %s'''
+        cursor.execute(category_override_query, user_id)
+        user_data['category_overrides'] = defaultdict(dict)
+        for row in cursor:
+            user_data['category_overrides'][row['application_name']] = row
+
         # Get user contact modes
         modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
                          FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
@@ -3960,6 +3972,13 @@ class User(object):
         user_data['modes'] = {}
         for row in cursor:
             user_data['modes'][row['priority']] = row['mode']
+
+        # get device settings for user
+        mode_template_override_query = '''SELECT `device`.`registration_id`, `device`.`user_id`, `device`.`platform`
+                         FROM `device`
+                         WHERE `device`.`user_id` = %s'''
+        cursor.execute(mode_template_override_query, user_id)
+        user_data['device'] = [row for row in cursor]
 
         # Get user contact modes per app
         user_data['per_app_modes'] = defaultdict(dict)
@@ -5388,6 +5407,29 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
+class InternalApplicationsAuth():
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+
+    def on_get(self, req, resp):
+        if req.context['app']['name'] not in self.allowlisted_apps:
+            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('''SELECT `name`, `key` FROM `application` WHERE `auth_only` is False''')
+        apps = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        payload = apps
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -5474,6 +5516,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/categories', CategoryOverrides())
     api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
+
+    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth(config))
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):

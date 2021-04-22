@@ -2153,7 +2153,7 @@ def test_get_user(sample_user, sample_email, sample_admin_user):
     re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
-    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name', 'template_overrides'}
+    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name', 'template_overrides', 'device', 'category_overrides'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
 
