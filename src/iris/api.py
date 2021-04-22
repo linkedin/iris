@@ -5401,7 +5401,7 @@ class InternalApplications(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         app_query = '''SELECT
-            `id`, `name`, `key`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
+            `id`, `name`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
             FROM `application`
             WHERE `auth_only` is False AND `application`.`name` = %s'''
         cursor.execute(app_query, app_name)
@@ -5438,6 +5438,29 @@ class InternalApplications(object):
         connection.close()
 
         payload = app
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
+class InternalApplicationsAuth(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+
+    def on_get(self, req, resp):
+        if req.context['app']['name'] not in self.allowlisted_apps:
+            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('''SELECT `name`, `key` FROM `application` WHERE `auth_only` is False''')
+        apps = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        payload = apps
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
 
@@ -5530,6 +5553,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     api.add_route('/v0/internal/applications/{app_name}', InternalApplications(config))
+    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth(config))
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
