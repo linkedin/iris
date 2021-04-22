@@ -5407,7 +5407,7 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
-class InternalApplicationsAuth(object):
+class InternalApplicationsAuth():
     allow_read_no_auth = False
 
     def __init__(self, config):
