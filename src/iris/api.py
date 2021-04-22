@@ -3950,6 +3950,18 @@ class User(object):
         cursor.execute(mode_template_override_query, user_id)
         user_data['template_overrides'] = [row['mode'] for row in cursor]
 
+        # get any category override settings
+        category_override_query = '''SELECT `application`.`name` AS `application_name`, `mode`.`name` AS `mode`, `notification_category`.`name` AS `category`
+                                     FROM `category_override`
+                                     JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                                     JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+                                     JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+                                     WHERE `category_override`.`user_id` = %s'''
+        cursor.execute(category_override_query, user_id)
+        user_data['category_overrides'] = defaultdict(dict)
+        for row in cursor:
+            user_data['category_overrides'][row['application_name']] = row
+
         # Get user contact modes
         modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
                          FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
@@ -3960,6 +3972,13 @@ class User(object):
         user_data['modes'] = {}
         for row in cursor:
             user_data['modes'][row['priority']] = row['mode']
+
+        # get device settings for user
+        mode_template_override_query = '''SELECT `device`.`registration_id`, `device`.`user_id`, `device`.`platform`
+                         FROM `device`
+                         WHERE `device`.`user_id` = %s'''
+        cursor.execute(mode_template_override_query, user_id)
+        user_data['device'] = [row for row in cursor]
 
         # Get user contact modes per app
         user_data['per_app_modes'] = defaultdict(dict)
