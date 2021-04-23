@@ -18,9 +18,6 @@ def test_configure(mocker):
     mocker.patch('iris.bin.sender.api_cache.cache_priorities')
     mocker.patch('iris.bin.sender.api_cache.cache_applications')
     mocker.patch('iris.bin.sender.api_cache.cache_modes')
-    mock_iris_client = mocker.MagicMock()
-    mocker.patch('iris.sender.cache.IrisClient').return_value = mock_iris_client
-    mock_iris_client.get.return_value.status_code = 200
 
     init_sender({
         'db': {
@@ -145,8 +142,6 @@ def test_fetch_and_send_message(mocker):
     mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent
     mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_send_message, per_mode_send_queues
     )
@@ -184,8 +179,6 @@ def test_message_retry(mocker):
     mock_mark_message_sent.side_effect = check_mark_message_sent
     mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
     mocker.patch('iris.bin.sender.set_target_fallback_mode').side_effect = mock_set_target_contact
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_send_message, per_mode_send_queues, metrics, default_sender_metrics,
         add_mode_stat
@@ -381,8 +374,6 @@ def test_quotas(mocker):
 
 
 def test_aggregate_audit_msg(mocker):
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_prepare_message, message_queue, per_mode_send_queues,
         plan_aggregate_windows
