@@ -255,7 +255,12 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         for key, value in oncall_users[username].items():
             if value and key in modes:
                 logger.info('%s: %s -> %s', username, key, value)
-                engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
+                try:
+                    engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
+                except SQLAlchemyError as e:
+                    logger.exception('Error adding contact for target id: %s', target_id)
+                    metrics.incr('sql_errors')
+                    continue
 
     # update users that need to be
     contact_update_sql = 'UPDATE target_contact SET destination = %s WHERE target_id = (SELECT id FROM target WHERE name = %s AND type_id = %s) AND mode_id = %s'
@@ -320,6 +325,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 engine.execute(oncall_add_sql, (iris_target_name_id_dict[t], oncall_response_dict_name_key[t]))
             except SQLAlchemyError as e:
                 logger.exception('Error inserting oncall_team %s: %s', t, e)
+                metrics.incr('sql_errors')
                 continue
 
 # rename all mismatching target names
@@ -351,13 +357,19 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                     logger.info('Renaming team %s to %s', current_name, new_name)
                     engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (new_name, target_id_to_rename))
                 sleep(update_sleep)
-        except Exception:
+        except SQLAlchemyError as e:
             logger.exception('Error changing team name of %s to %s', current_name, new_name)
+            metrics.incr('sql_errors')
 
     # go back and rename name_swaps to correct value
     for oncall_id, target_id_to_rename in name_swaps.items():
         new_name = oncall_response_dict_id_key[oncall_id]
-        engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
+        try:
+            engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
+        except SQLAlchemyError as e:
+            logger.exception('Error renaming target: %s', new_name)
+            metrics.incr('sql_errors')
+            continue
         sleep(update_sleep)
 
 
@@ -380,6 +392,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         except SQLAlchemyError as e:
             logger.exception('Error inserting team %s: %s', t, e)
             metrics.incr('teams_failed_to_add')
+            metrics.incr('sql_errors')
             continue
 
         # add team to oncall_team table
@@ -389,6 +402,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 engine.execute(oncall_add_sql, (new_target_id, team_id))
             except SQLAlchemyError as e:
                 logger.exception('Error inserting oncall_team %s: %s', t, e)
+                metrics.incr('sql_errors')
                 continue
     session.commit()
     session.close()
@@ -620,7 +634,7 @@ def sync_ldap_lists(ldap_settings, engine):
             new_name = incoming_case_sensitive_map[ldap_list]
             list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
                                        AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': old_name}).scalar()
-            session.execute('UPDATE `mailing_list` SET `name` = :name WHERE `target_id` = :list_id', {'name': new_name, 'list_id': list_id})
+            session.execute('UPDATE `target` SET `name` = :name WHERE `id` = :list_id', {'name': new_name, 'list_id': list_id})
             session.commit()
             logger.info('Renamed ldap list %s to %s', old_name, new_name)
 
