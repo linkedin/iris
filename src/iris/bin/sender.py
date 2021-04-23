@@ -1670,7 +1670,6 @@ def init_sender(config):
         setproctitle.setproctitle(process_title)
         logger.info('Changing process name to %s', process_title)
 
-    api_host = config['sender'].get('api_host', 'http://localhost:16649')
     db.init(config)
     cache.init(config)
     metrics.init(config, 'iris-sender', default_sender_metrics)
