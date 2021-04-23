@@ -10,14 +10,12 @@ from .message import update_message_mode
 from .. import db
 from ..role_lookup import get_role_lookups
 from . import auditlog
-from ..client import IrisClient
 
-import requests
 import logging
+import ujson
 logger = logging.getLogger(__name__)
 
 
-iris_client = None
 plans = None
 templates = None
 incidents = None
@@ -159,15 +157,14 @@ class Templates():
     def refresh(self):
         logger.info('refreshing templates')
 
-        try:
-            request = iris_client.get('templates/?active=1&fields=id&fields=name')
-            request.raise_for_status()
-            templates_response = request.json()
-        except (requests.exceptions.RequestException, ValueError):
-            logger.exception('Failed to hit api to get active templates')
-            return
+        connection = self.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
 
-        active = {item['id']: item['name'] for item in templates_response}
+        cursor.execute('''SELECT `template`.`id`, `template`.`name` FROM `template` INNER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`''')
+        active = {row['id']: row['name'] for row in cursor}
+
+        cursor.close()
+        connection.close()
 
         new_active_ids = active.keys()
         old_active_ids = self.active.keys()
@@ -199,16 +196,64 @@ class Plans():
         try:
             return self.data[key]
         except KeyError:
-            fields = ['threshold_window', 'threshold_count', 'aggregation_window', 'creator',
-                      'aggregation_reset', 'name', 'tracking_type', 'tracking_key', 'tracking_template']
 
-            try:
-                request = iris_client.get('plans/%s/' % key, params={'fields': fields})
-                request.raise_for_status()
-                plan = request.json()
-            except (requests.exceptions.RequestException, ValueError):
-                logger.exception('Failed to hit api to get plan %s', key)
-                return None
+            connection = self.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            if isinstance(key, int):
+                plan_id = key
+            else:
+                cursor.execute('''SELECT `plan`.`id` FROM `plan` INNER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id` WHERE `plan`.`name` = %s''', key)
+                plan_id = cursor.fetchone()['id']
+
+            single_plan_query = '''SELECT DISTINCT `plan`.`id` as `id`, `plan`.`name` as `name`,
+                `plan`.`threshold_window` as `threshold_window`, `plan`.`threshold_count` as `threshold_count`,
+                `plan`.`aggregation_window` as `aggregation_window`, `plan`.`aggregation_reset` as `aggregation_reset`,
+                `plan`.`description` as `description`, UNIX_TIMESTAMP(`plan`.`created`) as `created`,
+                `target`.`name` as `creator`, IF(`plan_active`.`plan_id` IS NULL, FALSE, TRUE) as `active`,
+                `plan`.`tracking_type` as `tracking_type`, `plan`.`tracking_key` as `tracking_key`,
+                `plan`.`tracking_template` as `tracking_template`
+            FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
+            LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
+            WHERE `plan`.`id` = %s'''
+
+            cursor.execute(single_plan_query, plan_id)
+            plan = cursor.fetchone()
+
+            single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
+                `plan_notification`.`step` as `step`,
+                `plan_notification`.`repeat` as `repeat`,
+                `plan_notification`.`wait` as `wait`,
+                `plan_notification`.`optional` as `optional`,
+                `target_role`.`name` as `role`,
+                `target`.`name` as `target`,
+                `plan_notification`.`template` as `template`,
+                `priority`.`name` as `priority`,
+                `plan_notification`.`dynamic_index` AS `dynamic_index`
+            FROM `plan_notification`
+            LEFT OUTER JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`
+            LEFT OUTER JOIN `target_role` ON `plan_notification`.`role_id` = `target_role`.`id`
+            JOIN `priority` ON `plan_notification`.`priority_id` = `priority`.`id`
+            WHERE `plan_notification`.`plan_id` = %s
+            ORDER BY `plan_notification`.`step`'''
+
+            step = 0
+            steps = []
+            cursor.execute(single_plan_query_steps, plan_id)
+            for notification in cursor:
+                s = notification['step']
+                if s != step:
+                    l = [notification]
+                    steps.append(l)
+                    step = s
+                else:
+                    l.append(notification)
+            plan['steps'] = steps
+            if plan['tracking_template']:
+                plan['tracking_template'] = ujson.loads(plan['tracking_template'])
+
+            cursor.close()
+            connection.close()
 
             logger.debug('[+] adding plan: %s', key)
 
@@ -249,15 +294,14 @@ class Plans():
     def refresh(self):
         logger.info('refreshing plans')
 
-        try:
-            request = iris_client.get('plans/?active=1&fields=id&fields=name')
-            request.raise_for_status()
-            plans_response = request.json()
-        except (requests.exceptions.RequestException, ValueError):
-            logger.exception('Failed to hit api to refresh plans')
-            return
+        connection = self.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
 
-        active = {item['id']: item['name'] for item in plans_response}
+        cursor.execute('''SELECT `plan`.`id`, `plan`.`name` FROM `plan` INNER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`''')
+        active = {row['id']: row['name'] for row in cursor}
+
+        cursor.close()
+        connection.close()
 
         new_active_ids = active.keys()
         old_active_ids = self.active.keys()
@@ -444,31 +488,9 @@ def purge():
     plan_notifications.purge()
 
 
-def init(api_host, config):
+def init(config):
     global targets_for_role, target_names, target_reprioritization, plan_notifications, targets
-    global roles, incidents, templates, plans, iris_client, dynamic_plan_map
-
-    iris_client = IrisClient(api_host, 0)
-
-    # make sure API is online
-    max_trey = 36
-    api_chk_cnt = 0
-    while api_chk_cnt < max_trey:
-        try:
-            re = iris_client.get('target_roles')
-            if re.status_code == 200:
-                break
-        except Exception:
-            pass
-        api_chk_cnt += 1
-        logger.warning(
-            'Not able to connect to Iris API %s, retry in 5 seconds.',
-            iris_client.url)
-        sleep(5)
-
-    if api_chk_cnt >= max_trey:
-        import sys
-        sys.exit('FATAL: Not able to connect to Iris API: %s' % iris_client.url)
+    global roles, incidents, templates, plans, dynamic_plan_map
 
     plans = Plans(db.engine)
     templates = Templates(db.engine)
