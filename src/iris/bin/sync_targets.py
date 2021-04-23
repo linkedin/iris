@@ -620,7 +620,7 @@ def sync_ldap_lists(ldap_settings, engine):
             new_name = incoming_case_sensitive_map[ldap_list]
             list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
                                        AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': old_name}).scalar()
-            session.execute('UPDATE `mailing_list` SET `name` = :name WHERE `target_id` = :list_id', {'name': new_name, 'list_id': list_id})
+            session.execute('UPDATE `target` SET `name` = :name WHERE `id` = :list_id', {'name': new_name, 'list_id': list_id})
             session.commit()
             logger.info('Renamed ldap list %s to %s', old_name, new_name)
 
