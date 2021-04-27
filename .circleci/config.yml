@@ -5,7 +5,7 @@ jobs:
       - docker
     docker:
       - image: circleci/python:3.7-stretch-browsers
-      - image: mysql/mysql-server:5.7
+      - image: mysql/mysql-server:5.7.33
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=1
           - MYSQL_ROOT_HOST=%
