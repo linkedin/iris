@@ -17,7 +17,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTP_400, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
@@ -35,6 +35,8 @@ from . import ui
 from . import app_stats
 from .config import load_config
 from iris.vendors.iris_slack import iris_slack
+from iris.role_lookup import IrisRoleLookupException
+from iris.sender import cache as sender_cache
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
@@ -3920,91 +3922,96 @@ class Priorities(object):
         resp.body = payload
 
 
+def get_user_details(username):
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor(db.dict_cursor)
+    # Get user id/name
+    user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
+                    FROM `target`
+                    JOIN `user` on `user`.`target_id` = `target`.`id`'''
+    if username.isdigit():
+        user_query += ' WHERE `target`.`id` = %s'
+    else:
+        user_query += ' WHERE `target`.`name` = %s'
+    cursor.execute(user_query, username)
+    if cursor.rowcount != 1:
+        raise HTTPNotFound()
+    user_data = cursor.fetchone()
+    user_data['admin'] = bool(user_data['admin'])
+    user_id = user_data.pop('id')
+
+    # get any mode based template override settings
+    mode_template_override_query = '''SELECT `mode`.`name` AS `mode`
+                        FROM `mode_template_override`
+                            JOIN `mode` ON `mode`.`id` = `mode_template_override`.`mode_id`
+                        WHERE `mode_template_override`.`target_id` = %s'''
+    cursor.execute(mode_template_override_query, user_id)
+    user_data['template_overrides'] = [row['mode'] for row in cursor]
+
+    # get any category override settings
+    category_override_query = '''SELECT `application`.`name` AS `application_name`, `mode`.`name` AS `mode`, `notification_category`.`name` AS `category`
+                                    FROM `category_override`
+                                    JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                                    JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+                                    JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+                                    WHERE `category_override`.`user_id` = %s'''
+    cursor.execute(category_override_query, user_id)
+    user_data['category_overrides'] = {}
+    for row in cursor:
+        user_data['category_overrides'][row['application_name']] = row
+
+    # Get user contact modes
+    modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
+                        FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
+                            JOIN `priority` ON `priority`.`id` = `target_mode`.`priority_id`
+                            JOIN `mode` ON `mode`.`id` = `target_mode`.`mode_id`
+                        WHERE `target`.`id` = %s'''
+    cursor.execute(modes_query, user_id)
+    user_data['modes'] = {}
+    for row in cursor:
+        user_data['modes'][row['priority']] = row['mode']
+
+    # get device settings for user
+    mode_template_override_query = '''SELECT `device`.`registration_id`, `device`.`user_id`, `device`.`platform`
+                        FROM `device`
+                        WHERE `device`.`user_id` = %s'''
+    cursor.execute(mode_template_override_query, user_id)
+    user_data['device'] = list(cursor)
+
+    # Get user contact modes per app
+    user_data['per_app_modes'] = defaultdict(dict)
+    cursor.execute(get_all_users_app_modes_query, user_id)
+    for row in cursor:
+        user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
+
+    # Get user teams
+    teams_query = '''SELECT `target`.`name` AS `team`
+                    FROM `user_team` JOIN `target` ON `user_team`.`team_id` = `target`.`id`
+                    WHERE `user_team`.`user_id` = %s'''
+    cursor.execute(teams_query, user_id)
+    user_data['teams'] = []
+    user_data['teams'] = [row['team'] for row in cursor]
+
+    # Get user contact info
+    contacts_query = '''SELECT `mode`.`name` AS `mode`, `target_contact`.`destination` AS `destination`
+                        FROM `target_contact` JOIN `mode` ON `target_contact`.`mode_id` = `mode`.`id`
+                        WHERE `target_contact`.`target_id` = %s'''
+    cursor.execute(contacts_query, user_id)
+    user_data['contacts'] = {}
+    for row in cursor:
+        user_data['contacts'][row['mode']] = row['destination']
+    cursor.close()
+    connection.close()
+
+    return user_data
+
+
 class User(object):
     allow_read_no_auth = False
     enforce_user = True
 
     def on_get(self, req, resp, username):
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-        # Get user id/name
-        user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
-                        FROM `target`
-                        JOIN `user` on `user`.`target_id` = `target`.`id`'''
-        if username.isdigit():
-            user_query += ' WHERE `target`.`id` = %s'
-        else:
-            user_query += ' WHERE `target`.`name` = %s'
-        cursor.execute(user_query, username)
-        if cursor.rowcount != 1:
-            raise HTTPNotFound()
-        user_data = cursor.fetchone()
-        user_data['admin'] = bool(user_data['admin'])
-        user_id = user_data.pop('id')
-
-        # get any mode based template override settings
-        mode_template_override_query = '''SELECT `mode`.`name` AS `mode`
-                         FROM `mode_template_override`
-                             JOIN `mode` ON `mode`.`id` = `mode_template_override`.`mode_id`
-                         WHERE `mode_template_override`.`target_id` = %s'''
-        cursor.execute(mode_template_override_query, user_id)
-        user_data['template_overrides'] = [row['mode'] for row in cursor]
-
-        # get any category override settings
-        category_override_query = '''SELECT `application`.`name` AS `application_name`, `mode`.`name` AS `mode`, `notification_category`.`name` AS `category`
-                                     FROM `category_override`
-                                     JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
-                                     JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
-                                     JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
-                                     WHERE `category_override`.`user_id` = %s'''
-        cursor.execute(category_override_query, user_id)
-        user_data['category_overrides'] = defaultdict(dict)
-        for row in cursor:
-            user_data['category_overrides'][row['application_name']] = row
-
-        # Get user contact modes
-        modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
-                         FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
-                             JOIN `priority` ON `priority`.`id` = `target_mode`.`priority_id`
-                             JOIN `mode` ON `mode`.`id` = `target_mode`.`mode_id`
-                         WHERE `target`.`id` = %s'''
-        cursor.execute(modes_query, user_id)
-        user_data['modes'] = {}
-        for row in cursor:
-            user_data['modes'][row['priority']] = row['mode']
-
-        # get device settings for user
-        mode_template_override_query = '''SELECT `device`.`registration_id`, `device`.`user_id`, `device`.`platform`
-                         FROM `device`
-                         WHERE `device`.`user_id` = %s'''
-        cursor.execute(mode_template_override_query, user_id)
-        user_data['device'] = [row for row in cursor]
-
-        # Get user contact modes per app
-        user_data['per_app_modes'] = defaultdict(dict)
-        cursor.execute(get_all_users_app_modes_query, user_id)
-        for row in cursor:
-            user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
-
-        # Get user teams
-        teams_query = '''SELECT `target`.`name` AS `team`
-                        FROM `user_team` JOIN `target` ON `user_team`.`team_id` = `target`.`id`
-                        WHERE `user_team`.`user_id` = %s'''
-        cursor.execute(teams_query, user_id)
-        user_data['teams'] = []
-        for row in cursor:
-            user_data['teams'].append(row['team'])
-
-        # Get user contact info
-        contacts_query = '''SELECT `mode`.`name` AS `mode`, `target_contact`.`destination` AS `destination`
-                            FROM `target_contact` JOIN `mode` ON `target_contact`.`mode_id` = `mode`.`id`
-                            WHERE `target_contact`.`target_id` = %s'''
-        cursor.execute(contacts_query, user_id)
-        user_data['contacts'] = {}
-        for row in cursor:
-            user_data['contacts'][row['mode']] = row['destination']
-        cursor.close()
-        connection.close()
+        user_data = get_user_details(username)
         resp.status = HTTP_200
         resp.body = ujson.dumps(user_data)
 
@@ -5414,7 +5421,7 @@ class InternalApplicationsAuth():
         self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
 
     def on_get(self, req, resp):
-        if req.context['app']['name'] not in self.allowlisted_apps:
+        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
             raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
 
         connection = db.engine.raw_connection()
@@ -5430,10 +5437,82 @@ class InternalApplicationsAuth():
         resp.body = ujson.dumps(payload)
 
 
+class InternalIncident():
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+
+    def on_post(self, req, resp, incident_id):
+        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
+            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
+
+        body = ujson.loads(req.context['body'])
+
+        if 'current_step' not in body or 'active' not in body:
+            raise HTTPBadRequest('Missing required fields "current_step" or "active" in body')
+
+        if not isinstance(body['current_step'], int):
+            raise HTTPBadRequest('"step" field must be an integer"')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s) as valid''', incident_id)
+        if not cursor.fetchone().get('valid'):
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Invalid incident id')
+
+        if body['active']:
+            active = 1
+        else:
+            active = 0
+
+        cursor.execute('''UPDATE `incident` SET `current_step` = %s, `active` = %s WHERE `id` = %s''', (body['current_step'], active, incident_id))
+        connection.commit()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+
+
+class InternalTarget():
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+
+    def on_get(self, req, resp):
+        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
+            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
+
+        role = req.get_param('role', required=True)
+        target = req.get_param('target', required=True)
+
+        payload = {"error": None, "users": {}}
+        try:
+            names = sender_cache.targets_for_role(role, target)
+        except IrisRoleLookupException as e:
+            names = None
+            payload['error'] = str(e)
+            resp.status = HTTP_400
+            resp.body = ujson.dumps(payload)
+            return
+
+        for username in names:
+            user_data = get_user_details(username)
+            payload['users'][username] = user_data
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
         cache.init()
+        sender_cache.purge()
+        sender_cache.refresh()
         sleep(60)
 
 
@@ -5518,6 +5597,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
     api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth(config))
+    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident(config))
+    api.add_route('/v0/internal/target', InternalTarget(config))
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
@@ -5544,6 +5625,7 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
+    sender_cache.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
