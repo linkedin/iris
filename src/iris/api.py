@@ -3976,7 +3976,7 @@ def get_user_details(username):
                         FROM `device`
                         WHERE `device`.`user_id` = %s'''
     cursor.execute(mode_template_override_query, user_id)
-    user_data['device'] = [row for row in cursor]
+    user_data['device'] = list(cursor)
 
     # Get user contact modes per app
     user_data['per_app_modes'] = defaultdict(dict)
@@ -3990,8 +3990,7 @@ def get_user_details(username):
                     WHERE `user_team`.`user_id` = %s'''
     cursor.execute(teams_query, user_id)
     user_data['teams'] = []
-    for row in cursor:
-        user_data['teams'].append(row['team'])
+    user_data['teams'] = [row['team'] for row in cursor]
 
     # Get user contact info
     contacts_query = '''SELECT `mode`.`name` AS `mode`, `target_contact`.`destination` AS `destination`
