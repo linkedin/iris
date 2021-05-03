@@ -3956,7 +3956,7 @@ def get_user_details(username):
                                     JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
                                     WHERE `category_override`.`user_id` = %s'''
     cursor.execute(category_override_query, user_id)
-    user_data['category_overrides'] = defaultdict(dict)
+    user_data['category_overrides'] = {}
     for row in cursor:
         user_data['category_overrides'][row['application_name']] = row
 
@@ -5459,8 +5459,8 @@ class InternalIncident():
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
 
-        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s)''', incident_id)
-        if cursor.fetchone() is None:
+        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s) as valid''', incident_id)
+        if not cursor.fetchone().get('valid'):
             cursor.close()
             connection.close()
             raise HTTPBadRequest('Invalid incident id')
