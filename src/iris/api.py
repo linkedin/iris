@@ -871,26 +871,19 @@ class AuthMiddleware(object):
                 if username_header and not app['allow_authenticating_users']:
                     logger.warning('Unprivileged application %s tried authenticating %s', app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
-                window = int(time.time()) // 5
+                now = int(time.time())
+                windows = [
+                  now // 5,
+                  (now // 5) - 1,
+                  now // 30,
+                ]
                 for api_key in (str(app['key']), str(app['secondary_key'])):
-                    # If username header is present, throw that into the hmac validation as well
-                    if username_header:
-                        text = '%s %s %s %s %s' % (window, method, path, body, username_header)
-                    else:
-                        text = '%s %s %s %s' % (window, method, path, body)
-                    HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
-                    digest = base64.urlsafe_b64encode(HMAC.digest())
-                    if equals(client_digest.encode('utf-8'), digest):
-                        req.context['app'] = app
+                    for window in windows:
+                        # If username header is present, throw that into the hmac validation as well
                         if username_header:
-                            req.context['username'] = username_header
-                        return
-                    else:
-                        # Try again with window - 1
-                        if username_header:
-                            text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
+                            text = '%s %s %s %s %s' % (window, method, path, body, username_header)
                         else:
-                            text = '%s %s %s %s' % (window - 1, method, path, body)
+                            text = '%s %s %s %s' % (window, method, path, body)
                         HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                         digest = base64.urlsafe_b64encode(HMAC.digest())
                         if equals(client_digest.encode('utf-8'), digest):
