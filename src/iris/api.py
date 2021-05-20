@@ -873,9 +873,9 @@ class AuthMiddleware(object):
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
                 now = int(time.time())
                 windows = [
-                  now // 5,
-                  (now // 5) - 1,
-                  now // 30,
+                    now // 5,
+                    (now // 5) - 1,
+                    now // 30,
                 ]
                 for api_key in (str(app['key']), str(app['secondary_key'])):
                     for window in windows:
