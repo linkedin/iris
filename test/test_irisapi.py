@@ -84,6 +84,25 @@ class TestAuth(falcon.testing.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.content, b'Hello world')
 
+        # Test widened window
+        window = int(time.time()) // 30
+        text = '%s %s %s %s' % (window, 'GET', '/foo/bar/', '')
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
+        auth = 'hmac app:%s' % digest
+        result = self.simulate_get(path='/foo/bar/', headers={'Authorization': auth})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, b'Hello world')
+
+        # Make sure broken window still returns 4xx
+        window = int(time.time()) // 25
+        text = '%s %s %s %s' % (window, 'GET', '/foo/bar/', '')
+        HMAC = hmac.new(b'key', text.encode('utf-8'), hashlib.sha512)
+        digest = base64.urlsafe_b64encode(HMAC.digest()).decode('utf-8')
+        auth = 'hmac app:%s' % digest
+        result = self.simulate_get(path='/foo/bar/', headers={'Authorization': auth})
+        self.assertEqual(result.status_code, 401)
+
         # Test no auth header
         result = self.simulate_get(path='/foo/bar')
         self.assertEqual(result.status_code, 401)
