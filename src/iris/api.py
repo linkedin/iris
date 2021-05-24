@@ -876,6 +876,7 @@ class AuthMiddleware(object):
                     now // 5,
                     (now // 5) - 1,
                     now // 30,
+                    (now // 30) - 1,
                 ]
                 for api_key in (str(app['key']), str(app['secondary_key'])):
                     for window in windows:
