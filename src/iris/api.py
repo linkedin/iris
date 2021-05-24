@@ -769,7 +769,9 @@ class ReqBodyMiddleware(object):
 
 
 class AuthMiddleware(object):
-    def __init__(self, debug=False):
+    def __init__(self, config, debug=False):
+
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
         if debug:
             self.process_resource = self.debug_auth
 
@@ -891,6 +893,12 @@ class AuthMiddleware(object):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
+
+                            # if trying to access internal route ensure that the app is in the allowlist
+                            if hasattr(resource, "internal_allowlist_only"):
+                                if resource.internal_allowlist_only:
+                                    if app_name not in self.allowlisted_apps:
+                                        raise HTTPUnauthorized('This endpoint is only available for internal allowlisted applications', '', [])
                             return
                 # No successful HMACs match, fail auth.
                 if username_header:
@@ -909,8 +917,8 @@ class AuthMiddleware(object):
 
 
 class ACLMiddleware(object):
-    def __init__(self, debug):
-        pass
+    def __init__(self, config, debug):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
 
     def process_resource(self, req, resp, resource, params):
         self.process_frontend_routes(req, resource)
@@ -935,6 +943,10 @@ class ACLMiddleware(object):
         # Quickly check the username in the path matches who's logged in
         enforce_user = getattr(resource, 'enforce_user', False)
         app = req.context.get('app')
+
+        # internally allowlisted apps have access to all internal data
+        if req.context.get('app', {}).get('name') in self.allowlisted_apps:
+            return
 
         if not req.context['username']:
             # Check if we need to raise 401s when user must be enforced
@@ -5410,13 +5422,9 @@ class CategoryOverrides(object):
 
 class InternalApplicationsAuth():
     allow_read_no_auth = False
-
-    def __init__(self, config):
-        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+    internal_allowlist_only = True
 
     def on_get(self, req, resp):
-        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
-            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
@@ -5433,13 +5441,9 @@ class InternalApplicationsAuth():
 
 class InternalIncident():
     allow_read_no_auth = False
-
-    def __init__(self, config):
-        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+    internal_allowlist_only = True
 
     def on_post(self, req, resp, incident_id):
-        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
-            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
 
         body = ujson.loads(req.context['body'])
 
@@ -5472,13 +5476,9 @@ class InternalIncident():
 
 class InternalTarget():
     allow_read_no_auth = False
-
-    def __init__(self, config):
-        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+    internal_allowlist_only = True
 
     def on_get(self, req, resp):
-        if req.context.get('app', {}).get('name') not in self.allowlisted_apps:
-            raise HTTPUnauthorized('Authentication failure', 'this endpoint is only available for internal use by allowlisted apps', [])
 
         role = req.get_param('role', required=True)
         target = req.get_param('target', required=True)
@@ -5520,8 +5520,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
-        AuthMiddleware(debug=debug),
-        ACLMiddleware(debug=debug),
+        AuthMiddleware(config=config, debug=debug),
+        ACLMiddleware(config=config, debug=debug),
         HeaderMiddleware(),
         cors.middleware
     ])
@@ -5590,9 +5590,9 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
-    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth(config))
-    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident(config))
-    api.add_route('/v0/internal/target', InternalTarget(config))
+    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
+    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
+    api.add_route('/v0/internal/target', InternalTarget())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
