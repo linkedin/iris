@@ -769,7 +769,7 @@ class ReqBodyMiddleware(object):
 
 
 class AuthMiddleware(object):
-    def __init__(self, config, debug=False):
+    def __init__(self, config={}, debug=False):
 
         self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
         if debug:
@@ -917,7 +917,7 @@ class AuthMiddleware(object):
 
 
 class ACLMiddleware(object):
-    def __init__(self, config, debug):
+    def __init__(self, config={}, debug=False):
         self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
 
     def process_resource(self, req, resp, resource, params):
