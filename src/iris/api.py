@@ -38,6 +38,8 @@ from iris.vendors.iris_slack import iris_slack
 from iris.role_lookup import IrisRoleLookupException
 from iris.sender import cache as sender_cache
 from iris.sender import auditlog
+from iris.bin.sender import set_target_contact, render
+from iris.utils import sanitize_unicode_dict
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
 
@@ -5420,6 +5422,107 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
+class InternalBuildMessages():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+        notification = ujson.loads(req.context['body'])
+        if 'application' not in notification:
+            logger.warning('Dropping OOB message due to missing application key')
+            raise HTTPBadRequest('INVALID application')
+
+        notification['subject'] = '[%s] %s' % (notification['application'],
+                                               notification.get('subject', ''))
+        target_list = notification.get('target_list')
+        role = notification.get('role')
+        if not role and not target_list:
+            logger.warning('Dropping OOB message with invalid role "%s" from app %s',
+                           role, notification['application'])
+            raise HTTPBadRequest('INVALID role')
+
+        target = notification.get('target')
+        if not (target or target_list):
+            logger.warning('Dropping OOB message with invalid target "%s" from app %s',
+                           target, notification['application'])
+            raise HTTPBadRequest('INVALID target')
+        expanded_targets = None
+        # if role is literal_target skip unrolling
+        if not notification.get('unexpanded'):
+            # For multi-recipient notifications, pre-populate destination with literal targets,
+            # then expand the remaining
+            has_literal_target = False
+            if target_list:
+                expanded_targets = []
+                notification['destination'] = []
+                notification['bcc_destination'] = []
+                for t in target_list:
+                    role = t['role']
+                    target = t['target']
+                    bcc = t.get('bcc')
+                    try:
+                        if role == 'literal_target':
+                            if bcc:
+                                notification['bcc_destination'].append(target)
+                            else:
+                                notification['destination'].append(target)
+                            has_literal_target = True
+                        else:
+                            expanded = cache.targets_for_role(role, target)
+                            expanded_targets += [{'target': e, 'bcc': bcc} for e in expanded]
+                    except IrisRoleLookupException:
+                        # Maintain best-effort delivery for remaining targets if one fails to resolve
+                        continue
+            else:
+                try:
+                    expanded_targets = sender_cache.targets_for_role(role, target)
+                except IrisRoleLookupException:
+                    expanded_targets = None
+            if not expanded_targets and not has_literal_target:
+                logger.warning('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                               role, target, notification['application'])
+                raise HTTPBadRequest('INVALID role:target')
+
+        sanitize_unicode_dict(notification)
+
+        # If we're rendering this using templates+context instead of body, fill in the
+        # needed iris key.
+        if 'template' in notification:
+            if 'context' not in notification:
+                logger.warning('Dropping OOB message due to missing context from app %s',
+                               notification['application'])
+                raise HTTPBadRequest('INVALID context')
+            else:
+                # fill in dummy iris meta data
+                notification['context']['iris'] = {}
+        elif 'email_html' in notification:
+            if not isinstance(notification['email_html'], str):
+                logger.warning('Dropping OOB message with invalid email_html from app %s: %s',
+                               notification['application'], notification['email_html'])
+                raise HTTPBadRequest('INVALID email_html')
+
+        notifications = []
+        if notification.get('unexpanded'):
+            notification['destination'] = notification['target']
+            notifications.append(notification)
+        elif notification.get('multi-recipient'):
+            notification['target'] = expanded_targets
+            notifications.append(notification)
+        else:
+            for _target in expanded_targets:
+                temp_notification = notification.copy()
+                temp_notification['target'] = _target
+                notifications.append(temp_notification)
+
+        messages = []
+        for notification in notifications:
+            message = set_target_contact(notification)[1]
+            message = render(message)
+            messages.append(message)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(messages)
+
+
 class InternalApplicationsAuth():
     allow_read_no_auth = False
     internal_allowlist_only = True
@@ -5593,6 +5696,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
     api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
     api.add_route('/v0/internal/target', InternalTarget())
+    api.add_route('/v0/internal/build_message', InternalBuildMessages())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
