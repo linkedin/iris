@@ -131,7 +131,7 @@ def test_fetch_and_send_message(mocker):
         message['destination'] = 'foo@example.com'
         message['mode'] = 'email'
         message['mode_id'] = 1
-        return True
+        return (True, message)
 
     vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
@@ -167,7 +167,7 @@ def test_message_retry(mocker):
         message['destination'] = 'foo@example.com'
         message['mode'] = 'sms'
         message['mode_id'] = 1
-        return True
+        return (True, message)
 
     vendors = IrisVendorManager({}, [])
     mocker.patch('iris.bin.sender.db')
@@ -232,11 +232,11 @@ def test_no_valid_modes(mocker):
         assert m['message_id'] == fake_message['message_id']
 
     def mock_set_target_contact(message):
-        return False
+        return (False, message)
 
     mocker.patch('iris.metrics.stats')
     mocker.patch('iris.bin.sender.db')
-    mocker.patch('iris.bin.sender.set_target_contact').return_value = False
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = (False, {})
     mock_mark_message_no_contact = mocker.patch('iris.bin.sender.mark_message_has_no_contact')
     mock_mark_message_no_contact.reset_mock()
     from iris.bin.sender import message_send_enqueue, message_ids_being_sent
@@ -259,7 +259,7 @@ def test_handle_api_request_v0_send(mocker):
     mocker.patch('iris.sender.cache.targets_for_role', lambda role, target: [target])
     mocker.patch('iris.bin.sender.db')
     mocker.patch('iris.metrics.stats')
-    mocker.patch('iris.bin.sender.set_target_contact').return_value = True
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = (True, {})
 
     mock_address = mocker.MagicMock()
     mock_socket = mocker.MagicMock()
@@ -416,7 +416,7 @@ def test_aggregate_audit_msg(mocker):
 
 
 def test_handle_api_notification_request_invalid_message(mocker):
-    mocker.patch('iris.bin.sender.set_target_contact').return_value = True
+    mocker.patch('iris.bin.sender.set_target_contact').return_value = (True, {})
     mocker.patch('iris.metrics.stats')
 
     from iris.bin.sender import message_send_enqueue
