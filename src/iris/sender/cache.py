@@ -310,10 +310,11 @@ class Plans():
         new_ids = new_active_ids - old_active_ids
 
         for plan_id in old_ids:
-            try:
-                del self.data[plan_id]
-            except KeyError:
-                logger.exception('Failed pruning old plan_id %s', plan_id)
+            if self.data.get(plan_id):
+                try:
+                    del self.data[plan_id]
+                except KeyError:
+                    logger.debug('Failed pruning old plan_id %s', plan_id)
 
         Pool(30).map(self.__getitem__, (active[id] for id in new_ids))
 
