@@ -111,6 +111,7 @@ class iris_slack(object):
         start = time.time()
         payload = self.get_message_payload(message)
         message_endpoint = self.config['base_url'] + "/chat.postMessage"
+
         try:
             response = requests.post(message_endpoint,
                                      data=payload,
@@ -125,8 +126,12 @@ class iris_slack(object):
                     return time.time() - start
                 # If message is invalid:
                 #   {u'ok': False, u'error': u'invalid_arg_name'}
-                logger.error('Received an error from slack api: %s',
-                             data['error'])
+                # if not in the channel, the error is expected so log a warning instead of an error
+                elif data.get('error') == 'not_in_channel':
+                    logger.warning('Iris bot not present in the designated channel %s', message.get('destination'))
+                    return time.time() - start
+                else:
+                    logger.error('Received an error from slack api: %s', data['error'])
             elif response.status_code == 429:
                 # Slack rate limiting. Sleep for a few seconds (chosen randomly to spread load),
                 # then raise error to retry
