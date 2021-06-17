@@ -129,6 +129,7 @@ class iris_slack(object):
                 # if not in the channel, the error is expected so log a warning instead of an error
                 elif data.get('error') == 'not_in_channel':
                     logger.warning('Iris bot not present in the designated channel %s', message.get('destination'))
+                    return time.time() - start
                 else:
                     logger.error('Received an error from slack api: %s', data['error'])
             elif response.status_code == 429:
