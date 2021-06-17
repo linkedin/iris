@@ -126,15 +126,9 @@ class iris_slack(object):
                     return time.time() - start
                 # If message is invalid:
                 #   {u'ok': False, u'error': u'invalid_arg_name'}
-
-                # Check the slack api to see if the iris bot is in the channel first before logging an error
-                # if not in the channel, the error is expected and should not be logged
-                msg_endpoint = self.config['base_url'] + "/conversations.info"
-                response_alt = requests.get(msg_endpoint, data=payload, proxies=self.proxy, timeout=self.timeout)
-                if response_alt.status_code == 200 \
-                        and response_alt.json()['ok'] \
-                        and not response_alt.json()['channel']['is_member']:
-                    pass
+                # if not in the channel, the error is expected so log a warning instead of an error
+                elif data.get('error') == 'not_in_channel':
+                    logger.warning('Iris bot not present in the designated channel %s', message.get('destination'))
                 else:
                     logger.error('Received an error from slack api: %s', data['error'])
             elif response.status_code == 429:
