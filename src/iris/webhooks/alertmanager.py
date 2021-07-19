@@ -15,7 +15,6 @@ class alertmanager(webhook):
         if 'iris_plan' not in body["groupLabels"]:
             raise HTTPBadRequest('missing iris_plan in group labels')
 
-
     def on_post(self, req, resp):
         '''
         This endpoint is compatible with the webhook post from Alertmanager.
