@@ -59,16 +59,14 @@ CREATE TABLE `incident` (
   `application_id` int(11) NOT NULL,
   `current_step` int(11) NOT NULL,
   `active` tinyint(1) NOT NULL,
+  `resolved` tinyint(1) unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ix_incident_plan_id` (`plan_id`),
   KEY `ix_incident_updated` (`updated`),
   KEY `ix_incident_owner_id` (`owner_id`),
   KEY `ix_incident_active` (`active`),
   KEY `ix_incident_application_id` (`application_id`),
-  KEY `ix_incident_created` (`created`),
-  CONSTRAINT `incident_ibfk_1` FOREIGN KEY (`plan_id`) REFERENCES `plan` (`id`),
-  CONSTRAINT `incident_ibfk_2` FOREIGN KEY (`owner_id`) REFERENCES `user` (`target_id`),
-  CONSTRAINT `incident_ibfk_3` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
+  KEY `ix_incident_created` (`created`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -108,15 +106,7 @@ CREATE TABLE `message` (
   KEY `ix_message_target_id` (`target_id`),
   KEY `ix_message_mode_id` (`mode_id`),
   KEY `ix_message_active` (`active`),
-  KEY `message_ibfk_8` (`template_id`),
-  CONSTRAINT `message_ibfk_1` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`),
-  CONSTRAINT `message_ibfk_2` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`),
-  CONSTRAINT `message_ibfk_3` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`),
-  CONSTRAINT `message_ibfk_4` FOREIGN KEY (`plan_id`) REFERENCES `plan` (`id`),
-  CONSTRAINT `message_ibfk_5` FOREIGN KEY (`priority_id`) REFERENCES `priority` (`id`),
-  CONSTRAINT `message_ibfk_6` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`),
-  CONSTRAINT `message_ibfk_7` FOREIGN KEY (`plan_notification_id`) REFERENCES `plan_notification` (`id`),
-  CONSTRAINT `message_ibfk_8` FOREIGN KEY (`template_id`) REFERENCES `template` (`id`)
+  KEY `message_ibfk_8` (`template_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -210,6 +200,7 @@ CREATE TABLE `plan_notification` (
   `step` int(11) NOT NULL,
   `template` varchar(255) DEFAULT NULL,
   `target_id` bigint(20),
+  `optional` TINYINT(1) NOT NULL DEFAULT '0',
   `role_id` int(11),
   `priority_id` int(11) NOT NULL,
   `repeat` int(11) NOT NULL DEFAULT '0',
@@ -303,6 +294,23 @@ CREATE TABLE `target` (
   UNIQUE KEY `name_type_idx` (`name`,`type_id`),
   KEY `active_index` (`active`),
   CONSTRAINT `target_ibfk_1` FOREIGN KEY (`type_id`) REFERENCES `target_type` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+
+--
+-- Table structure for table `oncall_team`
+--
+
+DROP TABLE IF EXISTS `oncall_team`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `oncall_team` (
+  `target_id` bigint(20) NOT NULL,
+  `oncall_team_id` bigint(20) NOT NULL,
+  PRIMARY KEY (`target_id`),
+  UNIQUE KEY `oncall_team_id_idx` (`oncall_team_id`),
+  CONSTRAINT `oncall_team_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -542,6 +550,7 @@ CREATE TABLE `template_variable` (
   `application_id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL,
   `required` tinyint(1) NOT NULL DEFAULT '0',
+  `title_variable` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ix_template_variable_application_id` (`application_id`),
   CONSTRAINT `template_variable_ibfk_1` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
@@ -646,6 +655,20 @@ CREATE TABLE `application_owner` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 --
+-- Table structure for table `application_custom_sender_address` defines custom "from" addresses
+--
+
+DROP TABLE IF EXISTS `application_custom_sender_address`;
+CREATE TABLE `application_custom_sender_address` (
+  `application_id` int(11) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  `sender_address` varchar(255) NOT NULL,
+  PRIMARY KEY (`application_id`, `mode_id`),
+  CONSTRAINT `application_custom_sender_address_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `application_custom_sender_address_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+--
 -- Table structure for table `twilio_delivery_status`
 --
 
@@ -742,14 +765,66 @@ DROP TABLE IF EXISTS `application_stats`;
 CREATE TABLE `application_stats` (
   `application_id` INT(11) NOT NULL,
   `statistic` VARCHAR(255) NOT NULL,
-  `value` FLOAT NOT NULL,
+  `value` FLOAT,
   `timestamp` DATETIME NOT NULL,
-  PRIMARY KEY (`application_id`, `statistic`),
+  PRIMARY KEY (`application_id`, `statistic`, `timestamp`),
   CONSTRAINT `application_stats_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `global_stats`;
+CREATE TABLE `global_stats` (
+  `statistic` VARCHAR(255) NOT NULL,
+  `value` FLOAT,
+  `timestamp` DATETIME NOT NULL,
+  PRIMARY KEY (`statistic`, `timestamp`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `comment`;
+CREATE TABLE `comment` (
+  `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+  `incident_id` BIGINT(20) NOT NULL,
+  `created` DATETIME NOT NULL,
+  `user_id` BIGINT(20) NOT NULL,
+  `content` TEXT NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `comment_incident_id_ibfk` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`),
+  CONSTRAINT `comment_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `notification_category`;
+CREATE TABLE `notification_category` (
+  `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+  `application_id` INT(11) NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `description` VARCHAR(255) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `notification_category_app_id_ibfk` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `notification_category_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`),
+  KEY `ix_notification_category_app_id` (`application_id`),
+  UNIQUE KEY (`application_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `mode_template_override`;
+CREATE TABLE `mode_template_override` (
+  `target_id` BIGINT(20) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`target_id`),
+  CONSTRAINT `target_id_override_ibfk_1` FOREIGN KEY (`target_id`) REFERENCES `target` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `mode_id_override_ibfk_1`  FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `category_override`;
+CREATE TABLE `category_override` (
+  `user_id` BIGINT(20) NOT NULL,
+  `category_id` BIGINT(20) NOT NULL,
+  `mode_id` INT(11) NOT NULL,
+  PRIMARY KEY (`user_id`, `category_id`),
+  CONSTRAINT `category_override_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `category_override_category_id_ibfk` FOREIGN KEY (`category_id`) REFERENCES `notification_category` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `category_override_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

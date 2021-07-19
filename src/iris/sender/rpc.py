@@ -1,8 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
-
 import os
 from gevent import Timeout, socket
 from gevent.server import StreamServer
@@ -13,6 +11,7 @@ from iris import metrics
 from iris.role_lookup import IrisRoleLookupException
 
 import logging
+import logging.handlers
 logger = logging.getLogger(__name__)
 access_logger = logging.getLogger('RPC:access')
 
@@ -73,32 +72,60 @@ def handle_api_notification_request(socket, address, req):
     notification = req['data']
     if 'application' not in notification:
         reject_api_request(socket, address, 'INVALID application')
-        logger.warn('Dropping OOB message due to missing application key')
+        logger.warning('Dropping OOB message due to missing application key')
         return
     notification['subject'] = '[%s] %s' % (notification['application'],
                                            notification.get('subject', ''))
+    target_list = notification.get('target_list')
     role = notification.get('role')
-    if not role:
+    if not role and not target_list:
         reject_api_request(socket, address, 'INVALID role')
-        logger.warn('Dropping OOB message with invalid role "%s" from app %s',
-                    role, notification['application'])
+        logger.warning('Dropping OOB message with invalid role "%s" from app %s',
+                       role, notification['application'])
         return
     target = notification.get('target')
-    if not target:
+    if not (target or target_list):
         reject_api_request(socket, address, 'INVALID target')
-        logger.warn('Dropping OOB message with invalid target "%s" from app %s',
-                    target, notification['application'])
+        logger.warning('Dropping OOB message with invalid target "%s" from app %s',
+                       target, notification['application'])
         return
-
-    try:
-        expanded_targets = cache.targets_for_role(role, target)
-    except IrisRoleLookupException:
-        expanded_targets = None
-    if not expanded_targets:
-        reject_api_request(socket, address, 'INVALID role:target')
-        logger.warn('Dropping OOB message with invalid role:target "%s:%s" from app %s',
-                    role, target, notification['application'])
-        return
+    expanded_targets = None
+    # if role is literal_target skip unrolling
+    if not notification.get('unexpanded'):
+        # For multi-recipient notifications, pre-populate destination with literal targets,
+        # then expand the remaining
+        has_literal_target = False
+        if target_list:
+            expanded_targets = []
+            notification['destination'] = []
+            notification['bcc_destination'] = []
+            for t in target_list:
+                role = t['role']
+                target = t['target']
+                bcc = t.get('bcc')
+                try:
+                    if role == 'literal_target':
+                        if bcc:
+                            notification['bcc_destination'].append(target)
+                        else:
+                            notification['destination'].append(target)
+                        has_literal_target = True
+                    else:
+                        expanded = cache.targets_for_role(role, target)
+                        expanded_targets += [{'target': e, 'bcc': bcc} for e in expanded]
+                except IrisRoleLookupException:
+                    # Maintain best-effort delivery for remaining targets if one fails to resolve
+                    continue
+        else:
+            try:
+                expanded_targets = cache.targets_for_role(role, target)
+            except IrisRoleLookupException:
+                expanded_targets = None
+        if not expanded_targets and not has_literal_target:
+            reject_api_request(socket, address, 'INVALID role:target')
+            logger.warning('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                           role, target, notification['application'])
+            return
 
     sanitize_unicode_dict(notification)
 
@@ -106,34 +133,43 @@ def handle_api_notification_request(socket, address, req):
     # needed iris key.
     if 'template' in notification:
         if 'context' not in notification:
-            logger.warn('Dropping OOB message due to missing context from app %s',
-                        notification['application'])
+            logger.warning('Dropping OOB message due to missing context from app %s',
+                           notification['application'])
             reject_api_request(socket, address, 'INVALID context')
             return
         else:
             # fill in dummy iris meta data
             notification['context']['iris'] = {}
     elif 'email_html' in notification:
-        if not isinstance(notification['email_html'], basestring):
-            logger.warn('Dropping OOB message with invalid email_html from app %s: %s',
-                        notification['application'], notification['email_html'])
+        if not isinstance(notification['email_html'], str):
+            logger.warning('Dropping OOB message with invalid email_html from app %s: %s',
+                           notification['application'], notification['email_html'])
             reject_api_request(socket, address, 'INVALID email_html')
             return
     elif 'body' not in notification:
         reject_api_request(socket, address, 'INVALID body')
-        logger.warn('Dropping OOB message with invalid body from app %s',
-                    notification['application'])
+        logger.warning('Dropping OOB message with invalid body from app %s',
+                       notification['application'])
         return
 
     access_logger.info('-> %s OK, to %s:%s (%s:%s)',
                        address, role, target, notification['application'],
                        notification.get('priority', notification.get('mode', '?')))
 
-    for _target in expanded_targets:
-        temp_notification = notification.copy()
-        temp_notification['target'] = _target
-        send_funcs['message_send_enqueue'](temp_notification)
-    metrics.incr('notification_cnt')
+    notification_count = 1
+    if notification.get('unexpanded'):
+        notification['destination'] = notification['target']
+        send_funcs['message_send_enqueue'](notification)
+    elif notification.get('multi-recipient'):
+        notification['target'] = expanded_targets
+        send_funcs['message_send_enqueue'](notification)
+        notification_count = len(expanded_targets)
+    else:
+        for _target in expanded_targets:
+            temp_notification = notification.copy()
+            temp_notification['target'] = _target
+            send_funcs['message_send_enqueue'](temp_notification)
+    metrics.incr('notification_cnt', inc=notification_count)
     socket.sendall(msgpack.packb('OK'))
 
 

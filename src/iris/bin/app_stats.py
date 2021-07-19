@@ -5,7 +5,9 @@ from gevent import monkey, sleep, spawn
 monkey.patch_all()  # NOQA
 
 import logging
+import logging.handlers
 import os
+from datetime import datetime
 
 from iris import db, metrics, app_stats
 from iris.api import load_config
@@ -40,21 +42,43 @@ stats_reset = {
 }
 
 
+def set_global_stats(stats, connection, cursor):
+    # delete outdated stats
+    cursor.execute('''DELETE FROM `global_stats`''')
+
+    # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+    for stat, entry_list in stats.items():
+        for stat_entry in entry_list:
+            for timestamp, val in stat_entry.items():
+                # format timestamp into datetime to store in mysql
+                timestamp = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                cursor.execute('''INSERT INTO `global_stats` (`statistic`, `value`, `timestamp`)
+                                VALUES (%s, %s, %s)
+                                ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                               (stat, val, timestamp, val, timestamp))
+    connection.commit()
+
+
 def set_app_stats(app, stats, connection, cursor):
-    for stat, val in stats.iteritems():
-        if val is not None:
-            cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
-                              VALUES (%s, %s, %s, NOW())
-                              ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = NOW()''',
-                           (app['id'], stat, val, val))
-            connection.commit()
+    # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+    for stat, entry_list in stats.items():
+        for stat_entry in entry_list:
+            for timestamp, val in stat_entry.items():
+                # format timestamp into datetime to store in mysql
+                timestamp = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                cursor.execute('''INSERT INTO `application_stats` (`application_id`, `statistic`, `value`, `timestamp`)
+                                VALUES (%s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE `value`= %s, `timestamp` = %s''',
+                               (app['id'], stat, val, timestamp, val, timestamp))
+    connection.commit()
 
 
-def stats_task():
-    connection = db.engine.raw_connection()
-    cursor = connection.cursor()
+def stats_task(connection, cursor):
+
     cursor.execute('SELECT `id`, `name` FROM `application`')
     applications = [{'id': row[0], 'name': row[1]} for row in cursor]
+    # clean up old app stats
+    cursor.execute('''DELETE FROM `application_stats`''')
     for app in applications:
         try:
             stats = app_stats.calculate_app_stats(app, connection, cursor)
@@ -62,20 +86,31 @@ def stats_task():
         except Exception:
             logger.exception('App stats calculation failed for app %s', app['name'])
             metrics.incr('task_failure')
-    cursor.close()
-    connection.close()
+    try:
+        stats = app_stats.calculate_global_stats(connection, cursor)
+        set_global_stats(stats, connection, cursor)
+    except Exception:
+        logger.exception('Global stats calculation failed')
+        metrics.incr('task_failure')
 
 
 def main():
     config = load_config()
     metrics.init(config, 'iris-application-stats', stats_reset)
-    retention_settings = config.get('app-stats', {})
-    run_interval = int(retention_settings['run_interval'])
+    app_stats_settings = config.get('app-stats', {})
+    run_interval = int(app_stats_settings['run_interval'])
     spawn(metrics.emit_forever)
-
     db.init(config)
     while True:
         logger.info('Starting app stats calculation loop')
-        stats_task()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        stats_task(connection, cursor)
+        cursor.close()
+        connection.close()
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
+
+
+if __name__ == '__main__':
+    main()

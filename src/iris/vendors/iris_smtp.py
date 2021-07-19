@@ -1,10 +1,13 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
+from gevent import sleep
 from iris.constants import EMAIL_SUPPORT, IM_SUPPORT
 from smtplib import SMTP
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
+from iris import cache
 import quopri
 import time
 import markdown
@@ -22,6 +25,7 @@ class iris_smtp(object):
 
     def __init__(self, config):
         self.config = config
+        self.retry_interval = config.get('retry_interval', 0)
         self.modes = {
             EMAIL_SUPPORT: self.send_email,
             IM_SUPPORT: self.send_email,
@@ -50,21 +54,20 @@ class iris_smtp(object):
     def send_email(self, message, customizations=None):
         md = markdown.Markdown()
 
-        if isinstance(customizations, dict):
-            from_address = customizations.get('from', self.config['from'])
-        else:
-            from_address = self.config['from']
-
         start = time.time()
         m = MIMEMultipart('alternative')
+
+        from_address = self.config['from']
+        application = message.get('application')
+        if application:
+            m['X-IRIS-APPLICATION'] = application
+            address = cache.applications.get(application, {}).get('custom_sender_addresses', {}).get('email')
+            if address is not None:
+                from_address = address
 
         priority = message.get('priority')
         if priority:
             m['X-IRIS-PRIORITY'] = priority
-
-        application = message.get('application')
-        if application:
-            m['X-IRIS-APPLICATION'] = application
 
         plan = message.get('plan')
         if plan:
@@ -74,8 +77,14 @@ class iris_smtp(object):
         if incident_id:
             m['X-IRIS-INCIDENT-ID'] = str(incident_id)
 
+        m['Date'] = formatdate(localtime=True)
         m['from'] = from_address
-        m['to'] = message['destination']
+        if message.get('multi-recipient'):
+            m['to'] = ','.join(set(message['destination']))
+            if message['bcc_destination']:
+                m['bcc'] = ','.join(set(message['bcc_destination']))
+        else:
+            m['to'] = message['destination']
         if message.get('noreply'):
             m['reply-to'] = m['to']
 
@@ -120,6 +129,10 @@ class iris_smtp(object):
 
         conn = None
 
+        if message.get('multi-recipient'):
+            email_recipients = message['destination'] + message['bcc_destination']
+        else:
+            email_recipients = [message['destination']]
         # Try reusing previous connection in this worker if we have one
         if self.last_conn:
             conn = self.last_conn
@@ -127,7 +140,9 @@ class iris_smtp(object):
             for mx in self.mx_sorted:
                 try:
                     smtp = SMTP(timeout=self.smtp_timeout)
-                    smtp.connect(mx[1], 25)
+                    smtp.connect(mx[1], self.config.get('port', 25))
+                    if self.config.get('username', None) is not None and self.config.get('password', None) is not None:
+                        smtp.login(self.config.get('username', None), self.config.get('password', None))
                     conn = smtp
                     self.last_conn = conn
                     self.last_conn_server = mx[1]
@@ -139,7 +154,7 @@ class iris_smtp(object):
             raise Exception('Failed to get smtp connection.')
 
         try:
-            conn.sendmail([from_address], [message['destination']], m.as_string())
+            conn.sendmail([from_address], email_recipients, m.as_string())
         except Exception:
             logger.warning('Failed sending email through %s. Will try connecting again and resending.', self.last_conn_server)
 
@@ -164,7 +179,10 @@ class iris_smtp(object):
                     return None
 
             try:
-                conn.sendmail([from_address], [message['destination']], m.as_string())
+                # If configured, sleep to back-off on connection
+                if self.retry_interval:
+                    sleep(self.retry_interval)
+                conn.sendmail([from_address], email_recipients, m.as_string())
                 logger.info('Message successfully sent through %s after reconnecting', self.last_conn_server)
             except Exception:
                 logger.exception('Failed sending email through %s after trying to reconnect', self.last_conn_server)

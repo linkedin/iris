@@ -52,7 +52,8 @@ class fcm(object):
                     sound='default',
                     time_to_live=self.ttl,
                     data_message=data_message,
-                    timeout=self.timeout
+                    timeout=self.timeout,
+                    click_action='incident'
                 )
                 for idx, result in enumerate(response['results']):
                     error = result.get('error')

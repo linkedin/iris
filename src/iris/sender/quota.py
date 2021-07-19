@@ -3,6 +3,7 @@
 
 from time import time
 from gevent import spawn, sleep
+from gevent.lock import Semaphore
 from collections import deque
 from datetime import datetime
 import iris.cache
@@ -53,13 +54,27 @@ required_quota_keys = frozenset(['hard_quota_threshold', 'soft_quota_threshold',
 quota_int_keys = ('hard_quota_threshold', 'soft_quota_threshold',
                   'hard_quota_duration', 'soft_quota_duration', 'wait_time')
 
-soft_quota_notification_interval = 600
+soft_quota_notification_interval = 1800
 
 
 class ApplicationQuota(object):
 
-    def __init__(self, db, expand_targets, message_send_enqueue, sender_app):
+    def __init__(self, db, expand_targets, message_send_enqueue, sender_app, rate_configs):
         self.db = db
+        # configure default rate limiting params for messages
+        hard_limit = rate_configs.get('hard_limit', 6000)
+        soft_limit = rate_configs.get('soft_limit', 600)
+        hard_duration = rate_configs.get('hard_duration', 1)
+        soft_duration = rate_configs.get('soft_duration', 1)
+        wait_time = rate_configs.get('wait_time', 3600)
+        plan_name = rate_configs.get('plan_name', None)
+        target_name = rate_configs.get('target_name', None)
+        target_role = rate_configs.get('target_role', None)
+        target = None
+        if target_name and target_role:
+            target = (target_name, target_role)
+        self.default_rate_def = (hard_limit, soft_limit, hard_duration, soft_duration, wait_time, plan_name, target)
+
         self.expand_targets = expand_targets
         self.message_send_enqueue = message_send_enqueue
         self.iris_application = None
@@ -74,7 +89,9 @@ class ApplicationQuota(object):
 
         self.rates = {}  # application: (hard_buckets, soft_buckets, hard_limit, soft_limit, wait_time, plan_name, (target_name, target_role))
         self.last_incidents = {}  # application: (incident_id, time())
+        self.last_incidents_mutex = Semaphore()
         self.last_soft_quota_notification_time = {}  # application: time()
+        self.last_soft_quota_notification_time_mutex = Semaphore()
         metrics.add_new_metrics({'quota_hard_exceed_cnt': 0, 'quota_soft_exceed_cnt': 0})
         spawn(self.refresh)
 
@@ -90,10 +107,15 @@ class ApplicationQuota(object):
             new_rates = {}
 
             for application, hard_limit, soft_limit, hard_duration, soft_duration, target_name, target_role, plan_name, wait_time in self.get_new_rules():
-                new_rates[application] = (hard_limit, soft_limit, hard_duration / 60, soft_duration / 60, wait_time, plan_name, (target_name, target_role))
+                new_rates[application] = (hard_limit, soft_limit, hard_duration // 60, soft_duration // 60, wait_time, plan_name, (target_name, target_role))
 
-            old_keys = self.rates.viewkeys()
-            new_keys = new_rates.viewkeys()
+            # for any application that does not have a quota defined set it to a default value
+            for app in iris.cache.applications:
+                if not new_rates.get(app):
+                    new_rates[app] = self.default_rate_def
+
+            old_keys = self.rates.keys()
+            new_keys = new_rates.keys()
 
             # Remove old application entries
             for key in old_keys - new_keys:
@@ -155,12 +177,14 @@ class ApplicationQuota(object):
 
         hard_usage_pct = 0
         if hard_limit > 0:
-            hard_usage_pct = (hard_quota_usage / hard_limit) * 100
+            hard_usage_pct = (hard_quota_usage // hard_limit) * 100
         metrics.set('app_%s_quota_hard_usage_pct' % application, hard_usage_pct)
 
         if hard_quota_usage > hard_limit:
             metrics.incr('quota_hard_exceed_cnt')
-            self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
+            if plan_name:
+                with self.last_incidents_mutex:
+                    self.notify_incident(application, hard_limit, len(hard_buckets), plan_name, wait_time)
             return False
 
         # If soft limit breached, just notify owner and still send
@@ -168,12 +192,14 @@ class ApplicationQuota(object):
 
         soft_usage_pct = 0
         if soft_limit > 0:
-            soft_usage_pct = (soft_quota_usage / soft_limit) * 100
+            soft_usage_pct = (soft_quota_usage // soft_limit) * 100
         metrics.set('app_%s_quota_soft_usage_pct' % application, soft_usage_pct)
 
         if soft_quota_usage > soft_limit:
             metrics.incr('quota_soft_exceed_cnt')
-            self.notify_target(application, soft_limit, len(soft_buckets), *target)
+            if target:
+                with self.last_soft_quota_notification_time_mutex:
+                    self.notify_target(application, soft_limit, len(soft_buckets), *target)
             return True
 
         return True
@@ -243,8 +269,6 @@ class ApplicationQuota(object):
 
         now = time()
         if last_notification_time is not None and (now - last_notification_time) < soft_quota_notification_interval:
-            logger.warning('Application %s breached soft quota. Will NOT notify %s:%s as they will only get a notification once every %s seconds.',
-                           application, target_role, target_name, soft_quota_notification_interval)
             return
 
         self.last_soft_quota_notification_time[application] = now

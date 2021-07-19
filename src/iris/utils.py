@@ -3,7 +3,7 @@
 
 # -*- coding:utf-8 -*-
 
-from __future__ import absolute_import
+
 from phonenumbers import (format_number as pn_format_number, parse as pn_parse,
                           PhoneNumberFormat)
 from gevent import sleep
@@ -30,29 +30,38 @@ def validate_msg_id(msg_id):
 
 
 def parse_response(response, mode, source):
+    claim_all = False
+    claim_last = False
     if response.lower().startswith('f'):
         return None, 'Sincerest apologies'
+    # One-letter shortcuts for claim all/last
+    elif re.match('^a\s*$', response, re.IGNORECASE):
+        claim_all = True
+    elif re.match('^l\s*$', response, re.IGNORECASE):
+        claim_last = True
 
-    halves = response.split(None, 1)
+    # Skip message splitting for single-letter responses
+    if not (claim_all or claim_last):
+        halves = response.split(None, 1)
 
-    # $id cmd (args..)
-    cmd = halves[1].split()[0].lower()
-    msg_id = halves[0]
-    if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
-        return msg_id, cmd
+        # $id cmd (args..)
+        cmd = halves[1].split()[0].lower()
+        msg_id = halves[0]
+        if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
+            return msg_id, cmd
 
-    # cmd $id (args..)
-    cmd = halves[0].lower()
-    msg_id = halves[1].split(None, 1)
-    if len(msg_id) == 1:
-        args = []
-    else:
-        args = msg_id[1:]
-    msg_id = msg_id[0]
-    if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
-        return msg_id, ' '.join([cmd] + args)
+        # cmd $id (args..)
+        cmd = halves[0].lower()
+        msg_id = halves[1].split(None, 1)
+        if len(msg_id) == 1:
+            args = []
+        else:
+            args = msg_id[1:]
+        msg_id = msg_id[0]
+        if validate_msg_id(msg_id) and (cmd in allowed_text_response_actions):
+            return msg_id, ' '.join([cmd] + args)
 
-    if re.match('claim\s+last', response, re.IGNORECASE):
+    if claim_last or re.match('claim\s+last', response, re.IGNORECASE):
         target_name = lookup_username_from_contact(mode, source)
         if not target_name:
             logger.error('Failed resolving %s:%s to target name', mode, source)
@@ -74,7 +83,7 @@ def parse_response(response, mode, source):
         msg_id = ret[0] if ret else None
         return msg_id, 'claim'
 
-    elif re.match('claim\s+all', response, re.IGNORECASE):
+    elif claim_all or re.match('claim\s+all', response, re.IGNORECASE):
         target_name = lookup_username_from_contact(mode, source)
         if not target_name:
             logger.error('Failed resolving %s:%s to target name', mode, source)
@@ -200,7 +209,7 @@ def claim_incident(incident_id, owner):
 
     max_retries = 3
 
-    for i in xrange(max_retries):
+    for i in range(max_retries):
         cursor = connection.cursor()
         try:
             cursor.execute('''UPDATE `incident`
@@ -303,6 +312,31 @@ def claim_incidents_from_batch_id(batch_id, owner):
     connection.close()
 
 
+def resolve_incident(incident_id, resolved_state):
+
+    now = datetime.datetime.utcnow()
+    resolved = 1
+    if not resolved_state:
+        resolved = 0
+
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute('''UPDATE `incident`
+                        SET `incident`.`updated` = %(updated)s,
+                            `incident`.`resolved` = %(resolved)s
+                            WHERE `incident`.`id` = %(incident_id)s''',
+                       {'incident_id': incident_id, 'resolved': resolved, 'updated': now})
+
+        connection.commit()
+    except Exception:
+        logger.exception('failed updating resolved state for incident %s', incident_id)
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+
+
 def msgpack_unpack_msg_from_socket(socket):
     unpacker = msgpack.Unpacker()
     while True:
@@ -311,7 +345,7 @@ def msgpack_unpack_msg_from_socket(socket):
             break
         unpacker.feed(buf)
         try:
-            item = unpacker.next()
+            item = next(unpacker)
         except StopIteration:
             pass
         else:
@@ -320,8 +354,8 @@ def msgpack_unpack_msg_from_socket(socket):
 
 def sanitize_unicode_dict(d):
     '''Properly decode unicode strings in d to avoid breaking jinja2 renderer'''
-    for key, value in d.iteritems():
-        if isinstance(value, basestring):
+    for key, value in d.items():
+        if isinstance(value, bytes):
             try:
                 d[key] = value.decode('utf-8')
             except UnicodeError:

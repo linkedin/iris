@@ -68,9 +68,9 @@ UNLOCK TABLES;
 
 LOCK TABLES `incident` WRITE;
 INSERT INTO `incident` VALUES
-    (1,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0),
-    (2,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0),
-    (3,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0);
+    (1,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0),
+    (2,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0),
+    (3,40,'2017-01-25 23:22:55','2017-01-25 23:24:55','{\"console_url\": \"\", \"fabric\": \"DC1\", \"notes\": \"This is a note\", \"filename\": \"dashboard\", \"zones\": [\"zone1\", \"zone2\"], \"metanodes\": [[\"execution_time.metanode1\", \"threshold: 72 is greater than the max (65)\"]], \"nodes\": [[\"execution_time.server1.example.com\", \"threshold: 72 is greater than the max (65)\"]], \"graph_image_url\": \"http://url.example.com/foo\", \"name\":\"API Alert\"}',1,8,1,0,0);
 UNLOCK TABLES;
 
 LOCK TABLES `incident_emails` WRITE;
@@ -122,39 +122,39 @@ UNLOCK TABLES;
 
 LOCK TABLES `plan_notification` WRITE;
 INSERT INTO `plan_notification` VALUES
-    (1,1,1,'test_template',4,44,17,1,300,NULL),
-    (2,1,1,'test_template',4,35,35,0,600,NULL),
-    (3,1,2,'test_template',4,35,26,0,600,NULL),
-    (4,1,2,'test_template',4,44,8,1,300,NULL),
-    (5,7,1,'test_template',4,35,35,0,600,NULL),
-    (6,7,1,'test_template',4,44,17,1,300,NULL),
-    (7,8,1,'test_template',4,35,35,0,600,NULL),
-    (9,11,1,'test_template',4,44,17,1,300,NULL),
-    (10,11,1,'test_template',4,35,35,0,600,NULL),
-    (11,11,2,'test_template',4,35,26,0,600,NULL),
-    (12,11,2,'test_template',4,44,8,1,300,NULL),
-    (13,17,1,'test_template',4,35,35,0,600,NULL),
-    (14,17,1,'test_template',4,44,17,1,300,NULL),
-    (15,18,1,'test_template',4,35,35,0,600,NULL),
-    (17,21,1,'test_template',4,44,17,1,300,NULL),
-    (18,21,1,'test_template',4,35,35,0,600,NULL),
-    (19,21,2,'test_template',4,35,26,0,600,NULL),
-    (20,21,2,'test_template',4,44,8,1,300,NULL),
-    (21,27,1,'test_template',4,35,35,0,600,NULL),
-    (22,27,1,'test_template',4,44,17,1,300,NULL),
-    (23,28,1,'test_template',4,35,35,0,600,NULL),
-    (25,31,1,'test_template',4,44,17,1,300,NULL),
-    (26,31,1,'test_template',4,35,35,0,600,NULL),
-    (27,31,2,'test_template',4,35,26,0,600,NULL),
-    (28,31,2,'test_template',4,44,8,1,300,NULL),
-    (29,37,1,'test_template',4,35,35,0,600,NULL),
-    (30,37,1,'test_template',4,44,17,1,300,NULL),
-    (31,38,1,'test_template',4,35,35,0,600,NULL),
-    (32,39,1,'test_template_2',4,35,35,0,600,NULL),
-    (33,40,1,'test_template',4,35,35,0,600,NULL),
-    (34,41,1,'oncall-test',NULL,NULL,26,0,0,2),
-    (35,41,1,'oncall-test',NULL,NULL,26,0,0,1),
-    (36,41,1,'oncall-test',NULL,NULL,8,0,0,0);
+    (1,1,1,'test_template',4,0,44,17,1,300,NULL),
+    (2,1,1,'test_template',4,0,35,35,0,600,NULL),
+    (3,1,2,'test_template',4,0,35,26,0,600,NULL),
+    (4,1,2,'test_template',4,0,44,8,1,300,NULL),
+    (5,7,1,'test_template',4,0,35,35,0,600,NULL),
+    (6,7,1,'test_template',4,0,44,17,1,300,NULL),
+    (7,8,1,'test_template',4,0,35,35,0,600,NULL),
+    (9,11,1,'test_template',4,0,44,17,1,300,NULL),
+    (10,11,1,'test_template',4,0,35,35,0,600,NULL),
+    (11,11,2,'test_template',4,0,35,26,0,600,NULL),
+    (12,11,2,'test_template',4,0,44,8,1,300,NULL),
+    (13,17,1,'test_template',4,0,35,35,0,600,NULL),
+    (14,17,1,'test_template',4,0,44,17,1,300,NULL),
+    (15,18,1,'test_template',4,0,35,35,0,600,NULL),
+    (17,21,1,'test_template',4,0,44,17,1,300,NULL),
+    (18,21,1,'test_template',4,0,35,35,0,600,NULL),
+    (19,21,2,'test_template',4,0,35,26,0,600,NULL),
+    (20,21,2,'test_template',4,0,44,8,1,300,NULL),
+    (21,27,1,'test_template',4,0,35,35,0,600,NULL),
+    (22,27,1,'test_template',4,0,44,17,1,300,NULL),
+    (23,28,1,'test_template',4,0,35,35,0,600,NULL),
+    (25,31,1,'test_template',4,0,44,17,1,300,NULL),
+    (26,31,1,'test_template',4,0,35,35,0,600,NULL),
+    (27,31,2,'test_template',4,0,35,26,0,600,NULL),
+    (28,31,2,'test_template',4,0,44,8,1,300,NULL),
+    (29,37,1,'test_template',4,0,35,35,0,600,NULL),
+    (30,37,1,'test_template',4,0,44,17,1,300,NULL),
+    (31,38,1,'test_template',4,0,35,35,0,600,NULL),
+    (32,39,1,'test_template_2',4,0,35,35,0,600,NULL),
+    (33,40,1,'test_template',4,0,35,35,0,600,NULL),
+    (34,41,1,'oncall-test',NULL,0,NULL,26,0,0,2),
+    (35,41,1,'oncall-test',NULL,0,NULL,26,0,0,1),
+    (36,41,1,'oncall-test',NULL,0,NULL,8,0,0,0);
 UNLOCK TABLES;
 
 LOCK TABLES `response` WRITE;
@@ -242,17 +242,17 @@ UNLOCK TABLES;
 
 LOCK TABLES `template_variable` WRITE;
 INSERT INTO `template_variable` VALUES
-    (1,8,'fabric',0),
-    (2,8,'console_url',0),
-    (3,8,'filename',0),
-    (4,8,'name',0),
-    (5,8,'graph_image_url',0),
-    (7,8,'zones',0),
-    (8,8,'nodes',0),
-    (9,8,'metanodes',0),
-    (10,8,'notes',0),
-    (11,12,'description',0),
-    (12,12,'requester',0);
+    (1,8,'fabric',0, 0),
+    (2,8,'console_url',0, 0),
+    (3,8,'filename',0, 0),
+    (4,8,'name',0, 0),
+    (5,8,'graph_image_url',0, 0),
+    (7,8,'zones',0, 0),
+    (8,8,'nodes',0, 0),
+    (9,8,'metanodes',0, 0),
+    (10,8,'notes',0, 0),
+    (11,12,'description',0, 0),
+    (12,12,'requester',0, 0);
 UNLOCK TABLES;
 
 LOCK TABLES `twilio_delivery_status` WRITE;

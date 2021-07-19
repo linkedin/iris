@@ -12,8 +12,10 @@ import requests
 import importlib
 import logging
 import re
+import pyqrcode
 from iris.ui import auth
 from beaker.middleware import SessionMiddleware
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,9 @@ ui_root = os.environ.get('STATIC_ROOT', os.path.abspath(os.path.dirname(__file__
 
 assets_env = AssetsEnvironment(os.path.join(ui_root, 'static'), url='/static')
 
-assets_env.register('jquery_libs', Bundle('js/jquery-2.1.4.min.js', 'js/jquery.dataTables.min.js',
-                                          'js/handlebars.min.js', 'js/hopscotch.min.js',
+assets_env.register('jquery_libs', Bundle('js/jquery-3.3.1.min.js', 'js/jquery.dataTables.min.js',
+                                          'js/handlebars-4.0.12.min.js', 'js/hopscotch.min.js',
+                                          'js/marked.min.js',
                                           output='bundles/jquery.libs.js'))
 assets_env.register('bootstrap_libs', Bundle('js/bootstrap.min.js', 'js/typeahead.js',
                                              'js/bootstrap-datetimepicker.js', 'js/moment-timezone.js',
@@ -65,6 +68,7 @@ default_route = '/incidents'
 
 
 jinja2_env.globals['default_route'] = default_route
+jinja2_env.globals['current_year'] = datetime.now().year
 
 
 def build_assets():
@@ -100,6 +104,14 @@ def get_flash(req):
 # that makes use of window.appData is converted to use ajax for those values instead.
 def get_local_api(req, path):
     return requests.get('%s/v0/%s' % (local_api_url, path), cookies=req.cookies).json()
+
+
+def create_qr_code(qr_base_url, qr_login_url):
+    qr_code_content = qr_base_url + ',' + qr_login_url
+    qr_object = pyqrcode.create(qr_code_content)
+    # create qr code and save it as a svg image
+    qr_filename = ui_root + '/static/images/iris-mobile-qr.svg'
+    qr_object.svg(qr_filename, scale=8)
 
 
 # Credit to Werkzeug for implementation
@@ -140,12 +152,30 @@ class Index(object):
 
 
 class Stats(object):
-    allow_read_no_auth = False
+    allow_read_no_auth = True
     frontend_route = True
 
     def on_get(self, req, resp):
         resp.content_type = 'text/html'
         resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class AppStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('stats.html').render(request=req)
+
+
+class SingleStats(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def on_get(self, req, resp, stat_name):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('singlestat.html').render(request=req)
 
 
 class Plans(object):
@@ -251,6 +281,16 @@ class Application(object):
                                                                        modes=get_local_api(req, 'modes') + ['drop'])
 
 
+class Unsubscribe(object):
+    allow_read_no_auth = False
+    frontend_route = True
+
+    def on_get(self, req, resp, application):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('unsubscribe.html').render(request=req,
+                                                                       priorities=get_local_api(req, 'priorities'))
+
+
 class Login():
     allow_read_no_auth = False
     frontend_route = True
@@ -266,7 +306,7 @@ class Login():
                                                                  last_flash=get_flash(req))
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             username = form_body['username']
@@ -275,7 +315,7 @@ class Login():
             raise HTTPFound('/login')
 
         if not auth.valid_username(username):
-            logger.warn('Tried to login with invalid username %s', username)
+            logger.warning('Tried to login with invalid username %s', username)
             if self.debug:
                 flash_message(req, 'Invalid username', 'danger')
             else:
@@ -286,11 +326,12 @@ class Login():
             logger.info('Successful login for %s', username)
             auth.login_user(req, username)
         else:
-            logger.warn('Failed login for %s', username)
+            logger.warning('Failed login for %s', username)
             flash_message(req, 'Invalid credentials', 'danger')
             raise HTTPFound('/login')
 
-        url = req.get_param('next')
+        # Remove newlines to prevent HTTP request splitting
+        url = req.get_param('next', default='').replace('\n', '')
 
         if not url or url.startswith('/'):
             raise HTTPFound(url or default_route)
@@ -319,12 +360,25 @@ class User():
                                                                 applications=get_local_api(req, 'applications'))
 
 
+class Qr(object):
+    allow_read_no_auth = True
+    frontend_route = True
+
+    def __init__(self, qr_base_url, qr_login_url):
+        self.qr_base_url = qr_base_url
+        self.qr_login_url = qr_login_url
+
+    def on_get(self, req, resp):
+        resp.content_type = 'text/html'
+        resp.body = jinja2_env.get_template('qr.html').render(base=self.qr_base_url, login=self.qr_login_url)
+
+
 class JinjaValidate():
     allow_read_no_auth = False
     frontend_route = True
 
     def on_post(self, req, resp):
-        form_body = uri.parse_query_string(req.context['body'])
+        form_body = uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         try:
             template_subject = form_body['templateSubject']
@@ -397,6 +451,8 @@ def init(config, app):
     auth_module = config.get('auth', {'module': 'iris.ui.auth.noauth'})['module']
     auth = importlib.import_module(auth_module)
     auth_manager = getattr(auth, 'Authenticator')(config)
+    qr_base_url = config.get('qr_base_url')
+    qr_login_url = config.get('qr_login_url')
 
     debug = config['server'].get('disable_auth', False) is True
     local_api_url = config['server'].get('local_api_url', 'http://localhost:16649')
@@ -406,6 +462,8 @@ def init(config, app):
     app.add_route('/static/fonts/{filename}', StaticResource('/static/fonts'))
     app.add_route('/', Index())
     app.add_route('/stats', Stats())
+    app.add_route('/stats/{application}', AppStats())
+    app.add_route('/singlestats/{stat_name}', SingleStats())
     app.add_route('/plans/', Plans())
     app.add_route('/plans/{plan}', Plan())
     app.add_route('/incidents/', Incidents())
@@ -420,6 +478,11 @@ def init(config, app):
     app.add_route('/logout/', Logout())
     app.add_route('/user/', User())
     app.add_route('/validate/jinja', JinjaValidate())
+    app.add_route('/unsubscribe/{application}', Unsubscribe())
+
+    if(qr_base_url and qr_login_url):
+        create_qr_code(qr_base_url, qr_login_url)
+        app.add_route('/qr', Qr(qr_base_url, qr_login_url))
 
     # Configuring the beaker middleware mutilates the app object, so do it
     # at the end, after we've added all routes/sinks for the entire iris
@@ -431,7 +494,9 @@ def init(config, app):
         'session.encrypt_key': config['user_session']['encrypt_key'],
         'session.validate_key': config['user_session']['sign_key'],
         'session.secure': not (config['server'].get('disable_auth', False) or config['server'].get('allow_http', False)),
-        'session.httponly': True
+        'session.httponly': True,
+        'session.crypto_type': 'cryptography',
+        'session.samesite': 'Lax'
     }
     app = SessionMiddleware(app, session_opts)
 

@@ -12,5 +12,6 @@ htmlcov
 venv
 /src/iris/ui/static/.webassets-cache
 /src/iris/ui/static/bundles
+/src/iris/ui/static/images/iris-mobile-qr.svg
 .tox
 *.orig

@@ -13,10 +13,10 @@
         <span class="light"> Owner:</span> {{#if owner}} {{owner}} {{else}} Unclaimed {{/if}}
       </span>
       {{#isUser owner}}
-        <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unclaim">Unclaim Incident</button>
+        <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unclaim" data-toggle="tooltip" data-placement="right" title="This will cause the incident to continue escalating where it left off at the time it was claimed">Unclaim Incident</button>
       {{else}}
         {{#if active}}
-          <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="claim">Claim Incident</button>
+          <button type="button" id="claim-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="claim" data-toggle="tooltip" data-placement="right" title="This stops any further escalation and marks you as the owner of the incident">Claim Incident</button>
         {{else}}
           {{#if owner}}
             <button type="button" id="claim-incident" class="pull-right btn btn-default btn-sm disabled" disabled data-id="{{id}}" data-action="claim">Claimed</button>
@@ -25,7 +25,18 @@
           {{/if}}
         {{/if}}
       {{/isUser}}
+      <button type="button" id="re-escalate-modal-btn" class="pull-right btn btn-default blue btn-sm" data-toggle="tooltip" data-placement="left" title="Re-raise this incident using a different plan">Re-escalate</button>
     </h3>
+    <h4>
+      {{#if owner}}
+        {{#if resolved}} <i>Resolved</i> {{else}} Unresolved{{/if}}
+          {{#if resolved}}
+            <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="unresolve" data-toggle="tooltip" data-placement="right" title="This removes a semantic tag that indicates the underlying issue is mitigated">Mark Unresolved</button>
+          {{else}}
+            <button type="button" id="resolve-incident" class="pull-right btn btn-default blue btn-sm" data-id="{{id}}" data-action="resolve" data-toggle="tooltip" data-placement="right" title="This applies a semantic tag that indicates the underlying issue is mitigated">Mark Resolved</button>
+          {{/if}}
+        {{/if}}
+    </h4>
     <span class="light italic"><small>created at {{convertToLocal created}}</small></span>
     {{#if updated}}
       <span class="light">|</span>
@@ -75,13 +86,94 @@
           <td> {{name}} {{#if target_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
           <td> {{priority}} </td>
           <td> {{mode}} {{#if mode_changed}}<span class="label label-info">Changed</span>{{/if}} </td>
-          <td> {{convertToLocal sent}} </td>
+          <td data-order="{{sent}}"> {{convertToLocal sent}} </td>
         </tr>
         {{/each}}
       </tbody>
     </table>
     {{/if}}
   </div>
+  <div class="module">
+    <h4>Comments:</h4>
+    <hr>
+    <div class="comment-list">
+      {{#each comments}}
+        {{>comment}}
+      {{/each}}
+    </div>
+    {{#unless comments}}
+    <div class="no-comments">
+      <p>There are no comments yet on this incident.</p><hr>
+    </div>
+    {{/unless}}
+    <div class="clearfix">
+      <button type="button" id="show-comment" class="btn btn-default blue btn-sm">Add comment</button>
+    </div>
+    <div id="add-comment">
+      <label for="comment-body">Comment:</label>
+      <textarea id="comment-body" class="form-control"></textarea>
+      <div class="comment-actions">
+        <button type="button" id="comment-incident" class="btn btn-primary btn-sm">Add</button>
+        <button type="button" id="cancel-comment" class="btn btn-default blue btn-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<div class="modal fade" id="re-escalate-modal" tabindex="-1" role="dialog" aria-labelledby="re-escalate-modal-btn">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">Re-escalate Incident</h4>
+      </div>
+      <div class="modal-body">
+        <p>
+        Re-escalate this incident using another escalation plan. This will claim the current incident if it is active
+        and create a new incident with the same content, following the escalation plan chosen below. This new incident
+        will be linked to this incident via automated comments.
+        </p>
+        <hr>
+        <div id="re-escalate-container">
+          <label class="item-label light" for="re-escalate-plan">Re-escalation plan: </label>
+          <input id="re-escalate-typeahead" type="text" class="form-control border-bottom typeahead unload-exclude"
+              placeholder="plan name" data-typeaheadtype="plan">
+          <button type="button" id="re-escalate-plan-btn" class="btn btn-default blue btn-sm pull-right">Select plan</button>
+        </div>
+        <div class="re-escalate-plan-container">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="re-escalate-btn" disabled>Re-escalate</button>
+      </div>
+    </div>
+  </div>
+</div>
+</script>
+
+<script id="comment-template" type="text/x-handlebars-template">
+  <div class="comment-display">
+      <p class="comment-header"><strong>{{author}}</strong> added a comment - {{convertToLocal created}}</p>
+      <div class="comment-content">{{markdown content}}</div>
+  </div>
+  <hr>
+</script>
+
+<!--// plan preview partial -->
+<script id="re-escalation-plan-template" type="text/x-handlebars-template">
+  {{#each steps}}
+    <li class="striped plan-step clearfix" data-mode="view">
+    {{#each .}}
+      <div class="plan-notification">
+        <p class="item-content" title="{{ role }}" ><label class="item-label light">Role</label> {{ role }}</p>
+        <p class="item-content" title="{{ target }}"><label class="item-label light">Target</label> {{ target }}</p>
+        <p class="item-content" title="{{ priority }}"><label class="item-label light">Priority</label> {{ priority }}</p>
+        <p class="item-content notification-wait" title="{{ secondsToMinutes wait }}"><label class="item-label light">Wait</label> {{ secondsToMinutes wait }} minutes</p>
+        <p class="item-content notification-count" title="{{ add repeat 1 }}"><label class="item-label light">Count</label> {{ add repeat 1 }} times</p>
+      </div>
+    {{/each}}
+  {{/each}}
+  </li>
 </script>
 {% endraw %}
 {% endblock %}

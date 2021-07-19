@@ -18,9 +18,6 @@ def test_configure(mocker):
     mocker.patch('iris.bin.sender.api_cache.cache_priorities')
     mocker.patch('iris.bin.sender.api_cache.cache_applications')
     mocker.patch('iris.bin.sender.api_cache.cache_modes')
-    mock_iris_client = mocker.MagicMock()
-    mocker.patch('iris.sender.cache.IrisClient').return_value = mock_iris_client
-    mock_iris_client.get.return_value.status_code = 200
 
     init_sender({
         'db': {
@@ -74,27 +71,27 @@ fake_notification = {
 }
 
 fake_plan = {
-    u'name': u'find-test-user',
-    u'threshold_count': 10,
-    u'creator': u'test-user',
-    u'created': 1470444636,
-    u'aggregation_reset': 300,
-    u'aggregation_window': 300,
-    u'threshold_window': 900,
-    u'tracking_type': None,
-    u'steps': [
-        [{u'repeat': 0, u'target': u'test-user', u'id': 178243, u'priority': u'low', u'step': 1,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 0},
-         {u'repeat': 1, u'target': u'test-user', u'id': 178252, u'priority': u'high', u'step': 1,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 300}],
-        [{u'repeat': 3, u'target': u'test-user', u'id': 178261, u'priority': u'urgent', u'step': 2,
-          u'role': u'user', u'template': u'test-app Default', u'wait': 900}]
+    'name': 'find-test-user',
+    'threshold_count': 10,
+    'creator': 'test-user',
+    'created': 1470444636,
+    'aggregation_reset': 300,
+    'aggregation_window': 300,
+    'threshold_window': 900,
+    'tracking_type': None,
+    'steps': [
+        [{'repeat': 0, 'target': 'test-user', 'id': 178243, 'priority': 'low', 'step': 1,
+          'role': 'user', 'template': 'test-app Default', 'wait': 0},
+         {'repeat': 1, 'target': 'test-user', 'id': 178252, 'priority': 'high', 'step': 1,
+          'role': 'user', 'template': 'test-app Default', 'wait': 300}],
+        [{'repeat': 3, 'target': 'test-user', 'id': 178261, 'priority': 'urgent', 'step': 2,
+          'role': 'user', 'template': 'test-app Default', 'wait': 900}]
     ],
-    u'tracking_template': None,
-    u'tracking_key': None,
-    u'active': 1,
-    u'id': 19546,
-    u'description': u"please don't abuse this plan :)"
+    'tracking_template': None,
+    'tracking_key': None,
+    'active': 1,
+    'id': 19546,
+    'description': "please don't abuse this plan :)"
 }
 
 
@@ -145,8 +142,6 @@ def test_fetch_and_send_message(mocker):
     mock_mark_message_sent = mocker.patch('iris.bin.sender.mark_message_as_sent')
     mock_mark_message_sent.side_effect = check_mark_message_sent
     mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_send_message, per_mode_send_queues
     )
@@ -184,8 +179,6 @@ def test_message_retry(mocker):
     mock_mark_message_sent.side_effect = check_mark_message_sent
     mocker.patch('iris.bin.sender.set_target_contact').side_effect = mock_set_target_contact
     mocker.patch('iris.bin.sender.set_target_fallback_mode').side_effect = mock_set_target_contact
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_send_message, per_mode_send_queues, metrics, default_sender_metrics,
         add_mode_stat
@@ -343,12 +336,12 @@ def test_quotas(mocker):
     from gevent import sleep
     mocker.patch('iris.sender.quota.ApplicationQuota.get_new_rules',
                  return_value=[(
-                     u'testapp', 5, 2, 120, 120, u'testuser',
-                     u'user', u'iris-plan', 10
+                     'testapp', 5, 2, 120, 120, 'testuser',
+                     'user', 'iris-plan', 10
                  )])
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_incident')
     mocker.patch('iris.sender.quota.ApplicationQuota.notify_target')
-    quotas = ApplicationQuota(None, None, None, None)
+    quotas = ApplicationQuota(None, None, None, None, {})
     sleep(1)
 
     # ensure drop messages don't count
@@ -376,13 +369,11 @@ def test_quotas(mocker):
     assert stats['app_testapp_quota_hard_usage_pct'] == 100
     assert stats['app_testapp_quota_soft_usage_pct'] == 200
 
-    for _ in xrange(10):
+    for _ in range(10):
         assert quotas.allow_send({'application': 'app_without_quota'})
 
 
 def test_aggregate_audit_msg(mocker):
-    mock_iris_client = mocker.patch('iris.sender.cache.iris_client')
-    mock_iris_client.get.return_value.json.return_value = fake_plan
     from iris.bin.sender import (
         fetch_and_prepare_message, message_queue, per_mode_send_queues,
         plan_aggregate_windows
@@ -511,16 +502,16 @@ def test_handle_api_notification_request_invalid_message(mocker):
 
 
 def test_sanitize_unicode_dict():
-    import pytest
     from jinja2.sandbox import SandboxedEnvironment
     from iris.utils import sanitize_unicode_dict
 
     # Use jinja the same way as in sender
     env = SandboxedEnvironment(autoescape=False)
     template = env.from_string('{{var}} {{var2}} {{nested.nest}}')
-    bad_context = {'var': '\xe2\x80\x99', 'var2': 2, 'nested': {'nest': '\xe2\x80\x99'}}
+    bad_context = {'var': b'\xe2\x80\x99', 'var2': 2, 'nested': {'nest': b'\xe2\x80\x99'}}
 
-    with pytest.raises(UnicodeDecodeError):
-        template.render(**bad_context)
+    assert '\\xe2' in template.render(**bad_context)
 
-    template.render(**sanitize_unicode_dict(bad_context))
+    good_render = template.render(**sanitize_unicode_dict(bad_context))
+    assert '\\xe2' not in good_render
+    assert b'\xe2\x80\x99'.decode('utf-8') in good_render

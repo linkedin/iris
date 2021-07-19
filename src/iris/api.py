@@ -1,9 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
-
-from __future__ import absolute_import
-
-from gevent import spawn, sleep, socket
+from gevent import spawn, sleep, socket, Timeout
 
 import msgpack
 import time
@@ -12,17 +9,19 @@ import hashlib
 import base64
 import re
 import os
+import random
 import datetime
 import logging
+import importlib
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
-from urlparse import parse_qs
+from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTP_400, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
 import falcon.uri
 import falcon
 
@@ -35,6 +34,9 @@ from . import cache
 from . import ui
 from . import app_stats
 from .config import load_config
+from iris.vendors.iris_slack import iris_slack
+from iris.role_lookup import IrisRoleLookupException
+from iris.sender import cache as sender_cache
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
@@ -162,6 +164,8 @@ incident_columns = {
     'created': 'UNIX_TIMESTAMP(`incident`.`created`) as `created`',
     'owner': '`target`.`name` as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
+    'title_variable_name': '`template_variable`.`name` as `title_variable_name`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filters = {
@@ -175,6 +179,7 @@ incident_filters = {
     'created': '`incident`.`created`',
     'owner': '`target`.`name`',
     'current_step': '`incident`.`current_step`',
+    'resolved': '`incident`.`resolved` as `resolved`'
 }
 
 incident_filter_types = {
@@ -185,10 +190,11 @@ incident_filter_types = {
     'current_step': int,
 }
 
-incident_query = '''SELECT %s FROM `incident`
+incident_query = '''SELECT DISTINCT %s FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
-JOIN `application` ON `incident`.`application_id` = `application`.`id`'''
+JOIN `application` ON `incident`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `template_variable` ON (`template_variable`.`application_id` = `application`.`id` AND `template_variable`.`title_variable` = 1)'''
 
 single_incident_query = '''SELECT `incident`.`id` as `id`,
     `incident`.`plan_id` as `plan_id`,
@@ -199,11 +205,13 @@ single_incident_query = '''SELECT `incident`.`id` as `id`,
     `target`.`name` as `owner`,
     `application`.`name` as `application`,
     `incident`.`current_step` as `current_step`,
-    `incident`.`active` as `active`
+    `incident`.`active` as `active`,
+    `incident`.`resolved` as `resolved`
 FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `template_variable` ON (`template_variable`.`application_id` = `application`.`id` AND `template_variable`.`title_variable` = 1)
 WHERE `incident`.`id` = %s'''
 
 single_incident_query_steps = '''SELECT `message`.`id` as `id`,
@@ -222,6 +230,12 @@ JOIN `target` ON `message`.`target_id` = `target`.`id`
 JOIN `plan_notification` ON `message`.`plan_notification_id` = `plan_notification`.`id`
 WHERE `message`.`incident_id` = %s
 ORDER BY `message`.`sent`'''
+
+single_incident_query_comments = '''
+SELECT `target`.`name` AS `author`, `comment`.`created`, `comment`.`content`
+FROM `comment` JOIN `target` ON `user_id` = `target`.`id`
+WHERE `comment`.`incident_id` = %s
+'''
 
 plan_columns = {
     'id': '`plan`.`id` as `id`',
@@ -261,8 +275,22 @@ plan_filter_types = {
     'aggregation_reset': int,
 }
 
-plan_query = '''SELECT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
+plan_query = '''SELECT DISTINCT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
 LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`'''
+
+plan_target_query = '''SELECT `plan_id` FROM `plan_notification`
+JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`'''
+
+plan_target_fields = [
+    'target',
+    'target__contains',
+    'target__startswith',
+    'target__endswith'
+]
+
+plan_target_filters = {
+    'target': '`target`.`name`'
+}
 
 single_plan_query = '''SELECT `plan`.`id` as `id`, `plan`.`name` as `name`,
     `plan`.`threshold_window` as `threshold_window`, `plan`.`threshold_count` as `threshold_count`,
@@ -278,6 +306,7 @@ single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
     `plan_notification`.`step` as `step`,
     `plan_notification`.`repeat` as `repeat`,
     `plan_notification`.`wait` as `wait`,
+    `plan_notification`.`optional` as `optional`,
     `target_role`.`name` as `role`,
     `target`.`name` as `target`,
     `plan_notification`.`template` as `template`,
@@ -359,7 +388,7 @@ insert_plan_query = '''INSERT INTO `plan` (
 )'''
 
 insert_plan_step_query = '''INSERT INTO `plan_notification` (
-    `plan_id`, `step`, `priority_id`, `target_id`, `template`, `role_id`, `repeat`, `wait`
+    `plan_id`, `step`, `priority_id`, `target_id`, `template`, `role_id`, `repeat`, `wait`, `optional`
 ) VALUES (
     :plan_id,
     :step,
@@ -370,11 +399,12 @@ insert_plan_step_query = '''INSERT INTO `plan_notification` (
     :template,
     :role_id,
     :repeat,
-    :wait
+    :wait,
+    :optional
 )'''
 
 insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
-    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`
+    `plan_id`, `step`, `priority_id`, `template`, `repeat`, `wait`, `dynamic_index`, `optional`
 ) VALUES (
     :plan_id,
     :step,
@@ -382,7 +412,8 @@ insert_dynamic_step_query = '''INSERT INTO `plan_notification` (
     :template,
     :repeat,
     :wait,
-    :dynamic_index
+    :dynamic_index,
+    :optional
 )'''
 
 reprioritization_setting_query = '''SELECT
@@ -502,12 +533,26 @@ WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = :name AND `type_id
       `priority_id` = (SELECT `id` from `priority` WHERE `name` = :priority) AND
       `application_id` = (SELECT `id` from `application` WHERE `name` = :app)'''
 
+insert_user_modes_template_override_query = '''INSERT
+INTO `mode_template_override` (`target_id`, `mode_id`)
+VALUES (
+    (SELECT `id` from `target` WHERE `name` = %s AND `type_id` = (
+      SELECT `id` FROM `target_type` WHERE `name` = 'user'
+    )),
+    (SELECT `id` from `mode` WHERE `name` = 'sms'))
+ON DUPLICATE KEY UPDATE target_id=target_id'''
+
+delete_user_modes_template_override_query = '''DELETE FROM `mode_template_override`
+WHERE `target_id` = (SELECT `id` from `target` WHERE `name` = %s AND `type_id` =
+                    (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+AND `mode_id` = (SELECT `id` from `mode` WHERE `name` = 'sms')'''
+
 get_applications_query = '''SELECT
     `id`, `name`, `context_template`, `sample_context`, `summary_template`, `mobile_template`
 FROM `application`
 WHERE `auth_only` is False'''
 
-get_vars_query = 'SELECT `name`, `required` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
+get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
 get_allowed_roles_query = '''SELECT `target_role`.`id`
                              FROM `target_role`
@@ -548,12 +593,53 @@ get_application_owners_query = '''SELECT `target`.`name`
                                   JOIN `target` on `target`.`id` = `application_owner`.`user_id`
                                   WHERE `application_owner`.`application_id` = %s'''
 
+get_application_categories = '''
+    SELECT `notification_category`.`id`, `notification_category`.`name`,
+        `notification_category`.`description`, `mode`.`name` AS mode
+    FROM `notification_category`
+    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+    WHERE `application_id` = %s'''
+
+category_query = '''
+    SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
+        `notification_category`.`description`, `mode`.`name` as mode
+    FROM `notification_category`
+    JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+    JOIN `mode` ON `mode`.`id` = `notification_category`.`mode_id`
+'''
+
+category_filters = {
+    'id': '`notification_category`.`id`',
+    'name': '`notification_category`.`name`',
+    'application': '`application`.`name`',
+    'mode': '`mode`.`name`'
+}
+
+category_filter_types = {
+    'id': str,
+    'name': str,
+    'application': str,
+    'mode': str
+}
+
+get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                                  FROM `application_custom_sender_address`
+                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                                  WHERE `application_custom_sender_address`.`application_id` = %s'''
+
+
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 
 
-def stream_incidents_with_context(cursor):
+def stream_incidents_with_context(cursor, title=False):
     for row in cursor:
         row['context'] = ujson.loads(row['context'])
+        if title:
+            title_variable_name = row.get('title_variable_name')
+            if title_variable_name:
+                row['title'] = row['context'].get(title_variable_name)
+            else:
+                row['title'] = None
         yield row
 
 
@@ -593,23 +679,30 @@ def is_valid_tracking_settings(t, k, tpl):
 
             try:
                 environment.from_string(tpl[app]['email_subject'])
-            except Exception as e:
+            except jinja2.TemplateSyntaxError as e:
                 return False, 'Invalid jinja syntax in subject: %s' % e
 
             try:
                 environment.from_string(tpl[app]['email_text'])
-            except Exception as e:
+            except jinja2.TemplateSyntaxError as e:
                 return False, 'Invalid jinja syntax in body: %s' % e
 
             email_html = tpl[app].get('email_html')
             if email_html is not None:
                 try:
                     environment.from_string(email_html)
-                except Exception as e:
+                except jinja2.TemplateSyntaxError as e:
                     return False, 'Invalid jinja syntax in email html: %s' % e
     else:
         if t not in cache.modes:
             return False, 'Unknown tracking type: %s' % t
+
+        environment = SandboxedEnvironment()
+        for app in tpl:
+            try:
+                environment.from_string(tpl[app]['body'])
+            except jinja2.TemplateSyntaxError as e:
+                return False, 'Invalid jinja syntax in incident tracking text: %s' % e
     return True, None
 
 
@@ -623,7 +716,7 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         4. (optional) transform escaped value through filter_escaped_value_transforms[col](value)
     '''
     where = []
-    for key, values in kwargs.iteritems():
+    for key, values in kwargs.items():
         col, _, op = key.partition('__')
         # Skip columns that don't exist
         if col not in filters:
@@ -631,7 +724,7 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         col_type = filter_types.get(col, str)
         # Format strings because Falcon splits on ',' but not on '%2C'
         # TODO: Get rid of this by setting request options on Falcon 1.1
-        if isinstance(values, basestring):
+        if isinstance(values, str):
             values = values.split(',')
         for val in values:
             try:
@@ -676,7 +769,9 @@ class ReqBodyMiddleware(object):
 
 
 class AuthMiddleware(object):
-    def __init__(self, debug=False):
+    def __init__(self, config={}, debug=False):
+
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
         if debug:
             self.process_resource = self.debug_auth
 
@@ -715,7 +810,7 @@ class AuthMiddleware(object):
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
 
             if app not in cache.applications:
-                logger.warn('Tried authenticating with nonexistent app: "%s"', app)
+                logger.warning('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
             req.context['app'] = cache.applications[app]
@@ -742,7 +837,7 @@ class AuthMiddleware(object):
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
             if not equals(api_key, str(app['key'])) or equals(api_key, str(app['secondary_key'])):
-                logger.warn('Application key invalid')
+                logger.warning('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
 
@@ -765,7 +860,7 @@ class AuthMiddleware(object):
         qs = req.env['QUERY_STRING']
         if qs:
             path = path + '?' + qs
-        body = req.context['body']
+        body = req.context['body'].decode('utf-8')
         auth = req.get_header('AUTHORIZATION')
         if auth and auth.startswith('hmac '):
             username_header = req.get_header('X-IRIS-USERNAME')
@@ -773,58 +868,57 @@ class AuthMiddleware(object):
                 app_name, client_digest = auth[5:].split(':', 1)
                 app = cache.applications.get(app_name)
                 if not app:
-                    logger.warn('Tried authenticating with nonexistent app: "%s"', app_name)
+                    logger.warning('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
                 if username_header and not app['allow_authenticating_users']:
-                    logger.warn('Unprivileged application %s tried authenticating %s',
-                                app['name'], username_header)
+                    logger.warning('Unprivileged application %s tried authenticating %s', app['name'], username_header)
                     raise HTTPUnauthorized('This application does not have the power to authenticate usernames', '', [])
-                window = int(time.time()) // 5
+                now = int(time.time())
+                windows = [
+                    now // 5,
+                    (now // 5) - 1,
+                    now // 30,
+                    (now // 30) - 1,
+                ]
                 for api_key in (str(app['key']), str(app['secondary_key'])):
-                    # If username header is present, throw that into the hmac validation as well
-                    if username_header:
-                        text = '%s %s %s %s %s' % (window, method, path, body, username_header)
-                    else:
-                        text = '%s %s %s %s' % (window, method, path, body)
-                    HMAC = hmac.new(api_key, text, hashlib.sha512)
-                    digest = base64.urlsafe_b64encode(HMAC.digest())
-                    if equals(client_digest, digest):
-                        req.context['app'] = app
+                    for window in windows:
+                        # If username header is present, throw that into the hmac validation as well
                         if username_header:
-                            req.context['username'] = username_header
-                        return
-                    else:
-                        # Try again with window - 1
-                        if username_header:
-                            text = '%s %s %s %s %s' % (window - 1, method, path, body, username_header)
+                            text = '%s %s %s %s %s' % (window, method, path, body, username_header)
                         else:
-                            text = '%s %s %s %s' % (window - 1, method, path, body)
-                        HMAC = hmac.new(api_key, text, hashlib.sha512)
+                            text = '%s %s %s %s' % (window, method, path, body)
+                        HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                         digest = base64.urlsafe_b64encode(HMAC.digest())
-                        if equals(client_digest, digest):
+                        if equals(client_digest.encode('utf-8'), digest):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
+
+                            # if trying to access internal route ensure that the app is in the allowlist
+                            if hasattr(resource, "internal_allowlist_only"):
+                                if resource.internal_allowlist_only:
+                                    if app_name not in self.allowlisted_apps:
+                                        raise HTTPUnauthorized('This endpoint is only available for internal allowlisted applications', '', [])
                             return
                 # No successful HMACs match, fail auth.
                 if username_header:
-                    logger.warn('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
+                    logger.warning('HMAC doesn\'t validate for app %s (passing username %s)', app['name'], username_header)
                 else:
-                    logger.warn('HMAC doesn\'t validate for app %s', app['name'])
-                raise HTTPUnauthorized('Authentication failure', '', [])
+                    logger.warning('HMAC doesn\'t validate for app %s; %s doesn\'t match "%s"', app['name'], client_digest, text)
+                raise HTTPUnauthorized('Authentication failure', 'HMAC failed validation. Check API key/clock skew', [])
 
             except (ValueError, KeyError):
                 logger.exception('Authentication failure')
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
         else:
-            logger.warn('Request has malformed/missing HMAC authorization header')
-            raise HTTPUnauthorized('Authentication failure', '', [])
+            logger.warning('Request has malformed/missing HMAC authorization header')
+            raise HTTPUnauthorized('Authentication failure', 'Malformed/missing HMAC authorization header', [])
 
 
 class ACLMiddleware(object):
-    def __init__(self, debug):
-        pass
+    def __init__(self, config={}, debug=False):
+        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
 
     def process_resource(self, req, resp, resource, params):
         self.process_frontend_routes(req, resource)
@@ -848,10 +942,22 @@ class ACLMiddleware(object):
 
         # Quickly check the username in the path matches who's logged in
         enforce_user = getattr(resource, 'enforce_user', False)
+        app = req.context.get('app')
+
+        # internally allowlisted apps have access to all internal data
+        if req.context.get('app', {}).get('name') in self.allowlisted_apps:
+            return
 
         if not req.context['username']:
+            # Check if we need to raise 401s when user must be enforced
             if enforce_user:
-                raise HTTPUnauthorized('Username must be specified for this action', '', [])
+                # 401 if no username or app
+                if not app:
+                    raise HTTPUnauthorized('Username must be specified for this action', '', [])
+                # 401 if app exists but not allowed to authenticate as user
+                elif not app.get('allow_authenticating_users'):
+                    raise HTTPUnauthorized('App must allow authentication as user for this action', '', [])
+            # Otherwise, all clear
             return
 
         # Check if user is an admin
@@ -884,6 +990,17 @@ class ACLMiddleware(object):
         connection.close()
 
         req.context['user_settings'] = settings
+
+
+def acl_allowed(req, username):
+    '''
+    Helper for checking ACLs for a given username when username is not included in params.
+    Allow if the username matches the session user, if an app is using an API key and is
+    allowed to authenticate users, or if the user is an admin.
+    '''
+    return (req.context['username'] == username or
+            req.context.get('app', {}).get('allow_authenticating_users') or
+            req.context['is_admin'])
 
 
 class Plan(object):
@@ -947,9 +1064,6 @@ class Plan(object):
         resp.body = ujson.dumps(active)
 
     def on_delete(self, req, resp, plan_id):
-        if not req.context['username']:
-            raise HTTPUnauthorized('You must be a logged in user to delete unused plans')
-
         if plan_id.isdigit():
             query = '''SELECT EXISTS(SELECT 1 FROM `plan` WHERE `id` = %s)'''
             plan_name = None
@@ -1017,8 +1131,6 @@ class Plan(object):
         connection.commit()
         connection.close()
 
-        logger.info('%s deleted plan %s', req.context['username'], plan_name)
-
         resp.status = HTTP_200
         resp.body = '[]'
 
@@ -1060,7 +1172,13 @@ class Plans(object):
                      "name": "foo-sla0"
                  }
              ]
-          '''
+        You can also search for plans that have specific targets in their steps by using the field 'target'
+
+        **example request**
+
+        GET /v0/plans?target=foo&active=1 HTTP/1.1
+
+        '''
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
@@ -1071,6 +1189,21 @@ class Plans(object):
 
         query = plan_query % ', '.join(plan_columns[f] for f in fields)
 
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.ss_dict_cursor)
+
+        # search for plans which have steps that target a specific user
+        for target_field in plan_target_fields:
+            if req.params.get(target_field, None):
+                target_query = plan_target_query
+                where = []
+                where += gen_where_filter_clause(connection, plan_target_filters, plan_filter_types, req.params)
+                if where:
+                    target_query = target_query + ' WHERE ' + ' AND '.join(where)
+
+                query = query + ' JOIN (' + target_query + ') `plan_notification_subset` ON `plan_notification_subset`.`plan_id` = `plan`.`id`'
+                break
+
         where = []
         active = req.get_param_as_bool('active')
         req.params.pop('active', None)
@@ -1080,7 +1213,6 @@ class Plans(object):
             else:
                 where.append('`plan_active`.`plan_id` IS NULL')
 
-        connection = db.engine.raw_connection()
         where += gen_where_filter_clause(
             connection, plan_filters, plan_filter_types, req.params)
 
@@ -1090,7 +1222,6 @@ class Plans(object):
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
-        cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
         payload = ujson.dumps(cursor)
@@ -1126,6 +1257,7 @@ class Plans(object):
                             "target": "demo",
                             "template": "template-foo",
                             "wait": 0
+                            "optional": 0
                         }
                     ]
                 ],
@@ -1182,6 +1314,7 @@ class Plans(object):
                             "repeat": 0,
                             "template": "template-foo",
                             "wait": 0
+                            "optional": 0
                         }
                     ]
                 ],
@@ -1203,6 +1336,8 @@ class Plans(object):
         index provided. At incident creation time, a mapping of dynamic index to role/target
         is provided to define the recipient of a message. See incidents POST endpoint for details.
 
+        The total time of all plan steps can not exceed 24 hours.
+
         '''
         plan_params = ujson.loads(req.context['body'])
         try:
@@ -1214,11 +1349,13 @@ class Plans(object):
 
         if not plan_name:
             raise HTTPBadRequest('Invalid plan', 'Empty plan name')
-
         if plan_name.isdigit():
             raise HTTPBadRequest('Invalid plan', 'Plan name cannot be a number')
 
-        # FIXME: catch creator not exist error
+        if not plan_params.get('creator'):
+            raise HTTPBadRequest('Invalid plan', 'Plan must specify a creator')
+        if not acl_allowed(req, plan_params['creator']):
+            raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
 
         tracking_key = plan_params.get('tracking_key')
         tracking_type = plan_params.get('tracking_type')
@@ -1249,22 +1386,41 @@ class Plans(object):
         }
 
         dynamic_indices = set()
+        plan_length = 0
         for steps in plan_params['steps']:
+            longest_step = 0
             for step in steps:
                 if 'dynamic_index' in step:
                     dynamic_indices.add(step['dynamic_index'])
+                if (step.get('wait', 0) * step.get('count', 0)) > longest_step:
+                    longest_step = step.get('wait', 0) * step.get('count', 0)
+            plan_length += longest_step
+
         if dynamic_indices != set(range(len(dynamic_indices))):
             raise HTTPBadRequest('Invalid plan',
                                  'Dynamic target numbers must span 0..n without gaps')
+
+        if plan_length > 86400:
+            raise HTTPBadRequest('Invalid plan',
+                                 'Plan length exceeds the 24 hour maximum')
 
         with db.guarded_session() as session:
             plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
 
             for index, steps in enumerate(plan_params['steps'], start=1):
+
+                # A plan must have at least one non-optonal notification per step, if it doesn't reject the plan
+                only_optional_flag = True
+
                 for step in steps:
                     dynamic = step.get('dynamic_index') is not None
                     step['plan_id'] = plan_id
                     step['step'] = index
+                    # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
+                    step.setdefault('optional', 0)
+                    if step['optional'] == 0:
+                        only_optional_flag = False
+
                     priority = cache.priorities.get(step['priority'])
                     role = cache.target_roles.get(step.get('role'))
 
@@ -1300,7 +1456,10 @@ class Plans(object):
                             session.execute(insert_plan_step_query, step)
                     except IntegrityError:
                         raise HTTPBadRequest('Invalid plan',
-                                             'Target not found for step %s' % index)
+                                             'Invalid data for step %s' % index)
+
+                if only_optional_flag:
+                    raise HTTPBadRequest('Invalid plan', 'You must have at least one non-optional notification per step. Step %s has none.' % index)
 
             session.execute('INSERT INTO `plan_active` (`name`, `plan_id`) '
                             'VALUES (:name, :plan_id) ON DUPLICATE KEY UPDATE `plan_id`=:plan_id',
@@ -1316,7 +1475,67 @@ class Plans(object):
 class Incidents(object):
     allow_read_no_auth = True
 
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
+
     def on_get(self, req, resp):
+        '''
+        Search for incidents. Returns a list of incidents matching specified parameters.
+        Valid parameters are listed below:
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            GET /v0/incidents?owner=jdoe&created__gt=1487466146&fields=id,owner  HTTP/1.1
+            Host: example.com
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "id": 123,
+                    "owner": "jdoe"
+                },
+                {
+                    "id": 124,
+                    "owner": "jdoe"
+                }
+            ]
+
+        :statuscode 400: Too much data requested; more filters are required
+        :statuscode 200: Successful query
+
+        *Allowed filter parameters:*
+
+        - id: Incident id (int)
+        - created: Incident creation time, in seconds since Unix epoch (int)
+        - owner: Username of person who claimed the incident (string)
+        - updated: Time when incident was last updated (e.g. claimed), in seconds since epoch (int)
+        - active: Incident status. Incidents are active if unclaimed, and inactive if they are
+          claimed or finished with their escalation plan (0 or 1 for inactive/active, respectively)
+        - context: JSON string representing the incident context data
+        - application: Application that created this incident (string)
+        - plan: Escalation plan name (string)
+        - plan_id: Escalation plan id (int)
+
+        This endpoint also allows specification of a limit via another query parameter, which limits
+        results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
+        or a filter will be rejected. To specify which incident attribute should be included in the output, the "fields"
+        query parameter can be used. The fields parameter takes the value of a comma-separated list of attributes
+        (e.g. id,owner), and the API will only include these incident fields in the output. If no "fields" value is
+        specified, all fields will be returned.
+        '''
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
         if not fields:
@@ -1327,29 +1546,35 @@ class Incidents(object):
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
 
-        query = incident_query % ', '.join(incident_columns[f] for f in fields)
+        query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
+        if target:
+            query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
         if target:
-            where.append('''`incident`.`id` IN (
-                SELECT `incident_id`
-                FROM `message`
-                JOIN `target` ON `message`.`target_id`=`target`.`id`
+            where.append('''`message`.`target_id` IN
+                (SELECT `id`
+                FROM `target`
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
+        if not (where or query_limit):
+            raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
         if query_limit is not None:
-            query += ' ORDER BY `incident`.`created` DESC LIMIT %s' % query_limit
+            query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC LIMIT %s' % query_limit
 
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
 
         if 'context' in fields:
-            payload = ujson.dumps(stream_incidents_with_context(cursor))
+            if 'title_variable_name' in fields:
+                payload = ujson.dumps(stream_incidents_with_context(cursor, True))
+            else:
+                payload = ujson.dumps(stream_incidents_with_context(cursor, False))
         else:
             payload = ujson.dumps(cursor)
         connection.close()
@@ -1390,7 +1615,7 @@ class Incidents(object):
 
         - plan name is missing
         - application is invalid
-        - context json blob is longer than 655355 bytes
+        - context json blob is longer than 65535 bytes
         - none of the templates used in the plan supports the given application
 
         To create an incident for a dynamic plan (one that defines dynamic targets), an
@@ -1422,7 +1647,7 @@ class Incidents(object):
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': incident_params['plan']}).scalar()
             if not plan_id:
-                logger.warn('Plan "%s" not found.', incident_params['plan'])
+                logger.warning('Plan "%s" not found.', incident_params['plan'])
                 raise HTTPNotFound()
             num_dynamic = session.execute('SELECT COUNT(DISTINCT `dynamic_index`) FROM `plan_notification` '
                                           'WHERE `plan_id` = :plan_id',
@@ -1459,9 +1684,9 @@ class Incidents(object):
 
             context = incident_params['context']
             context_json_str = ujson.dumps({variable: context.get(variable)
-                                           for variable in app['variables']})
+                                            for variable in app['variables']})
             if len(context_json_str) > 65535:
-                raise HTTPBadRequest('Context too long')
+                raise HTTPBadRequest('Context too large. %d is larger than limit 65535' % len(context_json_str))
 
             app_template_count = session.execute('''
                 SELECT EXISTS (
@@ -1477,42 +1702,104 @@ class Incidents(object):
             if not app_template_count:
                 raise HTTPBadRequest('No plan template actions exist for this app')
 
-            data = {
-                'plan_id': plan_id,
-                'created': datetime.datetime.utcnow(),
-                'application_id': app['id'],
-                'context': context_json_str,
-                'current_step': 0,
-                'active': True,
-            }
+        # To try to avoid deadlocks, split the inserts into their own session
+        retries = 0
+        max_retries = 10
+        while True:
+            with db.guarded_session() as session:
+                retries += 1
+                try:
+                    data = {
+                        'plan_id': plan_id,
+                        'created': datetime.datetime.utcnow(),
+                        'application_id': app['id'],
+                        'context': context_json_str,
+                        'current_step': 0,
+                        'active': True,
+                    }
 
-            incident_id = session.execute(
-                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                           `current_step`, `active`, `application_id`)
-                   VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
-                data).lastrowid
+                    incident_id = session.execute(
+                        '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                                   `current_step`, `active`, `application_id`)
+                           VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                        data).lastrowid
 
-            for idx, target in enumerate(dynamic_targets):
-                data = {
-                    'incident_id': incident_id,
-                    'target_id': target['target_id'],
-                    'role_id': target['role_id'],
-                    'index': idx
-                }
-                session.execute('''INSERT INTO `dynamic_plan_map` (`incident_id`, `role_id`,
-                                                                   `target_id`, `dynamic_index`)
-                                   VALUES (:incident_id, :role_id, :target_id, :index)''',
-                                data)
+                    for idx, target in enumerate(dynamic_targets):
+                        data = {
+                            'incident_id': incident_id,
+                            'target_id': target['target_id'],
+                            'role_id': target['role_id'],
+                            'index': idx
+                        }
+                        session.execute('''INSERT INTO `dynamic_plan_map` (`incident_id`, `role_id`,
+                                                                           `target_id`, `dynamic_index`)
+                                           VALUES (:incident_id, :role_id, :target_id, :index)''',
+                                        data)
 
-            session.commit()
-            session.close()
+                    session.commit()
+                    session.close()
+                except (InternalError, OperationalError) as e:
+                    logger.error('Failed inserting incident for plan %s. (Try %s/%s)', plan_id, retries, max_retries)
+                    if retries < max_retries:
+                        sleep_jitter = random.randint(10, 30) / 100
+                        sleep(sleep_jitter)
+                        continue
+                    else:
+                        logger.exception('Breached incident insertion retry quota. Bailing on incident for plan %s', plan_id)
+                        raise HTTPInternalServerError('Failed creating incident')
+                else:
+                    break
+
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
 
+        incident_data = {
+            'id': incident_id,
+            'plan': incident_params['plan'],
+            'created': int(time.time()),
+            'application': req.context['app']['name'],
+            'context': context
+        }
+
+        # optional incident handler to do additional tasks after the incident has been created
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            # get plan info
+            query = single_plan_query + 'WHERE `plan`.`id` = %s'
+            cursor.execute(query, plan_id)
+            plan_details = cursor.fetchone()
+
+            # get plan steps info
+            step = 0
+            steps = []
+            cursor.execute(single_plan_query_steps, plan_id)
+            for notification in cursor:
+                s = notification['step']
+                if s != step:
+                    l = [notification]
+                    steps.append(l)
+                    step = s
+                else:
+                    l.append(notification)
+            plan_details['steps'] = steps
+            connection.close()
+            incident_data["plan_details"] = plan_details
+            self.custom_incident_handler_module.process_create(incident_data)
+
 
 class Incident(object):
     allow_read_no_auth = True
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
 
     def on_get(self, req, resp, incident_id):
         '''
@@ -1568,6 +1855,9 @@ class Incident(object):
         if incident:
             cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
             incident['steps'] = cursor.fetchall()
+
+            cursor.execute(single_incident_query_comments, incident['id'])
+            incident['comments'] = cursor.fetchall()
             connection.close()
 
             incident['context'] = ujson.loads(incident['context'])
@@ -1621,8 +1911,15 @@ class Incident(object):
             raise HTTPBadRequest('"owner" field required')
 
         if owner is not None:
+            if not acl_allowed(req, owner):
+                raise HTTPUnauthorized('Invalid claimer for this app/user')
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
+
+            cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+            if not cursor.fetchone()[0]:
+                raise HTTPBadRequest('Invalid claim: no matching incident id')
+
             cursor.execute(
                 '''SELECT EXISTS(
                      SELECT 1
@@ -1642,6 +1939,135 @@ class Incident(object):
         resp.body = ujson.dumps({'incident_id': incident_id,
                                  'owner': owner,
                                  'active': is_active})
+
+        # optional incident handler to do additional tasks after the incident has been claimed
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            cursor.execute(single_incident_query, int(incident_id))
+            incident_data = cursor.fetchone()
+
+            cursor.execute(single_incident_query_comments, incident_id)
+            incident_data['comments'] = cursor.fetchall()
+
+            incident_data['context'] = ujson.loads(incident_data['context'])
+            cursor.close()
+            connection.close()
+            self.custom_incident_handler_module.process_claim(incident_data)
+
+
+class Resolved(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
+
+    def on_post(self, req, resp, incident_id):
+
+        incident_params = ujson.loads(req.context['body'])
+        if 'resolved' not in incident_params:
+            raise HTTPBadRequest('resolved field required')
+        resolved = incident_params.get('resolved')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+        if not cursor.fetchone()[0]:
+            raise HTTPBadRequest('Invalid claim: no matching incident id')
+        cursor.close()
+        connection.close()
+
+        try:
+            utils.resolve_incident(incident_id, resolved)
+        except Exception as e:
+            raise HTTPInternalServerError(description=e)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'incident_id': incident_id,
+                                 'resolved': resolved})
+
+        # optional incident handler to do additional tasks after the incident has been resolved
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            cursor.execute(single_incident_query, int(incident_id))
+            incident_data = cursor.fetchone()
+
+            cursor.execute(single_incident_query_comments, incident_id)
+            incident_data['comments'] = cursor.fetchall()
+            incident_data['context'] = ujson.loads(incident_data['context'])
+
+            cursor.close()
+            connection.close()
+            self.custom_incident_handler_module.process_resolve(incident_data)
+
+
+class ClaimIncidents(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config):
+        custom_incident_handler_module = config.get('custom_incident_handler_module')
+        if custom_incident_handler_module is not None:
+            module = importlib.import_module(custom_incident_handler_module)
+            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
+        else:
+            self.custom_incident_handler_module = None
+
+    def on_post(self, req, resp):
+        params = ujson.loads(req.context['body'])
+        try:
+            owner = params['owner']
+            incident_ids = params['incident_ids']
+        except KeyError:
+            raise HTTPBadRequest('Missing owner or incident_ids fields')
+        if owner is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            for incident_id in incident_ids:
+                cursor.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = %s)''', incident_id)
+                if not cursor.fetchone()[0]:
+                    raise HTTPBadRequest('Invalid claim: no matching incident id')
+
+            cursor.execute(
+                '''SELECT EXISTS(
+                     SELECT 1
+                     FROM `target`
+                     WHERE `target`.`name` = %s
+                     AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                     AND `target`.`active` = 1)''',
+                owner)
+            owner_valid = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            if not owner_valid:
+                raise HTTPBadRequest('Invalid claim: no matching owner')
+        claimed, unclaimed = utils.claim_bulk_incidents(incident_ids, owner)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'owner': owner,
+                                 'claimed': claimed,
+                                 'unclaimed': unclaimed})
+
+        # optional incident handler to do additional tasks after the incidents have been claimed
+        if self.custom_incident_handler_module is not None:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+            for incident_id in incident_ids:
+
+                cursor.execute(single_incident_query, int(incident_id))
+                incident_data = cursor.fetchone()
+
+                cursor.execute(single_incident_query_comments, incident_id)
+                incident_data['comments'] = cursor.fetchall()
+                incident_data['context'] = ujson.loads(incident_data['context'])
+                self.custom_incident_handler_module.process_claim(incident_data)
+            cursor.close()
+            connection.close()
 
 
 class Message(object):
@@ -1753,6 +2179,8 @@ class Messages(object):
         query = message_query % ', '.join(message_columns[f] % escaped_params for f in fields)
 
         where = gen_where_filter_clause(connection, message_filters, message_filter_types, req.params)
+        if not (where or query_limit):
+            raise HTTPBadRequest('Message query too broad, add limit or filter')
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
 
@@ -1768,8 +2196,9 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, zk_hosts, default_sender_addr):
+    def __init__(self, zk_hosts, default_sender_addr, timeout):
         self.default_sender_addr = default_sender_addr
+        self.timeout = timeout
         if zk_hosts:
             from iris.coordinator.kazoo import Coordinator
             self.coordinator = Coordinator(zk_hosts=zk_hosts,
@@ -1788,6 +2217,21 @@ class Notifications(object):
 
         You can set the priority key to honor target's priority preference or
         set the mode key to force the message transport.
+
+        You can use the role "literal_target" to prevent unrolling of targets and
+        send messages directly to mailing lists or slack channels.
+        Note that if you use this role you MUST specify the mode key but not the priority.
+        This role will set the destination to the target value so make sure the target
+        is a valid email address, slack channel, slack username, etc.
+
+        Multi-recipient messages are supported for notifications explicitly specifying the
+        "email" mode. To send a multi-recipient message, specify a list of objects defining
+        "role" and "target" attributes. All roles, including "literal_target", are
+        supported. These messages will be sent on a best-effort basis to as many targets
+        as is possible. If any role:target pairs are found to be invalid, they will be
+        skipped, and the message will be delivered to all other targets. Each object can
+        also optionally define a "bcc" field, which will mark those targets as bcc if set
+        to true. If no bcc attribute is defined for a target, the default value is false.
 
         **Example request**:
 
@@ -1817,6 +2261,41 @@ class Notifications(object):
                "mode": "email"
            }
 
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "role": "literal_target",
+               "target": "#slackchannel",
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "slack"
+           }
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "target_list": {
+                   {
+                       "role": "literal_target",
+                       "target": "list@example.com"
+                   },
+                   {
+                       "role": "user",
+                       "target": "jdoe",
+                       "bcc": true
+                   }
+               }
+               "subject": "wake up",
+               "body": "something is on fire",
+               "mode": "email"
+           }
+
         **Example response**:
 
         .. sourcecode:: http
@@ -1832,10 +2311,13 @@ class Notifications(object):
 
         A request is considered invalid if:
 
-        - either target, subject or role is missing
+        - either target, subject or role is missing and target_list is not provided
+        - target_list is provided, but no subject
+        - target_list is malformed (not of the form [{"role": foo, "target": bar}])
+        - a priority is given for a target_list
         - both priority and mode are missing
         - invalid priority, mode
-        - both tempalte, body and email_html are missing
+        - both template, body and email_html are missing
         - template, body and email_html is not a string
         - message queue request rejected by sender
         '''
@@ -1843,35 +2325,89 @@ class Notifications(object):
         message = ujson.loads(req.context['body'])
         msg_attrs = set(message)
         if not msg_attrs >= self.required_attrs:
-            raise HTTPBadRequest('Missing required atrributes',
-                                 ', '.join(self.required_attrs - msg_attrs))
+            if 'target_list' not in msg_attrs:
+                raise HTTPBadRequest('Missing required atrributes',
+                                     ', '.join(self.required_attrs - msg_attrs))
+            else:
+                if 'subject' not in msg_attrs:
+                    raise HTTPBadRequest('Missing required atrributes: subject')
+                if not all(['role' in t and 'target' in t for t in message['target_list']]):
+                    raise HTTPBadRequest('Malformed target list')
 
-        # If both priority and mode are passed in, priority overrides mode
-        if 'priority' in message:
-            priority = cache.priorities.get(message['priority'])
-            if not priority:
-                raise HTTPBadRequest('Invalid priority', message['priority'])
-            message['priority_id'] = priority['id']
-        elif 'mode' in message:
-            mode_id = cache.modes.get(message['mode'])
-            if not mode_id:
-                raise HTTPBadRequest('Invalid mode', message['mode'])
-            message['mode_id'] = mode_id
+        if 'target_list' in message:
+            message['multi-recipient'] = True
+            if 'mode' in message:
+                mode_id = cache.modes.get(message['mode'])
+                if not mode_id or message['mode'] != 'email':
+                    raise HTTPBadRequest('Invalid mode', message['mode'])
+                message['mode_id'] = mode_id
+            else:
+                raise HTTPBadRequest('Contact mode required for target list')
         else:
-            raise HTTPBadRequest(
-                'Both priority and mode are missing, at least one of it is required')
+            # If both priority and mode are passed in, priority overrides mode
+            if 'priority' in message:
+                priority = cache.priorities.get(message['priority'])
+                if not priority:
+                    raise HTTPBadRequest('Invalid priority', message['priority'])
+                message['priority_id'] = priority['id']
+            elif 'mode' in message:
+                mode_id = cache.modes.get(message['mode'])
+                if not mode_id:
+                    raise HTTPBadRequest('Invalid mode', message['mode'])
+                message['mode_id'] = mode_id
+            elif 'category' in message:
+                app = req.context.get('app')
+                if app is None:
+                    raise HTTPBadRequest('Invalid app specified for this notification category')
+                category = app['categories'].get(message['category'])
+                if category is None:
+                    # Add an additional DB check here in case our cache hasn't been refreshed yet.
+                    # This should cover the case when a user creates a category and immediately sends
+                    # a message for it, but shouldn't affect performance in the common case
+                    conn = db.engine.raw_connection()
+                    cursor = conn.cursor(db.dict_cursor)
+                    try:
+                        cursor.execute(
+                            '''SELECT `notification_category`.`id`, `notification_category`.`name`,
+                                `notification_category`.`mode_id`, `mode`.`name` AS mode
+                            FROM `notification_category`
+                            JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+                            WHERE `application_id` = %s and `notification_category`.`name`= %s''',
+                            (app['id'], message['category']))
+                        category = cursor.fetchone()
+                    except Exception:
+                        category = None
+                    finally:
+                        cursor.close()
+                        conn.close()
+                    # If we still don't have a category, raise 400
+                    if category is None:
+                        raise HTTPBadRequest('No category named %s exists for this app' % message['category'])
+                message['category_id'] = category['id']
+                message['category_mode_id'] = category['mode_id']
+                message['category_mode'] = category['mode']
+            else:
+                raise HTTPBadRequest(
+                    'Priority, mode, and category are missing, at least one is required')
+            if message['role'] == 'literal_target':
+                # target_literal requires that a mode be set and no priority be defined
+                if 'mode' not in message:
+                    raise HTTPBadRequest('INVALID mode not set for literal_target role')
+                if 'priority' in message or 'category' in message:
+                    raise HTTPBadRequest('INVALID role literal_target does not support priority or category')
+                message['unexpanded'] = True
 
         # Avoid problems down the line if we have no way of creating the
         # message body, which happens if both body and template are not
         # specified, or if we don't have email_html
         if 'template' in message:
-            if not isinstance(message['template'], basestring):
+            if not isinstance(message['template'], str):
                 raise HTTPBadRequest('template needs to be a string')
         elif 'body' in message:
-            if not isinstance(message['body'], basestring):
+            if not isinstance(message['body'], str):
                 raise HTTPBadRequest('body needs to be a string')
         elif 'email_html' in message:
-            if not isinstance(message['email_html'], basestring):
+            if not isinstance(message['email_html'], str):
                 raise HTTPBadRequest('email_html needs to be a string')
             # Handle the edge-case where someone is only specifying email_html
             # and not the others. Avoid KeyError's later on in sender
@@ -1887,9 +2423,11 @@ class Notifications(object):
 
         # If we're using ZK, try that to get master
         if self.coordinator:
-            sender_addr = self.coordinator.get_current_master()
+            sender_addr = None
+            with Timeout(self.timeout, False):
+                sender_addr = self.coordinator.get_current_master()
             if sender_addr:
-                logger.info('Relaying message to current master sender: %s', sender_addr)
+                logger.debug('Relaying message to current master sender: %s', sender_addr)
             else:
                 sender_addr = self.default_sender_addr
                 logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
@@ -1934,39 +2472,39 @@ class Template(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
-            if template_id.isdigit():
-                where = 'WHERE `template`.`id` = %s'
-            else:
-                where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
-            query = single_template_query + where
+        if template_id.isdigit():
+            where = 'WHERE `template`.`id` = %s'
+        else:
+            where = 'WHERE `template`.`name` = %s AND `template_active`.`template_id` IS NOT NULL'
+        query = single_template_query + where
 
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute(query, template_id)
-            results = cursor.fetchall()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        cursor.execute(query, template_id)
+        results = cursor.fetchall()
 
-            if results:
-                r = results[0]
-                t = {
-                    'id': r[0],
-                    'name': r[1],
-                    'active': r[2],
-                    'creator': r[3],
-                    'created': r[4]
-                }
-                content = {}
-                for r in results:
-                    content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
-                t['content'] = content
-                cursor = connection.cursor(db.dict_cursor)
-                cursor.execute(single_template_query_plans, t['name'])
-                t['plans'] = cursor.fetchall()
-                connection.close()
-                payload = ujson.dumps(t)
-            else:
-                raise HTTPNotFound()
-            resp.status = HTTP_200
-            resp.body = payload
+        if results:
+            r = results[0]
+            t = {
+                'id': r[0],
+                'name': r[1],
+                'active': r[2],
+                'creator': r[3],
+                'created': r[4]
+            }
+            content = {}
+            for r in results:
+                content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
+            t['content'] = content
+            cursor = connection.cursor(db.dict_cursor)
+            cursor.execute(single_template_query_plans, t['name'])
+            t['plans'] = cursor.fetchall()
+            connection.close()
+            payload = ujson.dumps(t)
+        else:
+            raise HTTPNotFound()
+        resp.status = HTTP_200
+        resp.body = payload
 
     def on_post(self, req, resp, template_id):
         template_params = ujson.loads(req.context['body'])
@@ -2043,11 +2581,14 @@ class Templates(object):
             if 'creator' not in template_params:
                 raise HTTPBadRequest('creator argument missing')
 
+            if not acl_allowed(req, template_params['creator']):
+                raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
+
             content = template_params.pop('content')
             contents = []
             template_env = SandboxedEnvironment(autoescape=True)
-            for _application, modes in content.iteritems():
-                for _mode, _content in modes.iteritems():
+            for _application, modes in content.items():
+                for _mode, _content in modes.items():
                     _content['mode'] = _mode
                     _content['application'] = _application
                     try:
@@ -2057,7 +2598,7 @@ class Templates(object):
                         logger.exception('Invalid jinja syntax')
                         raise HTTPBadRequest('Invalid jinja template', str(e))
                     contents.append(_content)
-        except HTTPBadRequest:
+        except (HTTPBadRequest, HTTPUnauthorized):
             raise
         except Exception:
             logger.exception('SERVER ERROR')
@@ -2104,6 +2645,38 @@ class UserModes(object):
     enforce_user = True
 
     def on_get(self, req, resp, username):
+        '''
+        Get priority:mode mappings for a given user. If no application is
+        passed via query params, returns a user's global priority:mode
+        mapping. Otherwise, return the per-application priority mapping
+        that corresponds to the specified application. Any undefined mapping
+        has "default" specified as mode, otherwise the mode's name is specified.
+
+        This action is only available if the request's username matches the
+        username passed in the URL. Admins and apps that can authenticate as
+        users are also allowed to access this data.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/modes/jdoe?application=foo HTTP/1.1
+           Content-Type: application/json
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+               "high": "default",
+               "low": "email",
+               "medium": "slack",
+               "urgent": "default",
+           }
+        '''
         with db.guarded_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
             modes = {name: 'default' for (name, ) in results}
@@ -2121,6 +2694,63 @@ class UserModes(object):
 
     # TODO (dewang): change to PUT for consistency with oncall
     def on_post(self, req, resp, username):
+        '''
+        Update priority:mode mappings for a given user. To update global
+        priority mappings, specify the priority and new value in the base
+        level of the post body. For per application settings, define new
+        values in a dict mapping to the app's name under the "per_app_modes"
+        key. To delete settings, specify "default" as the mode mapping.
+        Any priority/app not specified in the request is unchanged.
+
+        This API responds with the new value of the global priority:mode
+        mapping after the request has been made.
+
+        This action is available only to the user matching the username in
+        the URL, to admins, and to apps that can authenticate as users.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/notifications HTTP/1.1
+           Content-Type: application/json
+
+            {
+                "urgent": "default",
+                "high": "slack",
+                "medium": "slack",
+                "low": "default",
+                "per_app_modes": {
+                    "foo-app": {
+                        "urgent": "default",
+                        "high": "default",
+                        "medium": "default",
+                        "low": "email"
+                    },
+                    "bar-app": {
+                        "urgent": "default",
+                        "high": "default",
+                        "medium": "default",
+                        "low": "default"
+                    }
+                }
+            }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           {
+                "urgent": "default",
+                "high": "slack",
+                "medium": "slack",
+                "low": "default",
+            }
+
+        '''
         mode_params = ujson.loads(req.context['body'])
         with db.guarded_session() as session:
             results = session.execute('SELECT `name` FROM `priority`')
@@ -2131,7 +2761,7 @@ class UserModes(object):
 
             # Configure priority -> mode for a single application
             if app is not None:
-                for p, m in mode_params.iteritems():
+                for p, m in mode_params.items():
                     if m != 'default':
                         session.execute(insert_target_application_modes_query,
                                         {'name': username, 'priority': p, 'mode': m, 'app': app})
@@ -2143,8 +2773,8 @@ class UserModes(object):
 
             # Configure priority -> mode for multiple applications in one call (avoid MySQL deadlocks)
             elif multiple_apps is not None:
-                for app, app_modes in multiple_apps.iteritems():
-                    for p, m in app_modes.iteritems():
+                for app, app_modes in multiple_apps.items():
+                    for p, m in app_modes.items():
                         if m != 'default':
                             session.execute(insert_target_application_modes_query,
                                             {'name': username, 'priority': p, 'mode': m, 'app': app})
@@ -2153,7 +2783,7 @@ class UserModes(object):
                                             {'name': username, 'priority': p, 'app': app})
 
                 # Also configure global defaults in the same call if they're specified
-                for p in mode_params.viewkeys() & modes.viewkeys():
+                for p in mode_params.keys() & modes.keys():
                     m = mode_params[p]
                     if m != 'default':
                         session.execute(insert_user_modes_query,
@@ -2165,7 +2795,7 @@ class UserModes(object):
             # Configure user's global priority -> mode which covers all
             # applications that don't have defaults set
             else:
-                for p, m in mode_params.iteritems():
+                for p, m in mode_params.items():
                     if m != 'default':
                         session.execute(insert_user_modes_query,
                                         {'name': username, 'priority': p, 'mode': m})
@@ -2259,6 +2889,10 @@ class Target(object):
         if 'name' in req.params:
             filters_sql.append('`name` = :name')
 
+        if 'name__in' in req.params:
+            req.params['name__in'] = req.get_param_as_list('name__in')
+            filters_sql.append('`name` IN :name__in')
+
         active = req.get_param_as_bool('active')
         if active is not None:
             req.params['active'] = active
@@ -2294,10 +2928,13 @@ class Application(object):
         cursor.execute(get_vars_query, app['id'])
         app['variables'] = []
         app['required_variables'] = []
+        app['title_variable'] = None
         for row in cursor:
             app['variables'].append(row['name'])
             if row['required']:
                 app['required_variables'].append(row['name'])
+            if row['title_variable']:
+                app['title_variable'] = row['name']
 
         cursor.execute(get_default_application_modes_query, app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
@@ -2307,6 +2944,12 @@ class Application(object):
 
         cursor.execute(get_application_owners_query, app['id'])
         app['owners'] = [row['name'] for row in cursor]
+
+        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+        cursor.execute(get_application_categories, app['id'])
+        app['categories'] = [row for row in cursor]
 
         cursor.close()
         connection.close()
@@ -2347,6 +2990,9 @@ class Application(object):
             if 'summary_template' not in data:
                 raise HTTPBadRequest('summary_template must be specified')
 
+            if 'mobile_template' not in data:
+                raise HTTPBadRequest('mobile_template must be specified')
+
             new_variables = data.get('variables')
             if not isinstance(new_variables, list):
                 raise HTTPBadRequest('variables must be specified and be a list')
@@ -2358,17 +3004,37 @@ class Application(object):
                     {'application_id': app['id']})
             }
 
+            title_variable = data.get('title_variable')
+            # if no variables are set then title variable will be null
+            if not new_variables:
+                title_variable = None
+            elif title_variable and title_variable not in new_variables:
+                raise HTTPBadRequest('title variable is invalid')
+
             kill_variables = existing_variables - new_variables
 
+            # insert new variables and update the value of title_variable for existing variables
             for variable in new_variables - existing_variables:
                 session.execute('''INSERT INTO `template_variable` (`application_id`, `name`)
-                                VALUES (:application_id, :variable)''',
+                                    VALUES (:application_id, :variable)''',
                                 {'application_id': app['id'], 'variable': variable})
 
             if kill_variables:
                 session.execute('''DELETE FROM `template_variable`
                                 WHERE `application_id` = :application_id AND `name` IN :variables''',
                                 {'application_id': app['id'], 'variables': tuple(kill_variables)})
+
+            # update value of title variable for application
+            if title_variable:
+                session.execute('''UPDATE `template_variable`
+                                SET `title_variable` = IF(`name` = :title_val, 1, 0)
+                                WHERE `application_id`= :application_id''',
+                                {'application_id': app['id'], 'title_val': title_variable})
+            else:
+                session.execute('''UPDATE `template_variable`
+                                SET `title_variable` = 0
+                                WHERE `application_id`= :application_id''',
+                                {'application_id': app['id']})
 
             # Only owners can (optionally) change owners
             new_owners = data.get('owners')
@@ -2420,6 +3086,38 @@ class Application(object):
                 if kill_owners or add_owners:
                     logger.info('User %s has changed owners for app %s to: %s',
                                 req.context['username'], app_name, ', '.join(new_owners))
+
+            # change the sender address for the application
+            new_addresses = data.get('custom_sender_addresses')
+            if new_addresses:
+                # currently self service custom addresses are only implemented for the iris_smtp vendor but this can easily be extended
+                supported_custom_address_modes = ['email']
+                kill_address_modes = []
+
+                if not isinstance(new_addresses, dict):
+                    raise HTTPBadRequest('To change custom addresses, you must pass a dictionary of mode: address pairings')
+                for mode in new_addresses:
+                    if mode not in supported_custom_address_modes:
+                        raise HTTPBadRequest('%s does not support custom sender addresses', mode)
+
+                for mode in supported_custom_address_modes:
+                    # if mode key exists and value is none add to kill_list, ignore if key is undefined
+                    if new_addresses.get(mode, 'undefined') is None:
+                        kill_address_modes.append(mode)
+
+                for mode, custom_address in new_addresses.items():
+                    if custom_address is not None:
+                        session.execute('''INSERT INTO `application_custom_sender_address`
+                                        VALUES (:app_id, (SELECT `mode`.`id` FROM `mode`
+                                        WHERE `mode`.`name` = :mode), :custom_address)
+                                        ON DUPLICATE KEY UPDATE `sender_address` = :custom_address''',
+                                        {'app_id': app['id'], 'mode': mode, 'custom_address': custom_address})
+
+                for mode in kill_address_modes:
+                    session.execute('''DELETE FROM `application_custom_sender_address`
+                                        WHERE `application_id` = :app_id AND
+                                        `mode_id` = (SELECT `mode`.`id` FROM `mode` WHERE `mode`.`name` = :mode)''',
+                                    {'app_id': app['id'], 'mode': mode})
 
             # Only admins can (optionally) change supported modes
             new_modes = data.get('supported_modes')
@@ -2484,15 +3182,13 @@ class Application(object):
                        JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
                        WHERE `default_application_mode`.`application_id` = :application_id''',
                     {'application_id': app['id']})}
-                kill_priorities = existing_priorities - default_modes.viewkeys()
-                for priority, mode in default_modes.iteritems():
+                kill_priorities = existing_priorities - default_modes.keys()
+                for priority, mode in default_modes.items():
                     # If we disabled this mode for this app in the code block
                     # above, avoid the expected integrity error here by bailing
                     # early
                     if new_modes is not None and mode not in new_modes:
-                        logger.warn(('Not setting default priority %s to mode %s for app %s '
-                                     'as this mode was disabled as part of this app update'),
-                                    priority, mode, app_name)
+                        logger.warning(('Not setting default priority %s to mode %s for app %s as this mode was disabled as part of this app update'), priority, mode, app_name)
                         continue
 
                     try:
@@ -2533,6 +3229,7 @@ class Application(object):
                 '''UPDATE `application`
                    SET `context_template` = :context_template,
                        `summary_template` = :summary_template,
+                       `mobile_template` = :mobile_template,
                        `sample_context` = :sample_context
                    WHERE `id` = :application_id LIMIT 1''',
                 data)
@@ -2594,7 +3291,7 @@ class ApplicationQuota(object):
         except ValueError:
             raise HTTPBadRequest('Invalid json in post body')
 
-        if data.viewkeys() != required_quota_keys:
+        if data.keys() != required_quota_keys:
             raise HTTPBadRequest('Missing required keys in post body')
 
         try:
@@ -2910,7 +3607,7 @@ class ApplicationEmailIncidents(object):
                     {'app_name': app_name, 'email_addresses': email_addresses})
 
                 # Configure new/existing ones
-                for email_address, plan_name in email_to_plans.iteritems():
+                for email_address, plan_name in email_to_plans.items():
                     # If this plan does not have steps that support this app, block this
                     app_template_count = session.execute('''
                         SELECT EXISTS (
@@ -3062,7 +3759,7 @@ class ApplicationPlans(object):
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
-            fields = plan_columns.keys()
+            fields = list(plan_columns.keys())
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
@@ -3071,7 +3768,7 @@ class ApplicationPlans(object):
             connection, plan_filters, plan_filter_types, req.params)
 
         query = '''SELECT %s
-                   FROM `plan_active` JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
+                   FROM `plan_active` LEFT JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
                    JOIN `plan_notification` ON `plan`.`id` = `plan_notification`.`plan_id`
                    JOIN `template` ON `plan_notification`.`template` = `template`.`name`
                    JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
@@ -3094,9 +3791,10 @@ class Applications(object):
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(get_applications_query)
+        cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
         apps = cursor.fetchall()
         for app in apps:
+            app['title_variable'] = None
             cursor.execute(get_vars_query, app['id'])
             app['variables'] = []
             app['required_variables'] = []
@@ -3104,6 +3802,8 @@ class Applications(object):
                 app['variables'].append(row['name'])
                 if row['required']:
                     app['required_variables'].append(row['name'])
+                if row['title_variable'] == 1:
+                    app['title_variable'] = row['name']
 
             cursor.execute(get_default_application_modes_query, app['name'])
             app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
@@ -3114,6 +3814,12 @@ class Applications(object):
             cursor.execute(get_application_owners_query, app['id'])
             app['owners'] = [row['name'] for row in cursor]
 
+            cursor.execute(get_application_custom_sender_addresses, app['id'])
+            app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+
+            cursor.execute(get_application_categories, app['id'])
+            app['categories'] = [row for row in cursor]
+
             del app['id']
         payload = apps
         cursor.close()
@@ -3122,6 +3828,7 @@ class Applications(object):
         resp.body = ujson.dumps(payload)
 
     def on_post(self, req, resp):
+
         try:
             data = ujson.loads(req.context['body'])
         except ValueError:
@@ -3221,64 +3928,96 @@ class Priorities(object):
         resp.body = payload
 
 
+def get_user_details(username):
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor(db.dict_cursor)
+    # Get user id/name
+    user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
+                    FROM `target`
+                    JOIN `user` on `user`.`target_id` = `target`.`id`'''
+    if username.isdigit():
+        user_query += ' WHERE `target`.`id` = %s'
+    else:
+        user_query += ' WHERE `target`.`name` = %s'
+    cursor.execute(user_query, username)
+    if cursor.rowcount != 1:
+        raise HTTPNotFound()
+    user_data = cursor.fetchone()
+    user_data['admin'] = bool(user_data['admin'])
+    user_id = user_data.pop('id')
+
+    # get any mode based template override settings
+    mode_template_override_query = '''SELECT `mode`.`name` AS `mode`
+                        FROM `mode_template_override`
+                            JOIN `mode` ON `mode`.`id` = `mode_template_override`.`mode_id`
+                        WHERE `mode_template_override`.`target_id` = %s'''
+    cursor.execute(mode_template_override_query, user_id)
+    user_data['template_overrides'] = [row['mode'] for row in cursor]
+
+    # get any category override settings
+    category_override_query = '''SELECT `application`.`name` AS `application_name`, `mode`.`name` AS `mode`, `notification_category`.`name` AS `category`
+                                    FROM `category_override`
+                                    JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                                    JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+                                    JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+                                    WHERE `category_override`.`user_id` = %s'''
+    cursor.execute(category_override_query, user_id)
+    user_data['category_overrides'] = {}
+    for row in cursor:
+        user_data['category_overrides'][row['application_name']] = row
+
+    # Get user contact modes
+    modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
+                        FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
+                            JOIN `priority` ON `priority`.`id` = `target_mode`.`priority_id`
+                            JOIN `mode` ON `mode`.`id` = `target_mode`.`mode_id`
+                        WHERE `target`.`id` = %s'''
+    cursor.execute(modes_query, user_id)
+    user_data['modes'] = {}
+    for row in cursor:
+        user_data['modes'][row['priority']] = row['mode']
+
+    # get device settings for user
+    mode_template_override_query = '''SELECT `device`.`registration_id`, `device`.`user_id`, `device`.`platform`
+                        FROM `device`
+                        WHERE `device`.`user_id` = %s'''
+    cursor.execute(mode_template_override_query, user_id)
+    user_data['device'] = list(cursor)
+
+    # Get user contact modes per app
+    user_data['per_app_modes'] = defaultdict(dict)
+    cursor.execute(get_all_users_app_modes_query, user_id)
+    for row in cursor:
+        user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
+
+    # Get user teams
+    teams_query = '''SELECT `target`.`name` AS `team`
+                    FROM `user_team` JOIN `target` ON `user_team`.`team_id` = `target`.`id`
+                    WHERE `user_team`.`user_id` = %s'''
+    cursor.execute(teams_query, user_id)
+    user_data['teams'] = []
+    user_data['teams'] = [row['team'] for row in cursor]
+
+    # Get user contact info
+    contacts_query = '''SELECT `mode`.`name` AS `mode`, `target_contact`.`destination` AS `destination`
+                        FROM `target_contact` JOIN `mode` ON `target_contact`.`mode_id` = `mode`.`id`
+                        WHERE `target_contact`.`target_id` = %s'''
+    cursor.execute(contacts_query, user_id)
+    user_data['contacts'] = {}
+    for row in cursor:
+        user_data['contacts'][row['mode']] = row['destination']
+    cursor.close()
+    connection.close()
+
+    return user_data
+
+
 class User(object):
     allow_read_no_auth = False
     enforce_user = True
 
     def on_get(self, req, resp, username):
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-        # Get user id/name
-        user_query = '''SELECT `target`.`id`, `target`.`name`, `user`.`admin`
-                        FROM `target`
-                        JOIN `user` on `user`.`target_id` = `target`.`id`'''
-        if username.isdigit():
-            user_query += ' WHERE `target`.`id` = %s'
-        else:
-            user_query += ' WHERE `target`.`name` = %s'
-        cursor.execute(user_query, username)
-        if cursor.rowcount != 1:
-            raise HTTPNotFound()
-        user_data = cursor.fetchone()
-        user_data['admin'] = bool(user_data['admin'])
-        user_id = user_data.pop('id')
-
-        # Get user contact modes
-        modes_query = '''SELECT `priority`.`name` AS priority, `mode`.`name` AS `mode`
-                         FROM `target` JOIN `target_mode` ON `target`.`id` = `target_mode`.`target_id`
-                             JOIN `priority` ON `priority`.`id` = `target_mode`.`priority_id`
-                             JOIN `mode` ON `mode`.`id` = `target_mode`.`mode_id`
-                         WHERE `target`.`id` = %s'''
-        cursor.execute(modes_query, user_id)
-        user_data['modes'] = {}
-        for row in cursor:
-            user_data['modes'][row['priority']] = row['mode']
-
-        # Get user contact modes per app
-        user_data['per_app_modes'] = defaultdict(dict)
-        cursor.execute(get_all_users_app_modes_query, user_id)
-        for row in cursor:
-            user_data['per_app_modes'][row['application']][row['priority']] = row['mode']
-
-        # Get user teams
-        teams_query = '''SELECT `target`.`name` AS `team`
-                        FROM `user_team` JOIN `target` ON `user_team`.`team_id` = `target`.`id`
-                        WHERE `user_team`.`user_id` = %s'''
-        cursor.execute(teams_query, user_id)
-        user_data['teams'] = []
-        for row in cursor:
-            user_data['teams'].append(row['team'])
-
-        # Get user contact info
-        contacts_query = '''SELECT `mode`.`name` AS `mode`, `target_contact`.`destination` AS `destination`
-                            FROM `target_contact` JOIN `mode` ON `target_contact`.`mode_id` = `mode`.`id`
-                            WHERE `target_contact`.`target_id` = %s'''
-        cursor.execute(contacts_query, user_id)
-        user_data['contacts'] = {}
-        for row in cursor:
-            user_data['contacts'][row['mode']] = row['destination']
-        cursor.close()
-        connection.close()
+        user_data = get_user_details(username)
         resp.status = HTTP_200
         resp.body = ujson.dumps(user_data)
 
@@ -3375,6 +4114,52 @@ class UserSettings(object):
         resp.status = HTTP_204
 
 
+class UserTemplateOverrides(object):
+    allow_read_no_auth = False
+    enforce_user = True
+
+    def on_post(self, req, resp, username):
+        # check request body integrity
+        try:
+            data = ujson.loads(req.context['body'])
+        except ValueError:
+            raise HTTPBadRequest('Invalid json in post body')
+        if not isinstance(data.get('template_overrides'), dict):
+            raise HTTPBadRequest('Invalid json in post body: template_overrides parameter is not a dict')
+
+        # currently only sms is needed/supported
+        override_val = data.get('template_overrides', {}).get('sms')
+        if not override_val:
+            raise HTTPBadRequest('No valid mode override values in post body')
+
+        # update mode template override settings for user
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+
+        if override_val == 'enabled':
+            try:
+                cursor.execute(insert_user_modes_template_override_query, req.context['username'])
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting mode template override for user %s', req.context['username'])
+        elif override_val == 'disabled':
+            try:
+                cursor.execute(delete_user_modes_template_override_query, req.context['username'])
+                connection.commit()
+            except Exception:
+                logger.exception('Failed setting mode template override for user %s', req.context['username'])
+        else:
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest(f'Invalid sms override setting value: {override_val}')
+
+        cursor.close()
+        connection.close()
+
+        resp.body = '[]'
+        resp.status = HTTP_204
+
+
 class SupportedTimezones(object):
     allow_read_no_auth = True
 
@@ -3410,7 +4195,7 @@ class ResponseMixin(object):
 
     def create_email_message(self, application, dest, subject, body):
         if application not in cache.applications:
-            return False, 'Application "%s" not found in %s.' % (application, cache.applications.keys())
+            return False, 'Application "%s" not found in %s.' % (application, list(cache.applications.keys()))
 
         app = cache.applications[application]
 
@@ -3422,7 +4207,7 @@ class ResponseMixin(object):
             target_id = session.execute(sql, {'destination': dest}).scalar()
             if not target_id:
                 msg = 'Failed to lookup target from destination: %s' % dest
-                logger.warn(msg)
+                logger.warning(msg)
                 raise HTTPBadRequest('Invalid request', msg)
 
             sql = '''INSERT INTO `message` (`created`, `application_id`, `subject`, `target_id`,
@@ -3447,6 +4232,7 @@ class ResponseMixin(object):
             }
             message_id = session.execute(sql, data).lastrowid
             session.commit()
+
             session.close()
             return True, message_id
 
@@ -3476,12 +4262,12 @@ class ResponseMixin(object):
         with db.guarded_session() as session:
             is_batch = False
             is_claim_all = False
-            if isinstance(msg_id, int) or (isinstance(msg_id, basestring) and msg_id.isdigit()):
+            if isinstance(msg_id, int) or (isinstance(msg_id, str) and msg_id.isdigit()):
                 # FIXME: return error if message not found for id
                 app = get_app_from_msg_id(session, msg_id)
                 validate_app(app)
                 self.create_response(msg_id, source, content)
-            elif isinstance(msg_id, basestring) and uuid4hex.match(msg_id):
+            elif isinstance(msg_id, str) and uuid4hex.match(msg_id):
                 # msg id is not pure digit, might be a batch id
                 sql = 'SELECT message.id FROM message WHERE message.batch=:batch_id'
                 results = session.execute(sql, {'batch_id': msg_id})
@@ -3510,7 +4296,7 @@ class ResponseMixin(object):
                     apps_to_message[msg_app].append(mid)
 
             # Case where we want to give back a custom message as there was nothing to claim
-            elif msg_id is None and isinstance(content, basestring):
+            elif msg_id is None and isinstance(content, str):
                 session.close()
                 return '', content
             else:
@@ -3522,20 +4308,20 @@ class ResponseMixin(object):
             try:
                 plugin_output = {
                     app: find_plugin(app).handle_response(mode, msg_ids, source, content, batch=is_batch)
-                    for app, msg_ids in apps_to_message.iteritems()
+                    for app, msg_ids in apps_to_message.items()
                 }
             except Exception as e:
                 logger.exception(
                     'Failed to handle %s response for mode %s for apps %s during claim all',
-                    content, mode, apps_to_message.keys())
+                    content, mode, list(apps_to_message.keys()))
                 raise HTTPBadRequest('Failed to handle response',
                                      'failed to handle response: %s' % str(e))
 
             if len(plugin_output) > 1:
                 return plugin_output, '\n'.join('%s: %s' % (app, output)
-                                                for app, output in plugin_output.iteritems())
+                                                for app, output in plugin_output.items())
             else:
-                return plugin_output, '\n'.join(plugin_output.itervalues())
+                return plugin_output, '\n'.join(plugin_output.values())
 
         else:
             try:
@@ -3560,7 +4346,7 @@ class ResponseEmail(ResponseMixin):
             raise HTTPBadRequest('Missing source', msg)
         to = email_headers.get('To', [])
         # 'To' will either be string of single recipient or list of several
-        if isinstance(to, basestring):
+        if isinstance(to, str):
             to = [to]
         # source is in the format of "First Last <user@email.com>",
         # but we only want the email part
@@ -3618,7 +4404,7 @@ class ResponseEmail(ResponseMixin):
                         'application_id': email_check_result['application_id'],
                         'created': datetime.datetime.utcnow(),
                         'plan_id': email_check_result['plan_id'],
-                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject})
+                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source})
                     }
                     incident_id = session.execute(
                         '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
@@ -3629,7 +4415,7 @@ class ResponseEmail(ResponseMixin):
                     session.close()
                     resp.status = HTTP_204
                     # Pass the new incident id back through a header so we can test this
-                    resp.set_header('X-IRIS-INCIDENT', incident_id)
+                    resp.set_header('X-IRIS-INCIDENT', str(incident_id))
                     return
 
                 session.close()
@@ -3644,13 +4430,13 @@ class ResponseEmail(ResponseMixin):
         try:
             app, response = self.handle_user_response('email', msg_id, source, cmd)
         except Exception:
-            logger.exception('Failed to handle email response: %s' % first_line)
+            logger.warning('Failed to handle email response: %s' % first_line)
             raise
 
         # When processing a claim all scenario, the first item returned by handle_user_response
         # will be a dict mapping the app to its plugin output.
         if isinstance(app, dict):
-            for app_name, app_response in app.iteritems():
+            for app_name, app_response in app.items():
                 app_response = '%s: %s' % (app_name, app_response)
                 success, re = self.create_email_message(
                     app_name, source, 'Re: %s' % subject, app_response)
@@ -3697,14 +4483,14 @@ class ResponseTwilioCalls(ResponseMixin):
         post_dict = parse_qs(req.context['body'])
 
         msg_id = req.get_param('message_id', required=True)
-        if 'Digits' not in post_dict:
+        if b'Digits' not in post_dict:
             raise HTTPBadRequest('Digits argument not found')
         # For phone call callbacks, To argument is the target and From is the
         # twilio number
-        if 'To' not in post_dict:
+        if b'To' not in post_dict:
             raise HTTPBadRequest('To argument not found')
-        digits = post_dict['Digits'][0]
-        source = post_dict['To'][0]
+        digits = post_dict[b'Digits'][0].decode('utf-8')
+        source = post_dict[b'To'][0].decode('utf-8')
 
         try:
             _, response = self.handle_user_response('call', msg_id, source, digits)
@@ -3719,13 +4505,13 @@ class ResponseTwilioCalls(ResponseMixin):
 class ResponseTwilioMessages(ResponseMixin):
     def on_post(self, req, resp):
         post_dict = parse_qs(req.context['body'])
-        if 'Body' not in post_dict:
+        if b'Body' not in post_dict:
             raise HTTPBadRequest('SMS body not found', 'Missing Body argument in post body')
 
-        if 'From' not in post_dict:
+        if b'From' not in post_dict:
             raise HTTPBadRequest('From argument not found', 'Missing From in post body')
-        source = post_dict['From'][0]
-        body = post_dict['Body'][0]
+        source = post_dict[b'From'][0].decode('utf-8')
+        body = post_dict[b'Body'][0].decode('utf-8')
         try:
             msg_id, content = utils.parse_response(body.strip(), 'sms', source)
         except (ValueError, IndexError):
@@ -3768,7 +4554,7 @@ class TwilioDeliveryUpdate(object):
     allow_read_no_auth = False
 
     def on_post(self, req, resp):
-        post_dict = falcon.uri.parse_query_string(req.context['body'])
+        post_dict = falcon.uri.parse_query_string(req.context['body'].decode('utf-8'))
 
         sid = post_dict.get('MessageSid', post_dict.get('CallSid'))
         status = post_dict.get('MessageStatus', post_dict.get('CallStatus'))
@@ -3778,45 +4564,65 @@ class TwilioDeliveryUpdate(object):
             raise HTTPBadRequest('Invalid keys in payload')
 
         affected = False
-        with db.guarded_session() as session:
-            affected = session.execute(
-                '''UPDATE `twilio_delivery_status`
-                   SET `status` = :status
-                   WHERE `twilio_sid` = :sid''',
-                {'sid': sid, 'status': status}).rowcount
-            session.commit()
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        try:
+            max_retries = 3
+            for i in range(max_retries):
+                try:
+                    affected = cursor.execute(
+                        '''UPDATE `twilio_delivery_status`
+                           SET `status` = %(status)s
+                           WHERE `twilio_sid` = %(sid)s''',
+                        {'sid': sid, 'status': status})
+                    connection.commit()
+                    break
+                except Exception:
+                    logger.exception('Failed running Twilio status query. (Try %s/%s)', i + 1, max_retries)
+                    sleep(.2)
 
             if status == 'failed':
-                msg_id = session.execute(
+                cursor.execute(
                     '''SELECT message_id
                        FROM `twilio_delivery_status`
-                       WHERE `twilio_sid` = :sid''',
-                    {'sid': sid}).scalar()
+                       WHERE `twilio_sid` = %(sid)s''',
+                    {'sid': sid})
+                msg_id = cursor.fetchone()
                 if msg_id is None:
                     raise HTTPBadRequest('No message id found for SID')
-                is_retry = session.execute(
+                msg_id = msg_id[0]
+                cursor.execute(
                     '''SELECT EXISTS(SELECT 1 FROM `twilio_retry`
-                                     WHERE `retry_id` = :msg_id)''', {'msg_id': msg_id}).scalar()
+                                     WHERE `retry_id` = %(msg_id)s)''', {'msg_id': msg_id})
+                is_retry = cursor.fetchone()[0]
                 # Don't retry messages that are already a retry
                 if not is_retry:
-                    retry_id = session.execute(
+                    cursor.execute(
                         '''INSERT INTO `message` (`created`, `incident_id`, `application_id`,
                                                   `target_id`, `priority_id`, `body`)
                            SELECT NOW(), `incident_id`, `application_id`, `target_id`, `priority_id`, `body`
-                           FROM `message` WHERE `id` = :msg_id
+                           FROM `message` WHERE `id` = %(msg_id)s
                         ''',
                         {'msg_id': msg_id}
-                    ).lastrowid
-                    session.execute(
+                    )
+                    retry_id = cursor.lastrowid
+                    cursor.execute(
                         '''INSERT INTO `twilio_retry` (`message_id`, `retry_id`)
-                           VALUES (:msg_id, :retry_id)
+                           VALUES (%(msg_id)s, %(retry_id)s)
                         ''',
                         {'msg_id': msg_id, 'retry_id': retry_id})
-                    session.commit()
-            session.close()
+                    connection.commit()
+            cursor.close()
+        except Exception:
+            msg = 'Failed to update Twilio delivery status'
+            logger.exception(msg)
+            raise HTTPBadRequest(msg, msg)
+        finally:
+            cursor.close()
+            connection.close()
 
         if not affected:
-            logger.warn('No rows changed when updating delivery status for twilio sid: %s', sid)
+            logger.warning('No rows changed when updating delivery status for twilio sid: %s', sid)
 
         resp.status = HTTP_204
 
@@ -3958,77 +4764,115 @@ class Healthcheck(object):
                 health = f.readline().strip()
         except Exception:
             raise HTTPNotFound()
-        resp.status = HTTP_200
-        resp.content_type = 'text/plain'
-        resp.body = health
+        try:
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT version()')
+            cursor.close()
+            conn.close()
+        except Exception:
+            resp.status = HTTP_503
+            resp.content_type = 'text/plain'
+            resp.body = 'Could not connect to database'
+        else:
+            resp.status = HTTP_200
+            resp.content_type = 'text/plain'
+            resp.body = health
 
 
 class Stats(object):
     allow_read_no_auth = True
 
-    def on_get(self, req, resp):
-        queries = {
-            'total_plans': 'SELECT COUNT(*) FROM `plan`',
-            'total_incidents': 'SELECT COUNT(*) FROM `incident`',
-            'total_messages_sent': 'SELECT COUNT(*) FROM `message`',
-            'total_incidents_today': 'SELECT COUNT(*) FROM `incident` WHERE `created` >= CURDATE()',
-            'total_messages_sent_today': 'SELECT COUNT(*) FROM `message` WHERE `sent` >= CURDATE()',
-            'total_active_users': 'SELECT COUNT(*) FROM `target` WHERE `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = "user") AND `active` = TRUE',
-            'pct_incidents_claimed_last_month': '''SELECT ROUND(
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                    AND `active` = FALSE
-                                                    AND NOT isnull(`owner_id`)) /
-                                                   (SELECT COUNT(*) FROM `incident`
-                                                    WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                    AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)) * 100, 2)''',
-            'median_seconds_to_claim_last_month': '''SELECT @incident_count := (SELECT count(*)
-                                                                                FROM `incident`
-                                                                                WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                                AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                                AND `active` = FALSE
-                                                                                AND NOT ISNULL(`owner_id`)
-                                                                                AND NOT ISNULL(`updated`)),
-                                                            @row_id := 0,
-                                                            (SELECT CEIL(AVG(time_to_claim)) as median
-                                                            FROM (SELECT `updated` - `created` as time_to_claim
-                                                                  FROM `incident`
-                                                                  WHERE `created` > (CURRENT_DATE - INTERVAL 29 DAY)
-                                                                  AND `created` < (CURRENT_DATE - INTERVAL 1 DAY)
-                                                                  AND `active` = FALSE
-                                                                  AND NOT ISNULL(`owner_id`)
-                                                                  AND NOT ISNULL(`updated`)
-                                                                  ORDER BY time_to_claim) as time_to_claim
-                                                            WHERE (SELECT @row_id := @row_id + 1)
-                                                            BETWEEN @incident_count/2.0 AND @incident_count/2.0 + 1)''',
-            'total_applications': 'SELECT COUNT(*) FROM `application` WHERE `auth_only` = FALSE'
-        }
+    def __init__(self, config):
+        cfg = config.get('app-stats', {})
+        # Calculate stats in real time (True), or query offline stats
+        # generated by the app stats daemon (False)
+        self.real_time = cfg.get('real_time', True)
 
-        stats = {}
+    def on_get(self, req, resp):
 
         fields_filter = req.get_param_as_list('fields')
-        fields = queries.viewkeys()
-        if fields_filter:
-            fields &= set(fields_filter)
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        if self.real_time:
+            stats = app_stats.calculate_global_stats(connection, cursor, fields_filter=fields_filter)
+
+        else:
+            cursor.execute('SELECT `statistic`, `value`, UNIX_TIMESTAMP(`timestamp`) FROM `global_stats` ORDER BY `timestamp` DESC')
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving global stats from db')
+                cursor.close()
+                connection.close()
+                raise HTTPInternalServerError('Error retrieving global stats from db')
+
+            stats = {}
+
+            for row in cursor:
+                # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+                if row[0] in stats:
+                    stats[row[0]].append({row[2]: row[1]})
+                else:
+                    stats[row[0]] = []
+                    stats[row[0]].append({row[2]: row[1]})
+
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(stats, sort_keys=True)
+
+
+class Singlestats(object):
+    allow_read_no_auth = True
+
+    def __init__(self, config):
+        cfg = config.get('app-stats', {})
+        # Calculate stats in real time (True), or query offline stats
+        # generated by the app stats daemon (False)
+        self.real_time = cfg.get('real_time', True)
+
+    def on_get(self, req, resp, stat_name):
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
-        for key in fields:
-            start = time.time()
-            cursor.execute(queries[key])
-            result = cursor.fetchone()
-            if result:
-                result = result[-1]
-            else:
-                result = None
-            logger.info('Stats query %s took %s seconds', key, round(time.time() - start, 2))
-            stats[key] = result
+
+        valid_stats = ['total_incidents', 'total_messages_sent', 'total_incidents_last_week', 'total_messages_sent_last_week', 'pct_incidents_claimed_last_week', 'total_call_retry_last_week', 'high_priority_incidents_last_week']
+        if stat_name not in valid_stats:
+            raise HTTPBadRequest('Stat %s not found' % stat_name)
+
+        stats = {}
+        if self.real_time:
+            stats = app_stats.calculate_single_stat(connection, cursor, stat_name)
+        else:
+            cursor.execute('''SELECT UNIX_TIMESTAMP(timestamp), name, value FROM application_stats
+                JOIN application on application_stats.application_id = application.id
+                WHERE statistic = %s ORDER BY timestamp DESC, value DESC''', stat_name)
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving hpi stats from db')
+                cursor.close()
+                connection.close()
+                raise HTTPInternalServerError('Error retrieving stats from db')
+
+            for timestamp, app_name, value in cursor:
+                # stats format {timestamp: [{app_name: value}, {app_name: value}], timestamp: [{app_name: value}, {app_name: value}]}
+                if timestamp in stats:
+                    # 0 value not filtered at sql query because we still want all timestamp rows in front end even if they are empty
+                    if value:
+                        stats[timestamp].append({app_name: value})
+                else:
+                    # use list so we can store ordered by incident count
+                    stats[timestamp] = []
+                    if value:
+                        stats[timestamp].append({app_name: value})
+
         cursor.close()
         connection.close()
 
+        time_sorted_stats = []
+        for key, value in stats.items():
+            time_sorted_stats.append({key: value})
+
         resp.status = HTTP_200
-        resp.body = ujson.dumps(stats)
+        resp.body = ujson.dumps(time_sorted_stats, sort_keys=True)
 
 
 class ApplicationStats(object):
@@ -4041,22 +4885,43 @@ class ApplicationStats(object):
         self.real_time = cfg.get('real_time', True)
 
     def on_get(self, req, resp, app_name):
-        app = cache.applications.get(app_name)
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        app_query = get_applications_query + " AND `application`.`name` = %s"
+        cursor.execute(app_query, app_name)
+        app = cursor.fetchone()
         if not app:
-            raise HTTPNotFound()
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Application %s not found' % app_name)
+        cursor.close()
 
         fields_filter = req.get_param_as_list('fields')
         if fields_filter:
             fields_filter = set(fields_filter)
 
-        connection = db.engine.raw_connection()
         cursor = connection.cursor()
         if self.real_time:
             stats = app_stats.calculate_app_stats(app, connection, cursor, fields_filter=fields_filter)
         else:
-            cursor.execute('''SELECT `statistic`, `value` FROM `application_stats` WHERE `application_id` = %s''',
+            cursor.execute('''SELECT `statistic`, `value`, UNIX_TIMESTAMP(`timestamp`) FROM `application_stats` WHERE `application_id` = %s ORDER BY `timestamp` DESC''',
                            app['id'])
-            stats = {row[0]: row[1] for row in cursor}
+            if cursor.rowcount == 0:
+                logger.exception('Error retrieving app stats from db')
+                cursor.close()
+                connection.close()
+                raise HTTPInternalServerError('Error retrieving app stats from db')
+
+            stats = {}
+
+            for row in cursor:
+                # format: {statistic : [{timestamp: value}, {timestamp: value}]}
+                if row[0] in stats:
+                    stats[row[0]].append({row[2]: row[1]})
+                else:
+                    stats[row[0]] = []
+                    stats[row[0]].append({row[2]: row[1]})
+
         cursor.close()
         connection.close()
 
@@ -4107,10 +4972,541 @@ class Devices(object):
         resp.status = HTTP_201
 
 
+class Comments(object):
+    allow_read_no_auth = True
+
+    def on_post(self, req, resp, incident_id):
+        comment = ujson.loads(req.context['body'])
+        if not comment['content']:
+            raise HTTPBadRequest('Empty comment')
+        if not acl_allowed(req, comment['author']):
+            raise HTTPForbidden('Comment author must match logged in user')
+        comment['incident_id'] = incident_id
+        comment['created'] = datetime.datetime.utcnow()
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                '''
+                INSERT INTO `comment` (`incident_id`, `user_id`, `created`, `content`)
+                VALUES
+                (%(incident_id)s,
+                (SELECT `id` FROM `user` JOIN `target` ON `user`.`target_id` = `target`.`id` WHERE `name` = %(author)s),
+                %(created)s,
+                %(content)s)
+                ''',
+                comment)
+        except Exception:
+            raise HTTPBadRequest('Failed to post comment')
+        else:
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+        resp.status = HTTP_201
+        resp.body = str(cursor.lastrowid)
+
+    def on_get(self, req, resp, incident_id):
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(
+            single_incident_query_comments,
+            incident_id)
+        resp.body = ujson.dumps(cursor)
+        cursor.close()
+        conn.close()
+
+
+class NotificationCategories(object):
+    allow_read_no_auth = True
+
+    def on_get(self, req, resp, application=None):
+        '''
+        Notification category search. Can filter based on id, name, app name,
+        and mode. Returns a list of categories matching the specified filters.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/categories?name__startswith=foo&application=app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "id": 123,
+                    "name": "foobar",
+                    "application": "app",
+                    "mode": "email"
+                }
+            ]
+        '''
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        if application:
+            req.params['application'] = application
+        query = category_query
+        if req.params:
+            query += ' WHERE ' + ' AND '.join(
+                gen_where_filter_clause(conn, category_filters, category_filter_types, req.params))
+        cursor.execute(query)
+        data = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        resp.body = ujson.dumps(data)
+
+    def on_post(self, req, resp, application):
+        '''
+        Create notification categories for a given app. Pass a list of categories representing
+        all notification categories for the app. This endpoint will create, edit, and delete
+        the app's categories to match the list passed in.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories/foo-app HTTP/1.1
+           Content-Type: application/json
+
+            [
+               {
+                    "name": "foo-category",
+                    "description": "foobar",
+                    "mode": "email"
+                },
+                {
+                    "name": "bar-category",
+                    "description": "barbaz",
+                    "mode": "slack"
+                }
+            ]
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+
+        :statuscode 200: categories saved
+        :statuscode 400: invalid request, missing required attributes
+        :statuscode 401: user/app is not allowed to create categories for this app
+        '''
+        new_categories = ujson.loads(req.context['body'])
+
+        # an empty list is valid and will delete all categories
+        if not all([{'name', 'description', 'mode'}.issubset(c.keys()) for c in new_categories]):
+            raise HTTPBadRequest('Missing required attributes')
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT `id` FROM `application` WHERE `name` = %s', application)
+            app_id = cursor.fetchone()
+            if app_id is None:
+                raise HTTPNotFound()
+            else:
+                app_id = app_id[0]
+
+            # Check ownership permissions
+            if req.context['is_admin'] or req.context.get('app', {}).get('name') == application:
+                permission = 1
+            else:
+                cursor.execute(
+                    '''SELECT 1
+                    FROM `application_owner`
+                    JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                    WHERE `target`.`name` = %s
+                    AND `application_id` = %s''',
+                    (req.context['username'], app_id))
+                permission = cursor.fetchone()
+            if not permission:
+                raise HTTPUnauthorized('You don\'t have permissions to create this category')
+
+            # Split categories into insert, delete, and update
+            cursor.execute('SELECT `name` FROM `notification_category` WHERE `application_id` = %s', app_id)
+            old_categories = {row[0] for row in cursor}
+            delete_categories = old_categories - {c['name'] for c in new_categories}
+            insert_categories = []
+            update_categories = []
+            for category in new_categories:
+                if category['name'] in old_categories:
+                    update_categories.append(category)
+                else:
+                    category['app_id'] = app_id
+                    insert_categories.append(category)
+
+            if insert_categories:
+                cursor.executemany(
+                    '''
+                    INSERT INTO `notification_category` (`application_id`, `name`, `description`, `mode_id`) VALUES
+                    (%(app_id)s,
+                    %(name)s,
+                    %(description)s,
+                    (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                    ON DUPLICATE KEY UPDATE
+                    `description` = VALUES(`description`),
+                    `mode_id` = VALUES(`mode_id`)
+                    ''', insert_categories)
+            if update_categories:
+                cursor.executemany(
+                    '''UPDATE `notification_category`
+                    SET `description` = %(description)s,
+                    `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s)
+                    WHERE `name` = %(name)s''',
+                    update_categories)
+            if delete_categories:
+                cursor.execute(
+                    'DELETE FROM `notification_category` WHERE `application_id` = %s AND `name` IN %s',
+                    (app_id, delete_categories))
+            conn.commit()
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({})
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class UserToSlackID(object):
+    allow_read_no_auth = True
+
+    def __init__(self, config):
+        cfg = config.get('vendors', [])
+        self.slack_cfg = {}
+        for vendor in cfg:
+            if vendor.get('name') == "slack":
+                self.slack_cfg = vendor
+
+    def on_get(self, req, resp, username):
+        '''
+        Retrieve the slack user ID that corresponds to an Iris username.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/jdoe/slackid HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+                {
+                    "slack_id": "12345ABCD",
+                }
+        '''
+
+        # check if slack integration is enabled
+        if not self.slack_cfg:
+            resp.body = 'Slack integration is not configured'
+            raise HTTPNotFound()
+
+        if username in cache.slack_ids:
+            slack_id = cache.slack_ids.get(username)
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({'slack_id': slack_id})
+            return
+
+        # get user's email address
+        query = '''
+            SELECT `target_contact`.`destination`
+            FROM `target_contact` JOIN `mode` ON `mode`.`id` = `target_contact`.`mode_id`
+            JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
+            WHERE `target`.`name` = %s AND `mode`.`name` = "email"'''
+        query_params = [username]
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(query, query_params)
+        user_email = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if user_email is None:
+            resp.body = 'User does not exist in Iris'
+            raise HTTPBadRequest()
+
+        # query slack for user id from email address
+        slack_vendor = iris_slack(self.slack_cfg)
+        try:
+            slack_id = slack_vendor.lookup_by_email(user_email['destination'])
+        except Exception as e:
+            raise HTTPInternalServerError(description=e)
+        if slack_id:
+            cache.add_slack_id(username, slack_id)
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({'slack_id': slack_id})
+        else:
+            resp.body = 'Failed to get id from Slack'
+            raise HTTPNotFound()
+
+
+class CategoryOverrides(object):
+    enforce_user = True
+    allow_read_no_auth = False
+
+    def on_get(self, req, resp, username, application=None):
+        '''
+        Get notification category overrides by user. Returns a list of override
+        objects, defining the app, category, and override mode. If no application
+        is provided in the URL, returns all category overrides for the user.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            [
+                {
+                    "application": "foo-app",
+                    "category": "bar-category",
+                    "mode": "drop"
+                }
+            ]
+        '''
+        query = '''
+            SELECT `mode`.`name` as mode, `notification_category`.`name` as category, `application`.`name` as application
+            FROM `category_override` JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+            JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+            JOIN `target` ON `target`.`id` = `category_override`.`user_id`
+            JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+            WHERE `target`.`name` = %s'''
+        query_params = [username]
+        if application is not None:
+            query_params.append(application)
+            query += ' AND `application`.`name` = %s'
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor(db.dict_cursor)
+        cursor.execute(query, query_params)
+        resp.body = ujson.dumps(cursor.fetchall())
+        cursor.close()
+        conn.close()
+
+    def on_post(self, req, resp, username, application):
+        '''
+        Create and edit a user's overrides for an application. Takes
+        a mapping of category_name: mode. For each category passed, either
+        creates or overwrites the user's settings for that category, mapping
+        it to the given mode. If the mode is null/None, instead deletes that
+        mapping to revert the category setting to default. e.g. passing
+        {"foo": "email", "bar": None} will delete the setting for "bar" and
+        map "foo" to "email", regardless of whether "foo" previously had
+        another setting.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           POST /v0/categories/123 HTTP/1.1
+           Content-Type: application/json
+
+           {
+               "foo-category": "drop",
+               "bar-category": null,
+           }
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 201 Created
+           Content-Type: application/json
+
+        '''
+        data = ujson.loads(req.context['body'])
+        insert_count = 0
+        query_params = []
+        del_categories = []
+        try:
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+            # Find user id
+            cursor.execute('''
+                SELECT `target`.`id` FROM `target`
+                JOIN `target_type` ON `target`.`type_id` = `target_type`.`id`
+                WHERE `target`.`name` = %s AND `target_type`.`name` = 'user'
+                ''', username)
+            user_id = cursor.fetchone()
+            if user_id is None:
+                raise HTTPBadRequest('Invalid user specified')
+            else:
+                user_id = user_id[0]
+
+            # Get list of category ids
+            cursor.execute('''
+                SELECT `notification_category`.`id`, `notification_category`.`name`
+                FROM `notification_category`
+                JOIN `application` ON `application`.`id` = `application_id`
+                WHERE `application`.`name` = %s''', application)
+            categories = {row[1]: row[0] for row in cursor}
+            for category, mode in data.items():
+                if category not in categories:
+                    raise HTTPBadRequest('Invalid category specified')
+                # Remove override setting if mode is None
+                if mode is None:
+                    del_categories.append(categories[category])
+                # Otherwise, add info to query params
+                else:
+                    query_params += [user_id, categories[category], cache.modes[mode]]
+                    insert_count += 1
+
+            # Insert all the new settings, then delete the ones that need to go
+            if insert_count > 0:
+                query = '''
+                    INSERT INTO `category_override` (`user_id`, `category_id`, `mode_id`) VALUES
+                    %s ON DUPLICATE KEY UPDATE `mode_id` = VALUES(`mode_id`)
+                    ''' % ','.join('(%s, %s, %s)' for i in range(insert_count))
+                cursor.execute(query, query_params)
+            if del_categories:
+                cursor.execute('DELETE FROM `category_override` WHERE `category_id` IN %s AND `user_id` = %s',
+                               (del_categories, user_id))
+            conn.commit()
+            resp.status = HTTP_201
+            resp.body = ujson.dumps({})
+        finally:
+            cursor.close()
+            conn.close()
+
+    def on_delete(self, req, resp, username, application):
+        '''
+        Delete a user's category settings for a given app, removing all
+        overrides for that app. Essentially sets all categories back to
+        default.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           DELETE /v0/users/jdoe/categories/foo-app HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 204 No Content
+            Content-Type: application/json
+
+        '''
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE `category_override` FROM `category_override`
+            JOIN `notification_category` ON `notification_category`.`id` = `category_override`.`category_id`
+            JOIN `application` ON `application`.`id` = `notification_category`.`application_id`
+            WHERE `application`.`name` = %s AND `category_override`.`user_id` =
+                (SELECT `id` FROM `target` WHERE `name` = %s AND `type_id` =
+                    (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+            ''', (application, username))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        resp.status = HTTP_204
+
+
+class InternalApplicationsAuth():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('''SELECT `name`, `key` FROM `application` WHERE `auth_only` is False''')
+        apps = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        payload = apps
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
+class InternalIncident():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_post(self, req, resp, incident_id):
+
+        body = ujson.loads(req.context['body'])
+
+        if 'current_step' not in body or 'active' not in body:
+            raise HTTPBadRequest('Missing required fields "current_step" or "active" in body')
+
+        if not isinstance(body['current_step'], int):
+            raise HTTPBadRequest('"step" field must be an integer"')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s) as valid''', incident_id)
+        if not cursor.fetchone().get('valid'):
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Invalid incident id')
+
+        if body['active']:
+            active = 1
+        else:
+            active = 0
+
+        cursor.execute('''UPDATE `incident` SET `current_step` = %s, `active` = %s WHERE `id` = %s''', (body['current_step'], active, incident_id))
+        connection.commit()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+
+
+class InternalTarget():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+
+        role = req.get_param('role', required=True)
+        target = req.get_param('target', required=True)
+
+        payload = {"error": None, "users": {}}
+        try:
+            names = sender_cache.targets_for_role(role, target)
+        except IrisRoleLookupException as e:
+            names = None
+            payload['error'] = str(e)
+            resp.status = HTTP_400
+            resp.body = ujson.dumps(payload)
+            return
+
+        for username in names:
+            user_data = get_user_details(username)
+            payload['users'][username] = user_data
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
         cache.init()
+        sender_cache.purge()
+        sender_cache.refresh()
         sleep(60)
 
 
@@ -4124,8 +5520,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
-        AuthMiddleware(debug=debug),
-        ACLMiddleware(debug=debug),
+        AuthMiddleware(config=config, debug=debug),
+        ACLMiddleware(config=config, debug=debug),
         HeaderMiddleware(),
         cors.middleware
     ])
@@ -4135,14 +5531,17 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/plans/{plan_id}', Plan())
     api.add_route('/v0/plans', Plans())
 
-    api.add_route('/v0/incidents/{incident_id}', Incident())
-    api.add_route('/v0/incidents', Incidents())
+    api.add_route('/v0/incidents/{incident_id}', Incident(config))
+    api.add_route('/v0/incidents', Incidents(config))
+    api.add_route('/v0/incidents/claim', ClaimIncidents(config))
+    api.add_route('/v0/incidents/{incident_id}/resolve', Resolved(config))
+    api.add_route('/v0/incidents/{incident_id}/comments', Comments())
 
     api.add_route('/v0/messages/{message_id}', Message())
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
     api.add_route('/v0/messages', Messages())
 
-    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr))
+    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config.get('zookeeper_timeout', 1)))
 
     api.add_route('/v0/targets/{target_type}', Target())
     api.add_route('/v0/targets', Targets())
@@ -4155,6 +5554,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}', User())
     api.add_route('/v0/users/settings/{username}', UserSettings(supported_timezones))
     api.add_route('/v0/users/modes/{username}', UserModes())
+    api.add_route('/v0/users/overrides/{username}', UserTemplateOverrides())
     api.add_route('/v0/users/reprioritization/{username}', Reprioritization())
     api.add_route('/v0/users/reprioritization/{username}/{src_mode_name}', ReprioritizationMode())
 
@@ -4184,11 +5584,22 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
 
+    api.add_route('/v0/categories', NotificationCategories())
+    api.add_route('/v0/categories/{application}', NotificationCategories())
+    api.add_route('/v0/users/{username}/categories', CategoryOverrides())
+    api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
+    api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
+
+    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
+    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
+    api.add_route('/v0/internal/target', InternalTarget())
+
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
         api.add_route('/v0/devices', Devices(mobile_config))
 
-    api.add_route('/v0/stats', Stats())
+    api.add_route('/v0/singlestats/{stat_name}', Singlestats(config))
+    api.add_route('/v0/stats', Stats(config))
 
     api.add_route('/v0/timezones', SupportedTimezones(supported_timezones))
 
@@ -4208,6 +5619,7 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
+    sender_cache.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))

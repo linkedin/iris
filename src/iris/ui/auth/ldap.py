@@ -1,7 +1,6 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
 
-from __future__ import absolute_import
 import logging
 import ldap
 import os
@@ -22,6 +21,8 @@ class Authenticator:
             if not os.access(self.cert_path, os.R_OK):
                 logger.error("Failed to read ldap_cert_path certificate")
                 raise IOError
+        else:
+            self.cert_path = None
 
         self.bind_user = config['auth'].get('ldap_bind_user')
         self.bind_password = config['auth'].get('ldap_bind_password')
@@ -33,7 +34,8 @@ class Authenticator:
         self.user_suffix = config['auth'].get('ldap_user_suffix')
 
     def ldap_auth(self, username, password):
-        ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, self.cert_path)
+        if self.cert_path:
+            ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, self.cert_path)
         connection = ldap.initialize(self.ldap_url)
         connection.set_option(ldap.OPT_REFERRALS, 0)
 
@@ -56,7 +58,7 @@ class Authenticator:
         except ldap.INVALID_CREDENTIALS:
             return False
         except (ldap.SERVER_DOWN, ldap.INVALID_DN_SYNTAX) as err:
-            logger.warn("%s", err)
+            logger.warning("%s", err)
             return None
         return True
 

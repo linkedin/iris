@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="/static/images/iris.png?v=2">
+    <title>Iris QR Code</title>
+  </head>
+<body>
+{% block content %}
+<img src="/static/images/iris-mobile-qr.svg" alt="Iris url qr code">
+<h3>Base Url: {{ base }}</h3>
+<h3>Login Url: {{ login }}</h3>
+{% endblock %}
+</body>
+</html>

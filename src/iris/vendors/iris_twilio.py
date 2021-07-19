@@ -4,15 +4,26 @@
 from iris.constants import SMS_SUPPORT, CALL_SUPPORT
 from iris.plugins import find_plugin
 from iris.custom_import import import_custom_module
-from twilio.rest import TwilioRestClient
-from twilio.rest.resources import Connection
+from twilio.rest import Client
+from twilio.http.http_client import TwilioHttpClient
 from iris import db
 from sqlalchemy.exc import IntegrityError
 import time
-import urllib
+import urllib.parse
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class TwilioHTTP(TwilioHttpClient):
+    def __init__(self, timeout):
+        self.timeout = timeout
+        super().__init__()
+
+    def request(self, method, url, params=None, data=None, headers=None, auth=None,
+                timeout=None, allow_redirects=False):
+        return super().request(method, url, params=params, data=data, headers=headers, auth=auth,
+                               timeout=self.timeout, allow_redirects=allow_redirects)
 
 
 class iris_twilio(object):
@@ -20,31 +31,32 @@ class iris_twilio(object):
 
     def __init__(self, config):
         self.config = config
+        self.http_client = TwilioHTTP(self.config.get('timeout', 10))
         if 'proxy' in self.config:
-            Connection.set_proxy_info(self.config['proxy']['host'],
-                                      self.config['proxy']['port'],
-                                      proxy_rdns=True)
+            proxy = '%s:%s' % (self.config['proxy']['host'], self.config['proxy']['port'])
+            self.http_client.session.proxies = {'https': proxy, 'http': proxy}
         self.modes = {
             SMS_SUPPORT: self.send_sms,
             CALL_SUPPORT: self.send_call,
         }
-        self.timeout = config.get('timeout', 10)
+        self.say_endpoint = config.get('say_endpoint', '/api/v0/twilio/calls/say')
+        self.gather_endpoint = config.get('gather_endpoint', '/api/v0/twilio/calls/gather')
         push_config = config.get('push_notification', {})
         self.push_active = push_config.get('activated', False)
         if self.push_active:
             self.notifier = import_custom_module('iris.push', push_config['type'])(push_config)
 
     def get_twilio_client(self):
-        return TwilioRestClient(self.config['account_sid'],
-                                self.config['auth_token'],
-                                timeout=self.timeout)
+        return Client(self.config['account_sid'],
+                      self.config['auth_token'],
+                      http_client=self.http_client)
 
     def generate_message_text(self, message):
         content = []
 
         for key in ('subject', 'body'):
             value = message.get(key)
-            if not isinstance(value, basestring):
+            if not isinstance(value, str):
                 continue
             value = value.strip()
             if value:
@@ -72,7 +84,7 @@ class iris_twilio(object):
         status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
         result = sender(to=message['destination'],
                         from_=from_,
-                        body=content[:480],
+                        body=content[:1600],
                         status_callback=status_callback_url)
 
         send_time = time.time() - start
@@ -115,12 +127,12 @@ class iris_twilio(object):
         if message_id:
             payload['message_id'] = message_id
             payload['instruction'] = plugin.get_phone_menu_text()
-            relay_cb_url = '%s/api/v0/twilio/calls/gather?%s' % (
-                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+            relay_cb_url = '%s%s?%s' % (
+                self.config['relay_base_url'], self.gather_endpoint, urllib.parse.urlencode({k: str(v).encode('utf-8') for k, v in payload.items()})
             )
         else:
-            relay_cb_url = '%s/api/v0/twilio/calls/say?%s' % (
-                self.config['relay_base_url'], urllib.urlencode({k: unicode(v).encode('utf-8') for k, v in payload.iteritems()})
+            relay_cb_url = '%s%s?%s' % (
+                self.config['relay_base_url'], self.say_endpoint, urllib.parse.urlencode({k: str(v).encode('utf-8') for k, v in payload.items()})
             )
 
         start = time.time()

@@ -9,7 +9,10 @@ import pytest
 import json
 import requests
 import copy
+import logging
 import iris.bin.iris_ctl as iris_ctl
+import iris.bin.app_stats as app_stats
+
 from click.testing import CliRunner
 import uuid
 import socket
@@ -425,7 +428,7 @@ def test_api_response_batch_phone_call(fake_batch_id, sample_phone, fake_iris_nu
         'message_id': fake_batch_id,
     }, data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
+    assert re.content.decode('utf-8') == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
 
 def test_api_response_sms(fake_message_id, fake_incident_id, sample_phone):
@@ -486,7 +489,7 @@ def test_api_response_batch_sms(fake_batch_id, sample_phone):
 
     re = requests.post(base_url + 'response/twilio/messages', data=data)
     assert re.status_code == 200
-    assert re.content == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
+    assert re.content.decode('utf-8') == '{"app_response":"All iris incidents claimed for batch id %s."}' % fake_batch_id
 
     data = base_body.copy()
     data['Body'] = '%s claim arg1 arg2' % '*(fasdf'
@@ -505,6 +508,15 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
         'ApiVersion': '2010-04-01',
         'From': sample_phone,
         'Body': 'claim all'
+    }
+
+    sms_claim_all_body_2 = {
+        'AccountSid': 'ACBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        'ToZip': 15108,
+        'FromState': 'CA',
+        'ApiVersion': '2010-04-01',
+        'From': sample_phone,
+        'Body': 'a'
     }
 
     email_claim_all_payload = {
@@ -578,7 +590,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     assert re.status_code == 200
     assert re.json()['active'] == 0
 
-    # Verify SMS with two incidents from different apps
+    # Verify SMS with two incidents from different apps, using one-letter response
     incident_id_1 = create_incident_with_message(sample_application_name, sample_plan_name, sample_user, 'sms')
     assert incident_id_1
 
@@ -594,7 +606,7 @@ def test_api_response_claim_all(sample_user, sample_phone, sample_application_na
     assert re.json()['active'] == 1
 
     # Response will be two lines, one for each application and its claimed incidents
-    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body)
+    re = requests.post(base_url + 'response/twilio/messages', data=sms_claim_all_body_2)
     assert re.status_code == 200
     assert set(re.json()['app_response'].splitlines()) == {'%s: Iris Incidents claimed (1): %s' % (sample_application_name, incident_id_1),
                                                            '%s: Iris Incidents claimed (1): %s' % (sample_application_name2, incident_id_2)}
@@ -671,7 +683,7 @@ def test_api_response_claim_last(sample_user, sample_phone, sample_application_n
     assert re.json()['active'] == 1
 
     data = {
-        'body': 'claim last',
+        'body': 'l',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},
@@ -826,7 +838,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
     assert re.status_code == 204
 
     data = {
-        'body': u'I\u0131d claim',
+        'body': 'I\u0131d claim',
         'headers': [
             {'name': 'From', 'value': sample_email},
             {'name': 'Subject', 'value': 'fooject'},
@@ -838,7 +850,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
 
 def test_plan_routing():
     re = requests.get(base_url + 'plans/TESTDOOOOT')
-    assert re.content == ""
+    assert re.content == b""
     assert re.status_code == 404
 
 
@@ -867,7 +879,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "role": "oncall-primary",
@@ -875,7 +888,8 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 1
                 },
             ],
             [
@@ -885,7 +899,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "urgent",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "role": "team",
@@ -893,7 +907,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                     "priority": "medium",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ]
         ],
@@ -905,10 +919,10 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     data['steps'] = sorted(data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
 
     # Test post to plans endpoint (create plan)
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
-    new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
+    plan_id = re.content.strip().decode('utf-8')
+    new_data = requests.get(base_url + 'plans/' + plan_id).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
     assert new_data['description'] == data['description']
@@ -925,7 +939,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     # Test post to plan endpoint (mark active/inactive)
     re = requests.post(base_url + 'plans/' + plan_id, json={'active': 0})
     assert re.status_code == 200
-    assert re.content == '0'
+    assert re.content == b'0'
 
     # Malformed requests
     re = requests.post(base_url + 'plans/' + plan_id, json={})
@@ -941,7 +955,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
 
     re = requests.post(base_url + 'plans/' + plan_id, json={'active': 1})
     assert re.status_code == 200
-    assert re.content == '1'
+    assert re.content == b'1'
 
     # Test get plan endpoint (plan search)
     re = requests.get(base_url + 'plans?active=1&name__contains=%s-test-foo' % sample_user)
@@ -964,10 +978,11 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                 "priority": "medium",
                 "wait": 600,
                 "repeat": 0,
-                "template": sample_template_name}
+                "template": sample_template_name,
+                "optional": 0}
     # Test bad role
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Role not found for step 1'
 
@@ -975,7 +990,7 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     bad_step['role'] = 'user'
     bad_step['target'] = invalid_user
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Target %s not found for step 1' % invalid_user
 
@@ -983,9 +998,20 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     bad_step['target'] = sample_team
     bad_step['priority'] = 'foo'
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Priority not found for step 1'
+
+    # Test bad all optional
+    bad_step['role'] = 'team'
+    bad_step['target'] = sample_team
+    bad_step['priority'] = 'medium'
+    bad_step['optional'] = 1
+    data['steps'][0][0] = bad_step
+    data['steps'][0][1] = bad_step
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
+    assert re.status_code == 400
+    assert re.json()['description'] == 'You must have at least one non-optional notification per step. Step 1 has none.'
 
 
 def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
@@ -1004,14 +1030,14 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ],
             [
@@ -1020,14 +1046,14 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                     "priority": "urgent",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "medium",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
                 },
             ]
         ],
@@ -1039,9 +1065,9 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
     data['steps'] = sorted(data['steps'], key=lambda x: x[0]['priority'] + x[1]['priority'])
 
     # Test post to plans endpoint (create plan)
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     new_data = requests.get(base_url + 'plans/' + str(plan_id)).json()
     assert new_data['name'] == data['name']
     assert new_data['creator'] == data['creator']
@@ -1061,19 +1087,16 @@ def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
                 "priority": "medium",
                 "wait": 600,
                 "repeat": 0,
-                "template": sample_template_name}
+                "template": sample_template_name,
+                "optional": 0}
     # Test bad dynamic target index
     data['steps'][0][0] = bad_step
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['description'] == 'Dynamic target numbers must span 0..n without gaps'
 
 
 def test_delete_plan(sample_user, sample_team, sample_template_name, sample_application_name):
-    re = requests.delete(base_url + 'plans/plan')
-    assert re.status_code == 401
-    assert re.json()['title'] == 'You must be a logged in user to delete unused plans'
-
     re = requests.delete(base_url + 'plans/fake-plan-name-12345', headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'No plan matched'
@@ -1106,9 +1129,9 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     }
 
     # Test creating and deleting by ID
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     re = requests.get(base_url + 'plans/%s' % plan_id)
@@ -1121,9 +1144,9 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     assert re.status_code == 404
 
     # Test creating and deleting by name
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     re = requests.get(base_url + 'plans/%s' % plan_id)
@@ -1139,9 +1162,9 @@ def test_delete_plan(sample_user, sample_team, sample_template_name, sample_appl
     data_cant_kill = data.copy()
     data_cant_kill['name'] += '-but-cant'
 
-    re = requests.post(base_url + 'plans', json=data_cant_kill)
+    re = requests.post(base_url + 'plans', json=data_cant_kill, headers=username_header(sample_user))
     assert re.status_code == 201
-    plan_id = re.content.strip()
+    plan_id = int(re.content.strip())
     assert plan_id
 
     assert create_incident_with_message(sample_application_name, data_cant_kill['name'], sample_user, 'email')
@@ -1174,7 +1197,7 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         ],
         'isValid': True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json() == {'description': 'Role oncall-primary is not appropriate for target %s in step 1' % sample_user, 'title': 'Invalid role'}
 
@@ -1200,12 +1223,12 @@ def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
         ],
         'isValid': True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
     assert re.json() == {'description': 'Role user is not appropriate for target %s in step 1' % sample_team, 'title': 'Invalid role'}
 
 
-def test_post_incident(sample_user, sample_team, sample_application_name, sample_template_name):
+def test_post_incident(sample_user, sample_team, sample_application_name, sample_template_name, superuser_application):
     data = {
         "creator": sample_user,
         "name": sample_user + "-test-incident-post",
@@ -1222,7 +1245,8 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "role": "oncall-primary",
@@ -1230,13 +1254,14 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     re = requests.post(base_url + 'incidents', json={
@@ -1245,23 +1270,39 @@ def test_post_incident(sample_user, sample_team, sample_application_name, sample
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
+    # Test claiming incident
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
         'plan': sample_user + '-test-incident-post',
         'context': {},
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
+
+    # Test claim via batch endpoint
+    re = requests.post(base_url + 'incidents/claim', json={
+        'owner': sample_user,
+        'incident_ids': [incident_id]
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 200
+    assert re.json() == {'owner': sample_user, 'claimed': [incident_id], 'unclaimed': []}
 
     # Invalid claim owner
     re = requests.post(base_url + 'incidents/%d' % incident_id, json={
         'owner': invalid_user,
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 400
     assert re.json()['title'] == 'Invalid claim: no matching owner'
+
+    # Test resolvling
+    re = requests.post(base_url + 'incidents/%s/resolve' % incident_id, headers=username_header(sample_user), json={
+        'resolved': True
+    })
+    assert re.status_code == 200
+    assert re.json() == {'incident_id': str(incident_id), 'resolved': True}
 
 
 def test_post_dynamic_incident(sample_user, sample_team, sample_application_name, sample_template_name):
@@ -1280,20 +1321,22 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
                 {
                     "dynamic_index": 1,
                     "priority": "high",
                     "wait": 300,
                     "repeat": 1,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # Create incident
@@ -1305,13 +1348,13 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
     # Claim
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
         'owner': sample_user,
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers=username_header(sample_user))
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
 
@@ -1366,7 +1409,7 @@ def test_post_incident_change_application(sample_user, sample_application_name, 
     }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     incident_id = int(re.content)
     assert re.status_code == 201
-    re = requests.get(base_url + 'incidents/%s' % re.content.strip())
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
     assert re.json()['application'] == sample_application_name
 
@@ -1374,11 +1417,11 @@ def test_post_incident_change_application(sample_user, sample_application_name, 
         'owner': sample_user,
         'plan': sample_user + '-test-incident-post',
         'context': {},
-    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    }, headers={'Authorization': 'hmac %s:abc' % superuser_application})
     assert re.status_code == 200
     assert re.json() == {'owner': sample_user, 'incident_id': incident_id, 'active': False}
 
-    # sample_application_name2 is not allowed to make plans as sample_application_name, so this will fail
+    # sample_application_name2 is not allowed to make incidents as sample_application_name, so this will fail
     re = requests.post(base_url + 'incidents', json={
         'plan': sample_user + '-test-incident-post',
         'context': {},
@@ -1411,13 +1454,14 @@ def test_post_incident_without_apps(sample_user, sample_team, sample_template_na
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
         "isValid": True
     }
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # The application in sample_application_name2 does not have any sample_template_name templates, so this
@@ -1504,12 +1548,13 @@ def test_api_get_nested_context(sample_user, sample_team, sample_template_name, 
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 },
             ],
         ],
         'creator': sample_user,
-    })
+    }, headers=username_header(sample_user))
     assert re.status_code == 201
 
     ctx = {
@@ -1530,7 +1575,7 @@ def test_api_get_nested_context(sample_user, sample_team, sample_template_name, 
     assert re.status_code == 201
     iid = re.content.strip()
 
-    re = requests.get(base_url + 'incidents/' + iid)
+    re = requests.get(base_url + 'incidents/' + iid.decode('utf-8'))
     assert re.status_code == 200
     assert re.json()['context']['nodes'] == ctx['nodes']
 
@@ -1546,7 +1591,7 @@ def test_large_incident_context(sample_user, sample_application_name):
         'aggregation_reset': 1,
         'steps': [],
         'creator': sample_user,
-    })
+    }, headers=username_header(sample_user))
     assert re.status_code == 201
 
     ctx = {
@@ -1565,7 +1610,7 @@ def test_large_incident_context(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
 
     assert re.status_code == 400
-    assert re.json()['title'] == 'Context too long'
+    assert re.json()['title'] == 'Context too large. 250198 is larger than limit 65535'
 
 
 def test_get_user_modes(sample_user, sample_application_name):
@@ -1634,7 +1679,7 @@ def test_get_invalid_incident(iris_incidents):
 
     re = requests.get(base_url + 'incidents?id=job')
     assert re.status_code == 400
-    assert 'id should be <type \'int\'>' in re.content
+    assert b'id should be <class \'int\'>' in re.content
 
 
 def test_post_user_modes(sample_user):
@@ -1779,7 +1824,7 @@ def test_create_template(sample_user, sample_application_name):
         },
     }
 
-    re = requests.post(base_url + 'templates/', json=post_payload)
+    re = requests.post(base_url + 'templates/', json=post_payload, headers=username_header(sample_user))
     assert re.status_code == 201
     template_id = int(re.text)
 
@@ -1968,7 +2013,10 @@ def test_post_plan_noc(sample_user, sample_team, sample_application_name):
 
 
 def test_get_applications(sample_application_name):
-    app_keys = set(['variables', 'required_variables', 'name', 'context_template', 'summary_template', 'sample_context', 'default_modes', 'supported_modes', 'owners', 'mobile_template'])
+    app_keys = set([
+        'variables', 'required_variables', 'name', 'context_template', 'summary_template',
+        'sample_context', 'default_modes', 'supported_modes', 'owners', 'title_variable',
+        'mobile_template', 'custom_sender_addresses', 'categories'])
     # TODO: insert application data before get
     re = requests.get(base_url + 'applications/' + sample_application_name)
     assert re.status_code == 200
@@ -2105,7 +2153,7 @@ def test_get_user(sample_user, sample_email, sample_admin_user):
     re = requests.get(base_url + 'users/' + sample_user, headers=username_header(sample_user))
     assert re.status_code == 200
     data = re.json()
-    assert data.viewkeys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name'}
+    assert data.keys() == {'teams', 'modes', 'per_app_modes', 'admin', 'contacts', 'name', 'template_overrides', 'device', 'category_overrides'}
     assert data['contacts']['email'] == sample_email
     assert data['name'] == sample_user
 
@@ -2119,44 +2167,39 @@ def test_healthcheck():
         f.write('GOOD')
     re = requests.get(server + 'healthcheck')
     assert re.status_code == 200
-    assert re.content == 'GOOD'
+    assert re.content == b'GOOD'
 
 
 def test_stats():
     re = requests.get(base_url + 'stats')
     assert re.status_code == 200
-    data = re.json()
-    for key in ('total_active_users', 'total_messages_sent_today', 'total_incidents_today', 'total_messages_sent',
-                'total_incidents', 'total_plans', 'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
-                'total_applications'):
-        assert key in data
-        assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
 
-    re = requests.get(base_url + 'stats?fields=total_active_users&fields=total_plans')
-    assert re.status_code == 200
-    assert re.json().viewkeys() == {'total_active_users', 'total_plans'}
-
-    re = requests.get(base_url + 'stats?fields=fakefield')
-    assert re.status_code == 200
-    assert re.json() == {}
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        # run stats script
+        app_stats.logger.setLevel(logging.ERROR)
+        app_stats.stats_task(conn, cursor)
+        # check that gobal stats were initiated
+        cursor.execute('SELECT DISTINCT statistic FROM global_stats')
+        # there should be 10 unique statistics calculated
+        assert cursor.rowcount == 10
 
 
 def test_app_stats(sample_application_name):
+
     re = requests.get(base_url + 'applications/sfsdf232423fakeappname/stats')
-    assert re.status_code == 404
+    assert re.status_code == 400
 
     re = requests.get(base_url + 'applications/%s/stats' % sample_application_name)
     assert re.status_code == 200
-    data = re.json()
-    for key in ('total_incidents_today', 'total_messages_sent_today',
-                'pct_incidents_claimed_last_month', 'median_seconds_to_claim_last_month',
-                'total_incidents_last_month', 'total_messages_sent_last_month',
-                'pct_call_fail_last_month', 'pct_call_success_last_month', 'pct_call_other_last_month',
-                'pct_sms_fail_last_month', 'pct_sms_success_last_month', 'pct_sms_other_last_month',
-                'pct_email_fail_last_month', 'pct_email_success_last_month', 'pct_email_other_last_month',
-                'total_call_retry_last_month', 'total_call_sent_last_month', 'total_sms_sent_last_month',
-                'total_slack_sent_last_month', 'total_drop_sent_last_month'):
-        assert data[key] is None or isinstance(data[key], int) or isinstance(data[key], float)
+
+    with iris_ctl.db_from_config(sample_db_config) as (conn, cursor):
+        # run stats script
+        app_stats.stats_task(conn, cursor)
+        app_stats.logger.setLevel(logging.ERROR)
+        # check that app stats were initialized
+        cursor.execute('SELECT DISTINCT statistic FROM application_stats')
+        # there should be 22 unique statistics calculated
+        assert cursor.rowcount == 22
 
 
 def test_post_invalid_notification(sample_user, sample_application_name):
@@ -2180,7 +2223,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
         'body': 'foo'
     })
     assert re.status_code == 400
-    assert 'Both priority and mode are missing' in re.text
+    assert 'Priority, mode, and category are missing' in re.text
 
     re = requests.post(base_url + 'notifications', json={
         'role': 'user',
@@ -2232,6 +2275,28 @@ def test_post_invalid_notification(sample_user, sample_application_name):
     assert re.json()['description'] == 'INVALID role:target'
 
     re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'INVALID mode not set for literal_target role'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
+        'mode': 'email',
+        'priority': 'low',
+        'email_html': 'foobar',
+        'body': '',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'INVALID role literal_target does not support priority or category'
+
+    re = requests.post(base_url + 'notifications', json={
         'mode': 'email',
         'role': 'user',
         'target': sample_user,
@@ -2242,7 +2307,7 @@ def test_post_invalid_notification(sample_user, sample_application_name):
     assert 'email_html needs to be a string' in re.text
 
 
-def test_post_notification(sample_user, sample_application_name):
+def test_post_notification(sample_user, sample_team, sample_application_name):
     # The iris-api in this case will send a request to iris-sender's
     # rpc endpoint. Don't bother if sender isn't working.
     try:
@@ -2284,6 +2349,73 @@ def test_post_notification(sample_user, sample_application_name):
     }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
     assert re.status_code == 200
     assert re.text == '[]'
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'literal_target',
+        'target': 'sample_mailinglist@email.com',
+        'subject': 'test',
+        'mode': 'email',
+        'email_html': 'foobar',
+        'body': '',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Multi-recipent notification should succeed
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com', 'bcc': True}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'},
+        headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Multi-recipent notification with all literal targets should succeed
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'literal_target', 'target': 'barbaz@example.com'},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Multi-recipent notification with one invalid target should still succeed
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': 'invalid-user-foobar'},
+                        {'role': 'user', 'target': sample_user}],
+        'subject': 'test',
+        'mode': 'email',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+
+    # Should return 400 for multi-recipient notification specifying priority
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'subject': 'test',
+        'priority': 'low',
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
+
+    # Should return 400 for multi-recipient notification with missing subject
+    re = requests.post(base_url + 'notifications', json={
+        'target_list': [{'role': 'user', 'target': sample_user},
+                        {'role': 'team', 'target': sample_team},
+                        {'role': 'literal_target', 'target': 'foobar@example.com'}],
+        'body': 'foo'
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 400
 
 
 def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sample_plan_name):
@@ -2497,14 +2629,15 @@ def test_application_plans(sample_user, sample_template_name, sample_application
                     "priority": "low",
                     "wait": 600,
                     "repeat": 0,
-                    "template": sample_template_name
+                    "template": sample_template_name,
+                    "optional": 0
                 }
             ]
         ],
         "isValid": True
     }
     # Create plan
-    re = requests.post(base_url + 'plans', json=data)
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
 
     # Check that plan appears for sample app 1
@@ -2629,7 +2762,7 @@ def test_view_app_key(sample_application_name, sample_admin_user):
 
     re = requests.get(base_url + 'applications/%s/key' % sample_application_name, headers=username_header(sample_admin_user))
     assert re.status_code == 200
-    assert re.json().viewkeys() == {'key'}
+    assert re.json().keys() == {'key'}
 
 
 def test_change_app_key(sample_application_name, sample_admin_user):
@@ -2788,6 +2921,17 @@ def test_configure_email_incidents(sample_application_name, sample_application_n
                       headers=username_header(sample_admin_user))
     assert re.status_code == 400
     assert re.json()['title'] == 'Failed adding %s -> %s combination. This plan does not have any templates which support this app.' % (special_email, sample_plan_name2)
+
+
+def test_create_incident(sample_plan_name, sample_application_name):
+    re = requests.post(base_url + 'incidents',
+                       json={"plan": sample_plan_name, "context": {}},
+                       headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 201
+    incident_id = re.json()
+    assert incident_id
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
 
 
 def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_plan_name2, sample_admin_user):
@@ -3086,6 +3230,304 @@ def test_user_update_timezone(sample_user):
     assert re.json()['timezone'] == timezones[1]
 
 
+def test_user_update_sms_override(sample_user):
+
+    session = requests.Session()
+    session.headers = username_header(sample_user)
+
+    # Change it to enabled and see if it sticks
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'sms': 'enabled'}})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    assert 'sms' in re.json()['template_overrides']
+
+    # Change it to disabled and see if it sticks
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'sms': 'disabled'}})
+    assert re.status_code == 204
+
+    re = session.get(base_url + 'users/' + sample_user)
+    assert re.status_code == 200
+    assert 'sms' not in re.json()['template_overrides']
+
+    # test bad request
+    re = session.post(base_url + 'users/overrides/' + sample_user,
+                      json={'template_overrides': {'invalid_mode': 'disabled'}})
+    assert re.status_code == 400
+
+
+def test_comment(sample_user, sample_team, sample_application_name, sample_template_name):
+    data = {
+        "creator": sample_user,
+        "name": sample_user + "-test-comment-post",
+        "description": "Test plan for e2e test",
+        "threshold_window": 900,
+        "threshold_count": 10,
+        "aggregation_window": 300,
+        "aggregation_reset": 300,
+        "steps": [
+            [
+                {
+                    "role": "team",
+                    "target": sample_team,
+                    "priority": "low",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name,
+                    "optional": 0
+                },
+                {
+                    "role": "oncall-primary",
+                    "target": sample_team,
+                    "priority": "high",
+                    "wait": 300,
+                    "repeat": 1,
+                    "template": sample_template_name,
+                    "optional": 0
+                },
+            ],
+        ],
+        "isValid": True
+    }
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
+    assert re.status_code == 201
+
+    re = requests.post(base_url + 'incidents', json={
+        'plan': sample_user + '-test-comment-post',
+        'context': {},
+    }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    incident_id = int(re.content)
+    assert re.status_code == 201
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+
+    # Post a few comments for the incident
+    re = requests.post(base_url + 'incidents/%s/comments' % incident_id, headers=username_header(sample_user), json={
+        'author': sample_user,
+        'content': 'Hello world'
+    })
+    assert re.status_code == 201
+    re = requests.post(base_url + 'incidents/%s/comments' % incident_id, headers=username_header(sample_user), json={
+        'author': sample_user,
+        'content': 'Goodbye world'
+    })
+    assert re.status_code == 201
+    # Get incident info and verify comments
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
+    comments = re.json()['comments']
+    assert comments[0]['content'] == 'Hello world'
+    assert comments[0]['author'] == sample_user
+    assert comments[1]['content'] == 'Goodbye world'
+    assert comments[1]['author'] == sample_user
+
+
+def clean_categories(app, admin):
+    # Helper to clean up categories before creating them
+    re = requests.post(base_url + 'categories/%s' % app, json=[], headers=username_header(admin))
+    assert re.status_code == 200
+
+
+def test_category(sample_application_name, sample_admin_user, sample_user):
+    category_name = 'test_category'
+    clean_categories(sample_application_name, sample_admin_user)
+    # Test creating category
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    # Make sure the category exists and test GET
+    re = requests.get(base_url + 'categories/' + sample_application_name)
+    assert re.status_code == 200
+    categories = re.json()
+    assert any(c['name'] == category_name for c in categories)
+
+    # Check that app ownership is required for category creation
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }])
+    assert re.status_code == 401
+
+    # Test name filters with GET
+    re = requests.get(base_url + 'categories/%s?name__startswith=%s' % (sample_application_name, category_name))
+    assert re.status_code == 200
+    categories = re.json()
+    assert any(c['name'] == category_name for c in categories)
+
+    # Test GET with application specified
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
+    assert re.status_code == 200
+    categories = re.json()
+    assert any(c['name'] == category_name for c in categories)
+
+    # Test edit category
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
+    data = re.json()[0]
+    assert data['description'] == 'barfoo'
+    assert data['mode'] == 'slack'
+
+    # Test delete
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+    re = requests.get(base_url + 'categories/%s' % sample_application_name)
+    assert len(re.json()) == 0
+
+
+def test_category_override(sample_application_name, sample_application_name2, sample_user, sample_user2, sample_admin_user):
+    category_name = 'test_category'
+    category_name_2 = 'test_category_2'
+    clean_categories(sample_application_name, sample_admin_user)
+
+    category_data = [
+        {
+            'name': category_name,
+            'description': 'foobar',
+            'mode': 'email'
+        },
+        {
+            'name': category_name_2,
+            'description': 'foobar',
+            'mode': 'email'
+        }
+    ]
+
+    # Set up categories
+    re = requests.post(
+        base_url + 'categories/' + sample_application_name,
+        json=category_data,
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    # Test create overrides
+    re = requests.post(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user),
+        json={
+            category_name: 'slack'
+        })
+    assert re.status_code == 201
+
+    # Test GET and make sure POST worked properly
+    re = requests.get(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user))
+    assert re.status_code == 200
+    data = re.json()
+    assert len(data) == 1
+    assert data[0]['category'] == category_name
+    assert data[0]['application'] == sample_application_name
+    assert data[0]['mode'] == 'slack'
+
+    # Add another override
+    re = requests.post(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user),
+        json={
+            category_name_2: 'slack'
+        })
+    assert re.status_code == 201
+    # Makes sure we get both
+    re = requests.get(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user))
+    assert re.status_code == 200
+    data = re.json()
+    assert len(data) == 2
+
+    # Remove an override via POST
+    re = requests.post(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user),
+        json={
+            category_name_2: None
+        })
+    assert re.status_code == 201
+    re = requests.get(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user))
+    assert re.status_code == 200
+    data = re.json()
+    assert len(data) == 1
+
+    # Remove all overrides via DELETE
+    re = requests.delete(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user))
+    assert re.status_code == 204
+    re = requests.get(
+        base_url + 'users/%s/categories/%s' % (sample_user, sample_application_name),
+        headers=username_header(sample_user))
+    assert re.status_code == 200
+    data = re.json()
+    assert len(data) == 0
+
+    # Clean up categories
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+
+def test_post_category_notification(sample_application_name, sample_user, sample_admin_user):
+    # The iris-api in this case will send a request to iris-sender's
+    # rpc endpoint. Don't bother if sender isn't working.
+    try:
+        sock = socket.socket()
+        sock.connect(sender_address)
+        sock.close()
+    except socket.error:
+        pytest.skip('Skipping this test as sender is not running/reachable.')
+
+    category_name = 'test_category'
+    clean_categories(sample_application_name, sample_admin_user)
+    # Set up category
+    re = requests.post(
+        base_url + 'categories/%s' % sample_application_name,
+        json=[{
+            'name': category_name,
+            'description': 'barfoo',
+            'mode': 'slack'
+        }],
+        headers=username_header(sample_admin_user))
+    assert re.status_code == 200
+
+    re = requests.post(base_url + 'notifications', json={
+        'role': 'user',
+        'target': sample_user,
+        'subject': 'test',
+        'category': category_name,
+        'body': '',
+    }, headers={'authorization': 'hmac %s:boop' % sample_application_name})
+    assert re.status_code == 200
+    assert re.text == '[]'
+    clean_categories(sample_application_name, sample_admin_user)
+
+
 @pytest.mark.skip(reason="Re-enable this when we don't hard-code primary keys")
 class TestDelete(object):
     def setup_method(self, method):
@@ -3098,8 +3540,8 @@ class TestDelete(object):
             cursor.execute("INSERT INTO message(`id`, `created`, `application_id`, "
                            "`target_id`, `plan_id`, `priority_id`, `template_id`)"
                            "VALUES (1, '2015-09-25 22:54:31', 8, 8, 2, 8, 1)")
-            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id)"
-                           "VALUES (1, 2, 1, 1, 8, 8, 8)")
+            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id, `optional`)"
+                           "VALUES (1, 2, 1, 1, 8, 8, 8, 0)")
             cursor.execute("INSERT INTO incident(`id`, `plan_id`, `created`, `application_id`, `current_step`, `active`)"
                            "VALUES (1, 2, '2015-09-25 22:54:31', 8, 1, 1)")
             conn.commit()
@@ -3133,8 +3575,8 @@ class TestDelete(object):
             assert result.exit_code == 1
 
             # Test failure with only plan referencing template
-            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id)"
-                           "VALUES (1, 29, 1, 1, 8, 8, 8)")
+            cursor.execute("INSERT INTO plan_notification(id, plan_id, step, template_id, target_id, role_id, priority_id, `optional`)"
+                           "VALUES (1, 29, 1, 1, 8, 8, 8, 0)")
             cursor.execute("DELETE FROM message WHERE id = 1")
             conn.commit()
             result = runner.invoke(iris_ctl.template, ['delete', 'foobar', '--config=../configs/config.dev.yaml'],

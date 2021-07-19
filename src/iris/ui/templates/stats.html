@@ -2,7 +2,7 @@
 {% block content %}
 
 <div class="main stats">
-  <h3>Stats</h3>
+  <h1 id="stats-header">Global Stats</h1>
   <div class="module stats-module col-md-12 col-sm-12 col-xs-12">
     <table id="stats-table" class="dataTable">
     </table>
@@ -14,8 +14,19 @@
   <tbody>
     {{#each .}}
           <tr>
-             <th>{{@key}}</th>
-             <td>{{this}}</td>
+             <th><h3>{{@key}}</h3></th>
+             <td>
+             <tbody>
+              {{#each .}}
+              {{#each .}}
+                    <tr>
+                      <th>{{unixToDate @key}}</th>
+                      <td class="stat-value">{{this}}</td>
+                    </tr>
+              {{/each}}
+              {{/each}}
+             </td>
+             </tbody>
           </tr>
     {{/each}}
   </tbody>

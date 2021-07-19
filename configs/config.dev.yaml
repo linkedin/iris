@@ -25,6 +25,42 @@ db: &db
     max_overflow: 100
     pool_timeout: 60
 
+# # Specify different connection settings for side scripts
+# db_target_sync: &db_target_sync
+#   conn:
+#     kwargs:
+#       scheme: mysql+pymysql
+#       user: iris-target-sync
+#       password: ""
+#       host: 127.0.0.1
+#       database: iris
+#       charset: utf8
+#     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+#   kwargs:
+#     pool_recycle: 3600
+#     echo: False
+#     pool_size: 100
+#     max_overflow: 100
+#     pool_timeout: 60
+
+
+# db_retention: &db_retention
+#   conn:
+#     kwargs:
+#       scheme: mysql+pymysql
+#       user: iris-retention
+#       password: ""
+#       host: 127.0.0.1
+#       database: iris
+#       charset: utf8
+#     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+#   kwargs:
+#     pool_recycle: 3600
+#     echo: False
+#     pool_size: 100
+#     max_overflow: 100
+#     pool_timeout: 60
+
 ## Change these to random long values when you run this in production
 user_session:
   encrypt_key: 'abc'
@@ -41,16 +77,32 @@ supported_timezones:
   - 'Asia/Shanghai'
   - 'UTC'
 
+sms_override_template: "ALERT: Incident %s has been triggered by Iris! Please check Iris for more information. - SMS template override"
+
 healthcheck_path: /tmp/status
 
 allowed_origins:
   - http://localhost:8080
 
+## values for base url and login url to be consumed by the mobile app
+## set to Null to disable the qr endpoint
+qr_base_url: Null
+qr_login_url: Null
+
 ## Custom webhooks can be created and put in src/iris/webhooks.
 ## Refer to their class name in this array.
 ## The webhook will be available at /v0/webhooks/$name and requires being called with
 ## ?application=xxx&key=xxx
-#webhooks: []
+webhooks:
+  - alertmanager
+
+## custom incident handler can be created to do additional tasks after incident creation
+# custom_incident_handler_module: iris.custom_incident_handler
+
+## allows listed applications to access internal API endpoints that return sensitive data including application API keys
+## this should only be used by applications that are essentially extensions of iris itself like a custom sender
+# allowlisted_internal_apps:
+#   - iris-internal-application
 
 #####################
 ### Iris-sender
@@ -91,6 +143,23 @@ sender:
   ## slaves to be cycled through
   is_master: True
 
+  # default_rate_def:
+  #   # how many messages in a period before they are dropped
+  #   hard_limit: 30
+  #   # how many messages in a period before notification is sent out
+  #   soft_limit: 20
+  #   # period length for hard limit
+  #   hard_duration: 1
+  #   # period length for soft limit
+  #   soft_duration: 1
+  #   # time to wait before messages can be created again
+  #   wait_time: 3600
+  #   # target that will receive notification for soft quota breaches
+  #   target_name: foo_team
+  #   target_role: team
+  #   # plan for incident that will be raised if there is a hard quota breach
+  #   plan_name: bar_plan
+
 #slaves:
 #  - host: 127.0.0.1
 #    port: 2322
@@ -108,6 +177,8 @@ role_lookups:
   - dummy # dummy role lookup used for testing purposes. Disable this in production.
 
 oncall-api: http://localhost:8080  # oncall url
+oncall-app: app # application for oncall auth
+oncall-key: abc # API key for oncall auth
 
 applications:
  - dummy_app
@@ -119,6 +190,10 @@ vendors: []
 #  smtp_server: 'smtp1.example.com'
 #  smtp_gateway: 'smtp2.example.com'
 #  from: 'foouser@example.com'
+#  port: 25
+#  username: 'foobar'
+#  password: 'secretpass'
+
 ## If True, make a pool of persistent connections per each MX record for the given smtp_gateway
 ##  autoscale: False
 ##  tasks_per_mx: 4
@@ -126,7 +201,7 @@ vendors: []
 #- type: iris_slack
 #  name: slack
 #  auth_token: ''
-#  base_url: 'https://slack.com/api/chat.postMessage'
+#  base_url: 'https://slack.com/api'
 #  iris_incident_url: ''
 #  proxy: *proxy_shared
 #  message_attachments:
@@ -182,6 +257,10 @@ gmail_one_click_url_endpoint: 'http://localhost:16648/api/v0/gmail-oneclick/rela
 ### Iris-sync-targets
 #####################
 sync_script_nap_time: 3600 # wait time before syncing again
+# sync_script_ldap_timeout: 60
+# sync_script_ldap_pagination_size: 400
+## add short pauses in seconds between inserting, updating, and deleting rows to allow take pressure off databasee replication
+# target_update_pause: 0.1
 ## use this for LDAP settings for sync script lookup
 # init_config_hook: iris_internal.api.init_config
 

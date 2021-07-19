@@ -7,6 +7,7 @@ monkey.patch_all()  # NOQA
 from sqlalchemy import create_engine
 from collections import deque
 import logging
+import logging.handlers
 import ujson
 import errno
 import time
@@ -19,7 +20,8 @@ from iris import metrics
 stats_reset = {
     'sql_errors': 0,
     'deleted_messages': 0,
-    'deleted_incidents': 0
+    'deleted_incidents': 0,
+    'deleted_comments': 0
 }
 
 # logging
@@ -72,6 +74,14 @@ message_fields = (
     ('`message`.`created`', 'created'),
 )
 
+comment_fields = (
+    ('`comment`.`id`', 'comment_id'),
+    ('`comment`.`incident_id`', 'incident_id'),
+    ('`target`.`name`', 'author'),
+    ('`comment`.`content`', 'content'),
+    ('`comment`.`created`', 'created'),
+)
+
 
 def archive_incident(incident_row, archive_path):
     incident = {field[1]: incident_row[i] for i, field in enumerate(incident_fields)}
@@ -117,6 +127,28 @@ def archive_message(message_row, archive_path):
         logger.exception('Failed writing message to %s', message_file)
 
 
+def archive_comment(comment_row, archive_path):
+    comment = {field[1]: comment_row[i] for i, field in enumerate(comment_fields)}
+
+    created = comment['created']
+    incident_dir = os.path.join(archive_path, str(created.year), str(created.month), str(created.day), str(comment['incident_id']))
+
+    try:
+        os.makedirs(incident_dir)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            logger.exception('Failed creating %s DIR', incident_dir)
+            return
+
+    comment_file = os.path.join(incident_dir, 'comment_%d.json' % comment['comment_id'])
+
+    try:
+        with open(comment_file, 'w') as handle:
+            ujson.dump(comment, handle, indent=2)
+    except IOError:
+        logger.exception('Failed writing comment to %s', comment_file)
+
+
 def process_retention(engine, max_days, batch_size, cooldown_time, archive_path):
     time_start = time.time()
 
@@ -125,6 +157,7 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
 
     deleted_incidents = 0
     deleted_messages = 0
+    deleted_comments = 0
 
     # First, archive/kill incidents and their messages
     while True:
@@ -162,6 +195,84 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
             break
 
         logger.info('Archived %d incidents', len(incident_ids))
+
+        # Then, Archive+Kill all comments in these incidents
+        while True:
+
+            try:
+                cursor.execute(
+                    '''
+                        SELECT
+                          %s
+                        FROM `comment`
+                        LEFT JOIN `target` ON `comment`.`user_id` = `target`.`id`
+                        WHERE `comment`.`incident_id` in %%s
+                        LIMIT %%s
+                    ''' % (', '.join(field[0] for field in comment_fields)),
+                    [tuple(incident_ids), batch_size])
+
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed getting comments')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+
+            comment_ids = deque()
+
+            for comment in cursor:
+                archive_comment(comment, archive_path)
+                comment_ids.append(comment[0])
+
+            if not comment_ids:
+                break
+
+            logger.info('Archived %d comments', len(comment_ids))
+
+            try:
+                deleted_rows = cursor.execute('DELETE FROM `comment` WHERE `id` IN %s', [tuple(comment_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting comments from incidents')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+            else:
+                if deleted_rows:
+                    logger.info('Killed %d comments from %d incidents', deleted_rows, len(incident_ids))
+                    deleted_comments += deleted_rows
+                    sleep(cooldown_time)
+                else:
+                    break
+
+        # Kill all dynamic plan maps associated with these incidents
+        while True:
+            try:
+                deleted_rows = cursor.execute('DELETE FROM `dynamic_plan_map` WHERE `incident_id` IN %s', [tuple(incident_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting dynamic plan maps')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+            else:
+                if deleted_rows:
+                    logger.info('Killed %d dynamic plan maps', deleted_rows)
+                    deleted_messages += deleted_rows
+                    sleep(cooldown_time)
+                else:
+                    break
 
         # Archive+Kill all messages in these incidents
         while True:
@@ -202,6 +313,23 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
 
             logger.info('Archived %d messages', len(message_ids))
 
+            # explicitly delete all the extra message data
+            try:
+                cursor.execute('DELETE FROM `message_changelog` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `response` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `twilio_delivery_status` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `twilio_retry` WHERE `message_id` IN %s', [tuple(message_ids)])
+                cursor.execute('DELETE FROM `generic_message_sent_status` WHERE `message_id` IN %s', [tuple(message_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting message child')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+
             try:
                 deleted_rows = cursor.execute('DELETE FROM `message` WHERE `id` IN %s', [tuple(message_ids)])
                 connection.commit()
@@ -213,7 +341,15 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 except Exception:
                     pass
                 cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
-                break
+                # try deleting individually to directly identify any issues and prevent single error from stopping cleanup
+                deleted_rows = 0
+                for msg_id in message_ids:
+                    try:
+                        deleted_rows += cursor.execute('DELETE FROM `message` WHERE `id`=%s', msg_id)
+                        connection.commit()
+                    except Exception:
+                        metrics.incr('sql_errors')
+                        logger.exception('Failed deleting message id: %s', msg_id)
             else:
                 if deleted_rows:
                     logger.info('Killed %d messages from %d incidents', deleted_rows, len(incident_ids))
@@ -234,11 +370,18 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
             except Exception:
                 pass
             cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
-            break
-        else:
-            logger.info('Deleted %s incidents', deleted_rows)
-            deleted_incidents += deleted_rows
-            sleep(cooldown_time)
+            # try deleting individually to directly identify any issues and prevent single error from stopping clean-up
+            deleted_rows = 0
+            for inc_id in incident_ids:
+                try:
+                    deleted_rows += cursor.execute('DELETE FROM `incident` WHERE `id`=%s', inc_id)
+                    connection.commit()
+                except Exception:
+                    metrics.incr('sql_errors')
+                    logger.exception('Failed deleting incident id: %s', inc_id)
+        logger.info('Deleted %s incidents', deleted_rows)
+        deleted_incidents += deleted_rows
+        sleep(cooldown_time)
 
     # Next, kill messages not tied to incidents, like quota notifs or incident tracking emails
     while True:
@@ -270,6 +413,7 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
     logger.info('Run took %.2f seconds and deleted %d incidents and %d messages', time.time() - time_start, deleted_incidents, deleted_messages)
     metrics.set('deleted_messages', deleted_messages)
     metrics.set('deleted_incidents', deleted_incidents)
+    metrics.set('deleted_comments', deleted_comments)
 
 
 def main():
@@ -281,15 +425,19 @@ def main():
         logger.info('Retention not enabled, bailing')
         return
 
-    engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
-                           **config['db']['kwargs'])
+    if config.get('db_retention'):
+        engine = create_engine(config['db_retention']['conn']['str'] % config['db_retention']['conn']['kwargs'],
+                               **config['db_retention']['kwargs'])
+    else:
+        engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
+                               **config['db']['kwargs'])
 
     max_days = int(retention_settings['max_days'])
     if max_days < 1:
         logger.error('Max days needs to at least be 1')
         return
 
-    cooldown_time = int(retention_settings['cooldown_time'])
+    cooldown_time = float(retention_settings['cooldown_time'])
     batch_size = int(retention_settings['batch_size'])
     run_interval = int(retention_settings['run_interval'])
     archive_path = retention_settings['archive_path']

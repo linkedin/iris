@@ -1,202 +1,308 @@
-{% extends "base.html" %}
-{% block content %}
+{% extends "base.html" %} {% block content %}
 <div class="main user-settings">
-  <h3>Settings</h3>
-  <div class="module module-blue clearfix border-all user-module user-contact-module col-md-3 col-sm-3 col-xs-3">
-    <!-- Contact info renders here -->
-  </div>
-  <div class="module clearfix user-module col-md-9 col-sm-9 col-xs-9">
-    <h4>Priority Modes</h4>
-    <span class="light">How would you like to be contacted at each of these priority levels?</span>
-    <div id="priority-inner">
-      <table id="priority-table">
-        <!-- Table template renders here -->
-      </table>
-      <div id="priority-controls">
-        <select id="add-application-select" class="form-control border-bottom"></select>
-        <button type="button" id="add-application-button" class="btn btn-primary btn-sm">Add</button>
-        <button type="button" id="save-settings" class="btn btn-primary btn-sm pull-right">Save All</button>
-      </div>
-      <span class="light">It is possible for applications to override these settings.</span>
+    <h3>Settings</h3>
+    <div class="module module-blue clearfix border-all user-module user-contact-module col-md-3 col-sm-3 col-xs-3">
+        <!-- Contact info renders here -->
     </div>
-    <h4>Timezone</h4>
-    <span class="light">What timezone would you like to see dates displayed as?</span>
-    <div id="timezone-controls">
-      <select id="timezone-select" class="form-control border-bottom"></select>
-      <button type="button" id="timezone-save" class="btn btn-primary btn-sm">Save</button>
+    <div class="module clearfix user-module col-md-9 col-sm-9 col-xs-9">
+        <h4>Priority Modes</h4>
+        <span class="light">How would you like to be contacted at each of these priority levels?</span>
+        <div id="priority-inner">
+            <table id="priority-table">
+                <!-- Table template renders here -->
+            </table>
+            <div id="priority-controls">
+                <select id="add-application-select" class="form-control border-bottom"></select>
+                <button type="button" id="add-application-button" class="btn btn-primary btn-sm">Add</button>
+                <button type="button" id="save-settings" class="btn btn-primary btn-sm pull-right">Save All</button>
+            </div>
+            <span class="light">It is possible for applications to override these settings.</span>
+        </div>
+
+        <h4>Custom OOB notification rules</h4>
+        <p class="light">How would you like to receive different categories of out of band notifications from applications?</p>
+        <div id="custom-inner">
+            <table id="custom-override-table">
+                <!-- Table template renders here -->
+            </table>
+
+            <div id="custom-override-controls">
+                <select id="add-application-override-select" class="form-control border-bottom"></select>
+                <button type="button" id="add-application-override-button" class="btn btn-primary btn-sm">Add</button>
+            </div>
+        </div>
+
+        <!-- Modal -->
+        <div class="modal fade" id="custom-override-modal" tabindex="-1" role="dialog" aria-labelledby="custom-override-modalTitle" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <!-- modal template renders here -->
+                    <div id="custom-override-modal-content"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button id="save-custom-override-modal" type="button" class="btn btn-primary"
+                            data-dismiss="modal">Save changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="confirm-delete-override" tabindex="-1" role="dialog" aria-labelledby="confirm-delete-override" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4>Are you sure you want to delete all overrides for <span id="app-overrides-to-delete"></span>
+                        </h4>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button id="delete-override" type="button" class="btn btn-danger" data-dismiss="modal">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h4>Timezone</h4>
+        <span class="light">What timezone would you like to see dates displayed as?</span>
+        <div id="timezone-controls">
+            <select id="timezone-select" class="form-control border-bottom"></select>
+            <button type="button" id="timezone-save" class="btn btn-primary btn-sm">Save</button>
+        </div>
+
+        <div class="user-settings-overrides">
+            <h4>Restricted country SMS override</h4>
+            <span class="light">Enable this setting if you are receiving SMS in a country with special restrictions.</span>
+            <span class="light">This setting replaces SMS templates with a special carrier whitelisted template.</span>
+            <div id="sms-override-controls">
+                <select id="sms-override-select" class="form-control border-bottom"></select>
+                <button type="button" id="sms-override-save" class="btn btn-primary btn-sm">Save</button>
+            </div>
+        </div>
+
     </div>
-  </div>
 </div>
 <div id="reprioritization" class="module">
-  <h4>Message Reprioritization <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
-  <div id="reprio-inner">
-    <table class="display dataTable border-top" id="reprioritization-table"></table>
-    <div id="reprio-controls" class="border-top">
-      After receiving
-      <input data-type="count" type="text" value="0" class="form-control border-bottom" data-default="true"> messages of type
-      <select data-type="src_mode" class="form-control border-bottom"></select> within
-      <input data-type="duration" type="text" value="0" class="form-control border-bottom" data-default="true"> minutes, change mode to
-      <select data-type="dst_mode" id="reprio-dest-mode" class="form-control border-bottom"></select>
-      <button type="button" class="btn btn-primary btn-sm" id="reprio-add-btn">Add</button>
+    <h4>Message Reprioritization <i class="glyphicon glyphicon-triangle-bottom"></i></h4>
+    <div id="reprio-inner">
+        <table class="display dataTable border-top" id="reprioritization-table"></table>
+        <div id="reprio-controls" class="border-top">
+            After receiving
+            <input data-type="count" type="text" value="0" class="form-control border-bottom" data-default="true">
+            messages of type
+            <select data-type="src_mode" class="form-control border-bottom"></select> within
+            <input data-type="duration" type="text" value="0" class="form-control border-bottom" data-default="true">
+            minutes, change mode to
+            <select data-type="dst_mode" id="reprio-dest-mode" class="form-control border-bottom"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="reprio-add-btn">Add</button>
+        </div>
     </div>
-  </div>
 </div>
 {% raw %}
 <script id="user-contact-template" type="text/x-handlebars-template">
-  <div class="pull-left user-settings-contact">
-    <h4> Contact </h4>
-    <ul>
-      <li>
-        CALL <a href="tel:{{contacts.call}}">{{contacts.call}}</a>
-      </li>
-      <li>
-        SMS <a href="sms:{{contacts.sms}}">{{contacts.sms}}</a>
-      </li>
-      <li>
-        <a href="mailto:{{contacts.email}}">{{contacts.email}}</a>
-      </li>
-    </ul>
-  </div>
+    <div class="pull-left user-settings-contact">
+        <h4> Contact </h4>
+        <ul>
+            <li>
+                CALL <a href="tel:{{contacts.call}}">{{contacts.call}}</a>
+            </li>
+            <li>
+                SMS <a href="sms:{{contacts.sms}}">{{contacts.sms}}</a>
+            </li>
+            <li>
+                <a href="mailto:{{contacts.email}}">{{contacts.email}}</a>
+            </li>
+        </ul>
+    </div>
 </script>
 <script id="priority-template" type="text/x-handlebars-template">
-  <thead>
-    <tr>
-      <td>Application</td>
-      {{#each priorities}}
-      <td class="priority-name">{{name}}</td>
-      {{/each}}
-      <td class="delete-column"></td>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td class="application-name">Global Default</td>
-      {{#each priorities}}
-      <td>
-        <select class="global-priority form-control border-bottom" value="{{default_mode}}" data-type="{{name}}">
+    <thead>
+        <tr>
+            <td>Application</td>
+            {{#each priorities}}
+            <td class="priority-name">{{name}}</td>
+            {{/each}}
+            <td class="delete-column"></td>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="application-name">Global Default</td>
+            {{#each priorities}}
+            <td>
+                <select class="global-priority form-control border-bottom" value="{{default_mode}}" data-type="{{name}}">
           {{#each ../modeSet}}<option value="{{this}}">{{this}}</option>{{/each}}
           <option value="default">default - {{default_mode}}</option>
         </select>
-      </td>
-      {{/each}}
-    </tr>
-    {{#each per_app_defaults }}
-    <tr data-app="{{@key}}" class="app-row">
-      <td class="application-name">{{@key}}</td>
-      {{#each priorities}}
-      <td>
-        <select class="app-priority form-control border-bottom" data-app="{{@../key}}" data-type="{{priority_name}}">
+            </td>
+            {{/each}}
+        </tr>
+        {{#each per_app_defaults }}
+        <tr data-app="{{@key}}" class="app-row">
+            <td class="application-name">{{@key}}</td>
+            {{#each priorities}}
+            <td>
+                <select class="app-priority form-control border-bottom" data-app="{{@../key}}" data-type="{{priority_name}}">
           {{#each ../supported_modes}}<option value="{{this}}">{{this}}</option>{{/each}}
           <option value="default">default - {{default_mode}}</option>
         </select>
-      </td>
-      {{/each}}
-      <td><button class="btn btn-danger btn-sm delete-app-button" data-app="{{@key}}" title="Remove custom settings for {{@key}}">Delete</button></td>
-    </tr>
-    {{/each}}
-  </tbody>
+            </td>
+            {{/each}}
+            <td><button class="btn btn-danger btn-sm delete-app-button" data-app="{{@key}}" title="Remove custom settings for {{@key}}">Delete</button></td>
+        </tr>
+        {{/each}}
+    </tbody>
 </script>
 <script id="batching-template" type="text/x-handlebars-template">
-  <thead>
-    <tr>
-      <td>Mode</td>
-      <td>Applications</td>
-      <td>Priority</td>
-      <td>Title Regex</td>
-      <td>Duration</td>
-      <td></td>
-    </tr>
-  </thead>
-  <tbody>
-    {{#each rules}}
-    <tr>
-      <td>
-        <select class="form-control batching-mode" value={{mode}}>
+    <thead>
+        <tr>
+            <td>Mode</td>
+            <td>Applications</td>
+            <td>Priority</td>
+            <td>Title Regex</td>
+            <td>Duration</td>
+            <td></td>
+        </tr>
+    </thead>
+    <tbody>
+        {{#each rules}}
+        <tr>
+            <td>
+                <select class="form-control batching-mode" value={{mode}}>
           {{#each ../modeSet}}
           <option value="{{this}}">{{this}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <select class="form-control batching-application" value={{application}}>
+            </td>
+            <td>
+                <select class="form-control batching-application" value={{application}}>
           {{#each ../applications}}
           <option value="{{this}}">{{this}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <select class="form-control batching-priority" value={{priority}}>
+            </td>
+            <td>
+                <select class="form-control batching-priority" value={{priority}}>
           {{#each ../priorities}}
           <option value="{{this}}">{{this}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <input type="text" class="form-control batching-title" placeholder="RegEx for title" value={{title}}>
-      </td>
-      <td>
-        <input type="text" class="form-control batching-duration" placeholder="Duration in seconds" value={{duration}}>
-      </td>
-      <td>
-        <button class="btn btn-primary">- Delete Rule</button>
-      </td>
-    </tr>
-    {{/each}}
-    <tr>
-      <td>
-        <select class="form-control batching-mode">
+            </td>
+            <td>
+                <input type="text" class="form-control batching-title" placeholder="RegEx for title" value={{title}}>
+            </td>
+            <td>
+                <input type="text" class="form-control batching-duration" placeholder="Duration in seconds" value={{duration}}>
+            </td>
+            <td>
+                <button class="btn btn-primary">- Delete Rule</button>
+            </td>
+        </tr>
+        {{/each}}
+        <tr>
+            <td>
+                <select class="form-control batching-mode">
           {{#each modeSet}}
           <option value="{{this}}">{{this}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <select class="form-control batching-application">
+            </td>
+            <td>
+                <select class="form-control batching-application">
           {{#each applications}}
           <option value="{{this}}">{{this}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <select class="form-control batching-priority">
+            </td>
+            <td>
+                <select class="form-control batching-priority">
           {{#each priorities}}
           <option value="{{this.name}}">{{this.name}}</option>
           {{/each}}
         </select>
-      </td>
-      <td>
-        <input type="text" class="form-control batching-title" placeholder="RegEx for title">
-      </td>
-      <td>
-        <input type="text" class="form-control batching-duration" placeholder="Duration in seconds">
-      </td>
-      <td>
-        <button class="btn btn-primary">+ Add Rule</button>
-      </td>
-    </tr>
-  </tbody>
+            </td>
+            <td>
+                <input type="text" class="form-control batching-title" placeholder="RegEx for title">
+            </td>
+            <td>
+                <input type="text" class="form-control batching-duration" placeholder="Duration in seconds">
+            </td>
+            <td>
+                <button class="btn btn-primary">+ Add Rule</button>
+            </td>
+        </tr>
+    </tbody>
 </script>
 <script id="reprioritization-table-template" type="text/x-handlebars-template">
-  <thead>
-    <tr>
-      <td class="light">Source Mode</td>
-      <td class="light">Destination Mode</td>
-      <td class="light">Count</td>
-      <td class="light">Duration (Minutes)</td>
-      <td class="light">Delete</td>
-    </tr>
-  </thead>
-  <tbody>
-  {{#each .}}
-    <tr>
-      <td>{{src_mode}}</td>
-      <td>{{dst_mode}}</td>
-      <td>{{count}}</td>
-      <td>{{secondsToMinutes duration}}</td>
-      <td><button class="btn btn-sm btn-danger" data-src-mode="{{src_mode}}">Delete</button></td>
-    </tr>
-  {{/each}}
-  </tbody>
+    <thead>
+        <tr>
+            <td class="light">Source Mode</td>
+            <td class="light">Destination Mode</td>
+            <td class="light">Count</td>
+            <td class="light">Duration (Minutes)</td>
+            <td class="light">Delete</td>
+        </tr>
+    </thead>
+    <tbody>
+        {{#each .}}
+        <tr>
+            <td>{{src_mode}}</td>
+            <td>{{dst_mode}}</td>
+            <td>{{count}}</td>
+            <td>{{secondsToMinutes duration}}</td>
+            <td><button class="btn btn-sm btn-danger" data-src-mode="{{src_mode}}">Delete</button></td>
+        </tr>
+        {{/each}}
+    </tbody>
+</script>
+<script id="custom-override-template" type="text/x-handlebars-template">
+    <thead>
+        <tr>
+            <td>Application</td>
+            <td class="edit-column"></td>
+            <td class="delete-column"></td>
+        </tr>
+    </thead>
+    <tbody>
+        {{#unless customApp}}
+        <tr>
+            <td>No custom notification settings have been defined for any application </td>
+        </tr>
+        {{/unless}}
+        {{#eachInSet customApp}}
+        <tr data-app="{{value}}" class="app-row">
+            <td class="application-name">{{value}}</td>
+            <td><button class="btn  btn-sm btn-primary edit-custom-app-button" data-app="{{value}}" title="Edit custom settings for {{value}}">Edit</button></td>
+            <td><button class="btn btn-danger btn-sm delete-custom-app-button" data-app="{{value}}" title="Remove custom settings for {{value}}">Delete</button></td>
+        </tr>
+        {{/eachInSet}}
+    </tbody>
+</script>
+
+<script id="custom-override-modal-template" type="text/x-handlebars-template">
+    <div class="modal-header">
+        <h4 class="modal-title">Per category notification rules for: <strong>{{modalAppName}}</strong></h5>
+    </div>
+    <div class="modal-body">
+        <table id="custom-override-modal-table" data-app="{{modalAppName}}">
+
+            <tr>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Delivery mode</th>
+            </tr>
+            {{#each appCategoryData}}
+            <tr>
+                <td>{{this.name}}</td>
+                <td>{{this.description}}</td>
+                <td>
+                    <select class="app-priority custom-modal-priority form-control border-bottom" data-category="{{this.name}}">
+                        {{#each ../supported_modes}}<option value="{{this}}" {{#isEqual this ../mode}} selected {{/isEqual}}>{{this}}</option>{{/each}}
+                      </select>
+                </td>
+            </tr>
+            {{/each}}
+        </table>
+    </div>
 </script>
 {% endraw %}
 {% endblock content %}

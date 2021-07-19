@@ -5,6 +5,7 @@ from gevent import monkey, sleep, spawn, queue
 monkey.patch_all()  # NOQA
 
 import logging
+import logging.handlers
 import time
 import ujson
 import os
@@ -30,7 +31,7 @@ from iris.sender.oneclick import oneclick_email_markup, generate_oneclick_url
 from iris import cache as api_cache
 from iris.sender.quota import ApplicationQuota
 from iris.role_lookup import IrisRoleLookupException
-from pymysql import DataError, IntegrityError, InternalError
+from pymysql import DataError
 # queue for sending messages
 from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
@@ -38,6 +39,7 @@ from iris.sender.shared import per_mode_send_queues, add_mode_stat
 
 NEW_INCIDENTS = '''SELECT
     `incident`.`id` as `id`,
+    `incident`.`created` as `created`,
     `incident`.`plan_id` as `plan_id`,
     `incident`.`context` as `context`,
     `application`.`name` as `application`
@@ -132,8 +134,8 @@ INSERT_MESSAGE_SQL = '''INSERT INTO `message`
 VALUES (NOW(), %s,%s,%s,%s,%s,%s,%s)'''
 
 UNSENT_MESSAGES_SQL = '''SELECT
-    `message`.`body`,
-    `message`.`id` as `message_id`,
+    `msg`.`body`,
+    `msg`.`id` as `message_id`,
     `target`.`name` as `target`,
     `priority`.`name` as `priority`,
     `priority`.`id` as `priority_id`,
@@ -142,19 +144,19 @@ UNSENT_MESSAGES_SQL = '''SELECT
     `plan`.`id` as `plan_id`,
     `incident`.`id` as `incident_id`,
     `incident`.`context` as `context`,
+    `incident`.`created` as `incident_created`,
     `plan_notification`.`template` as `template`,
     `dynamic_target`.`name` as `dynamic_target`
-FROM `message`
-JOIN `application` ON `message`.`application_id`=`application`.`id`
-JOIN `priority` ON `message`.`priority_id`=`priority`.`id`
-LEFT OUTER JOIN `target` ON `message`.`target_id`=`target`.`id`
-LEFT OUTER JOIN `plan` ON `message`.`plan_id`=`plan`.`id`
-LEFT OUTER JOIN `plan_notification` ON `message`.`plan_notification_id`=`plan_notification`.`id`
-LEFT OUTER JOIN `incident` ON `message`.`incident_id`=`incident`.`id`
+FROM (SELECT * FROM `message` FORCE INDEX (ix_message_active) WHERE `active`=1) AS msg
+JOIN `application` ON `msg`.`application_id`=`application`.`id`
+JOIN `priority` ON `msg`.`priority_id`=`priority`.`id`
+LEFT OUTER JOIN `target` ON `msg`.`target_id`=`target`.`id`
+LEFT OUTER JOIN `plan` ON `msg`.`plan_id`=`plan`.`id`
+LEFT OUTER JOIN `plan_notification` ON `msg`.`plan_notification_id`=`plan_notification`.`id`
+LEFT OUTER JOIN `incident` ON `msg`.`incident_id`=`incident`.`id`
 LEFT OUTER JOIN `dynamic_plan_map` ON `incident`.`id` = `dynamic_plan_map`.`incident_id`
   AND `plan_notification`.`dynamic_index` = `dynamic_plan_map`.`dynamic_index`
-LEFT OUTER JOIN `target` `dynamic_target` ON `dynamic_target`.`id` = `dynamic_plan_map`.`target_id`
-WHERE `message`.`active`=1'''
+LEFT OUTER JOIN `target` `dynamic_target` ON `dynamic_target`.`id` = `dynamic_plan_map`.`target_id`'''
 
 SENT_MESSAGE_BATCH_SQL = '''UPDATE `message`
 SET `destination`=%%s,
@@ -264,7 +266,7 @@ default_sender_metrics = {
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
     'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
-    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0,
+    'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0, 'send_queue_puts_fail_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
     'message_retry_cnt': 0, 'message_ids_being_sent_cnt': 0, 'notifications': 0, 'deactivation': 0,
@@ -278,95 +280,119 @@ should_mock_gwatch_renewer = False
 config = None
 
 
-def create_messages(incident_id, plan_notification_id):
-    application_id = cache.incidents[incident_id]['application_id']
-    plan_notification = cache.plan_notifications[plan_notification_id]
-    if plan_notification['role_id'] is None and plan_notification['target_id'] is None:
-        dynamic_info = cache.dynamic_plan_map[incident_id][plan_notification['dynamic_index']]
-        role = cache.roles[dynamic_info['role_id']]['name']
-        target = cache.targets[dynamic_info['target_id']]['name']
-    else:
-        role = cache.roles[plan_notification['role_id']]['name']
-        target = cache.targets[plan_notification['target_id']]['name']
-
-    # find role/priority from plan_notification_id
-    try:
-        names = cache.targets_for_role(role, target)
-    except IrisRoleLookupException as e:
-        names = None
-        lookup_fail_reason = str(e)
-    else:
-        lookup_fail_reason = None
-
-    priority_id = plan_notification['priority_id']
-    redirect_to_plan_owner = False
-    body = ''
-
-    if not names:
-        # Try to get creator of the plan and nag them instead
-        metrics.incr('role_target_lookup_error')
-        name = None
-        try:
-            name = cache.plans[plan_notification['plan_id']]['creator']
-        except (KeyError, TypeError):
-            pass
-
-        if not name:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                          'role: %s, target: %s, result: %s and failed looking '
-                          'up the plan\'s creator'),
-                         incident_id, plan_notification_id, role, target, names)
-            return False
-
-        try:
-            priority_id = api_cache.priorities['low']['id']
-        except KeyError:
-            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                          'role: %s, target: %s, result: %s and failed looking '
-                          'up ID for low priority'),
-                         incident_id, plan_notification_id, role, target, names)
-            return False
-
-        logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
-                      'role: %s, target: %s, result: %s. '
-                      'Reaching out to %s instead and lowering priority to low (%s)'),
-                     incident_id, plan_notification_id, role, target, names, name, priority_id)
-
-        body = ('You are receiving this as you created this plan and we can\'t resolve'
-                ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
-
-        names = [name]
-        redirect_to_plan_owner = True
-
+# msg_info takes the form [(incident_id, plan_notification_id), ...]
+def create_messages(msg_info):
+    msg_count = 0
+    error_incident_ids = set()
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
 
-    for name in names:
-        t = cache.target_names[name]
-        if t:
-            target_id = t['id']
-            cursor.execute(INSERT_MESSAGE_SQL,
-                           (plan_notification['plan_id'], plan_notification_id, incident_id,
-                            application_id, target_id, priority_id, body))
-
-            if redirect_to_plan_owner:
-                # needed for the lastrowid to exist in the DB to satisfy the constraint
-                connection.commit()
-                auditlog.message_change(
-                    cursor.lastrowid,
-                    auditlog.TARGET_CHANGE,
-                    role + '|' + target,
-                    name,
-                    lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
-
+    for (incident_id, plan_notification_id) in msg_info:
+        application_id = cache.incidents[incident_id]['application_id']
+        plan_notification = cache.plan_notifications[plan_notification_id]
+        if plan_notification['role_id'] is None and plan_notification['target_id'] is None:
+            dynamic_info = cache.dynamic_plan_map[incident_id][plan_notification['dynamic_index']]
+            role = cache.roles[dynamic_info['role_id']]['name']
+            target = cache.targets[dynamic_info['target_id']]['name']
         else:
-            metrics.incr('target_not_found')
-            logger.error('No target found: %s', name)
+            role = cache.roles[plan_notification['role_id']]['name']
+            target = cache.targets[plan_notification['target_id']]['name']
 
-    connection.commit()
+        # find role/priority from plan_notification_id
+        try:
+            names = cache.targets_for_role(role, target)
+        except IrisRoleLookupException as e:
+            names = None
+            metrics.incr('role_target_lookup_error')
+            lookup_fail_reason = str(e)
+        else:
+            lookup_fail_reason = None
+
+        priority_id = plan_notification['priority_id']
+        redirect_to_plan_owner = False
+        body = ''
+
+        if not names:
+
+            # if message is optional don't bother the creator, simply return true instead
+            if plan_notification['optional']:
+                msg_count += 1
+                continue
+
+            # Try to get creator of the plan and nag them instead
+            name = None
+            try:
+                name = cache.plans[plan_notification['plan_id']]['creator']
+            except (KeyError, TypeError):
+                pass
+
+            if not name:
+                logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                              'role: %s, target: %s, result: %s and failed looking '
+                              'up the plan\'s creator'),
+                             incident_id, plan_notification_id, role, target, names)
+                error_incident_ids.add(incident_id)
+                continue
+
+            try:
+                priority_id = api_cache.priorities['low']['id']
+            except KeyError:
+                logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                              'role: %s, target: %s, result: %s and failed looking '
+                              'up ID for low priority'),
+                             incident_id, plan_notification_id, role, target, names)
+                error_incident_ids.add(incident_id)
+                continue
+
+            logger.error(('Failed to find targets for incident %s, plan_notification_id: %s, '
+                          'role: %s, target: %s, result: %s. '
+                          'Reaching out to %s instead and lowering priority to low (%s)'),
+                         incident_id, plan_notification_id, role, target, names, name, priority_id)
+
+            body = ('You are receiving this as you created this plan and we can\'t resolve'
+                    ' %s of %s at this time%s.\n\n') % (role, target, ': %s' % lookup_fail_reason if lookup_fail_reason else '')
+
+            names = [name]
+            redirect_to_plan_owner = True
+
+        for name in names:
+            t = cache.target_names[name]
+            if t:
+                target_id = t['id']
+                retries = 0
+                max_retries = 5
+                while True:
+                    retries += 1
+                    try:
+                        cursor.execute(INSERT_MESSAGE_SQL,
+                                       (plan_notification['plan_id'], plan_notification_id, incident_id,
+                                        application_id, target_id, priority_id, body))
+                        connection.commit()
+                    except Exception:
+                        logger.warning('Failed inserting message for incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                        if retries < max_retries:
+                            sleep(.2)
+                            continue
+                        else:
+                            raise Exception('Failed inserting message retries exceeded')
+                    else:
+                        if redirect_to_plan_owner:
+                            # needed for the lastrowid to exist in the DB to satisfy the constraint
+                            auditlog.message_change(
+                                cursor.lastrowid,
+                                auditlog.TARGET_CHANGE,
+                                role + '|' + target,
+                                name,
+                                lookup_fail_reason or 'Changing target to plan owner as we failed resolving original target')
+                        break
+
+                msg_count += 1
+            else:
+                metrics.incr('target_not_found')
+                logger.warning('Failed to notify plan creator; no active target found: %s', name)
     cursor.close()
     connection.close()
-    return True
+    return msg_count, error_incident_ids
 
 
 def deactivate():
@@ -380,7 +406,7 @@ def deactivate():
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(max_retries):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(GET_INACTIVE_IDS_SQL)
             ids = tuple(r[0] for r in cursor)
@@ -389,7 +415,10 @@ def deactivate():
                 connection.commit()
                 break
         except Exception:
-            logger.exception('Failed running deactivate query. (Try %s/%s)', i + 1, max_retries)
+            if i == max_retries:
+                logger.warning('Failed running deactivate query. (Try %s/%s)', i, max_retries)
+            else:
+                logger.warning('Deadlocked running deactivate query. (Try %s/%s)', i, max_retries)
             sleep(.2)
 
     cursor.close()
@@ -411,7 +440,9 @@ def escalate():
     cursor.execute(NEW_INCIDENTS)
 
     escalations = {}
-    for incident_id, plan_id, context, application in cursor:
+    incident_per_plan_cnt = {}
+    for incident_id, created, plan_id, context, application in cursor:
+        incident_per_plan_cnt[plan_id] = incident_per_plan_cnt.get(plan_id, 0) + 1
         escalations[incident_id] = (plan_id, 1)
         # create tracking message if configured
         plan = cache.plans[plan_id]
@@ -427,7 +458,12 @@ def escalate():
                 'plan': plan['name'],
                 'plan_id': plan_id,
                 'application': application,
+                'incident_created': created,
             }
+            if tracking_type == 'call':
+                # in case there are any plans with call tracking type that have not been cleaned up
+                logger.warning('Tracking messages do not support support call mode, ignoring tracking message')
+                continue
             if tracking_type == 'email':
                 tracking_message = {
                     'noreply': True,
@@ -477,35 +513,62 @@ def escalate():
     metrics.set('new_incidents_cnt', new_incidents_count)
     logger.info('[*] %s new incidents', new_incidents_count)
 
+    # log any plan that creates a high volume of incidents
+    for pln_id, cnt in incident_per_plan_cnt.items():
+        if cnt > 10:
+            logger.info("plan with id %d created %d incidents this loop iteration")
+
     # then, fetch message count for current incidents
     msg_count = 0
     cursor = connection.cursor(db.dict_cursor)
     cursor.execute(QUEUE_SQL)
+    msg_info = []
     for n in cursor.fetchall():
         if n['count'] < n['max']:
-            if create_messages(n['incident_id'], n['plan_notification_id']):
-                msg_count += 1
+            msg_info.append((n['incident_id'], n['plan_notification_id']))
         else:
             escalations[n['incident_id']] = (n['plan_id'], n['current_step'] + 1)
+    msg_count += create_messages(msg_info)[0]
 
-    for incident_id, (plan_id, step) in escalations.iteritems():
+    # Create escalation messages
+    msg_info = []
+    for incident_id, (plan_id, step) in escalations.items():
         plan = cache.plans[plan_id]
         steps = plan['steps'].get(step, [])
-        if steps:
-            step_msg_cnt = 0
-            for plan_notification_id in steps:
-                if create_messages(incident_id, plan_notification_id):
-                    step_msg_cnt += 1
-            if step == 1 and step_msg_cnt == 0:
-                # no message created due to role look up failure, reset step to
-                # 0 for retry
-                step = 0
-            cursor.execute(UPDATE_INCIDENT_SQL, (step, incident_id))
-            msg_count += step_msg_cnt
-        else:
-            logger.error('plan id %d has no steps, incident id %d is invalid', plan_id, incident_id)
-            cursor.execute(INVALIDATE_INCIDENT, incident_id)
-        connection.commit()
+        for plan_notification_id in steps:
+            msg_info.append((incident_id, plan_notification_id))
+    count, error_incident_ids = create_messages(msg_info)
+    msg_count += count
+
+    # Update incident step value
+    for incident_id, (plan_id, step) in escalations.items():
+        plan = cache.plans[plan_id]
+        steps = plan['steps'].get(step, [])
+        retries = 0
+        max_retries = 5
+        while True:
+            retries += 1
+            try:
+                if steps:
+                    if step == 1 and incident_id in error_incident_ids:
+                        # no message created due to role look up failure, reset step to
+                        # 0 for retry
+                        step = 0
+                    cursor.execute(UPDATE_INCIDENT_SQL, (step, incident_id))
+                else:
+                    logger.error('plan id %d has no steps, incident id %d is invalid', plan_id, incident_id)
+                    cursor.execute(INVALIDATE_INCIDENT, incident_id)
+
+                connection.commit()
+            except Exception:
+                logger.warning('Failed updating incident %s. (Try %s/%s)', incident_id, retries, max_retries)
+                if retries < max_retries:
+                    sleep(.2)
+                    continue
+                else:
+                    raise Exception('Failed updating batch messages retries exceeded')
+            else:
+                break
     cursor.close()
     connection.close()
 
@@ -518,26 +581,21 @@ def aggregate(now):
     # see if it's time to send the batches
     logger.info('[-] start aggregate task - queued: %s', len(messages))
     start_aggregations = time.time()
-    for key in queues.keys():
-        aggregation_window = cache.plans[key[0]]['aggregation_window']
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    cursor.execute('SELECT `id` FROM `message` WHERE active=1')
+    all_actives = {r[0] for r in cursor}
+    cursor.close()
+    connection.close()
+    for key in list(queues.keys()):
+        aggregation_window = cache.plans[key[0]].get('aggregation_window')
+        if aggregation_window is None:
+            logger.error('No aggregation window found for plan %s', key[0])
+            aggregation_window = 0
         if now - sent.get(key, 0) >= aggregation_window:
             aggregated_message_ids = queues[key]
-
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute('SELECT `id` FROM `message` WHERE active=1 AND `id` in %s', [aggregated_message_ids])
-            active_message_ids = {r[0] for r in cursor}
-            cursor.close()
-            connection.close()
-
-            inactive_message_ids = aggregated_message_ids - active_message_ids
+            active_message_ids = aggregated_message_ids & all_actives
             l = len(active_message_ids)
-            logger.info('[x] dropped %s messages from claimed incidents, %s remain for %r',
-                        len(inactive_message_ids), l, key)
-
-            # remove inactive message from the queue
-            for message_id in inactive_message_ids:
-                messages.pop(message_id, None)
 
             if l == 1:
                 m = messages.pop(next(iter(active_message_ids)))
@@ -553,11 +611,19 @@ def aggregate(now):
                 m['aggregated_ids'] = list(active_message_ids)
                 message_send_enqueue(m)
 
-                for message_id in active_message_ids:
+                for message_id in aggregated_message_ids:
                     messages.pop(message_id, None)
                 logger.info('[-] purged %s from messages %s remaining', active_message_ids, len(messages))
             del queues[key]
             sent[key] = now
+    inactive_message_ids = messages.keys() - all_actives
+    logger.info('[x] dropped %s inactive messages from claimed incidents, %s remain',
+                len(inactive_message_ids), len(messages))
+
+    # remove inactive message from the queue
+    for message_id in inactive_message_ids:
+        messages.pop(message_id, None)
+
     metrics.set('aggregations', time.time() - start_aggregations)
     logger.info('[*] aggregate task finished - queued: %s', len(messages))
 
@@ -570,7 +636,7 @@ def poll():
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
     if messages:
-        cursor.execute(UNSENT_MESSAGES_SQL + ' AND `message`.`id` NOT IN %s', [tuple(messages)])
+        cursor.execute(UNSENT_MESSAGES_SQL + ' AND `msg`.`id` NOT IN %s', [tuple(messages)])
     else:
         cursor.execute(UNSENT_MESSAGES_SQL)
 
@@ -639,17 +705,17 @@ def fetch_and_prepare_message():
         # does this message trigger aggregation?
         window = plan_aggregate_windows.setdefault(key, defaultdict(int))
 
-        for bucket in window.keys():
+        for bucket in list(window.keys()):
             if now - bucket > plan['threshold_window']:
                 del window[bucket]
 
         window[now] += 1
 
-        if sum(window.itervalues()) > plan['threshold_count']:
+        if sum(window.values()) > plan['threshold_count']:
             # too many messages for the aggregation key - enqueue
 
             # add message id to aggregation queue
-            queues[key] = set([message_id])
+            queues.setdefault(key, set()).add(message_id)
             # add message id to queue for deduping
             messages[message_id] = m
             # initialize last sent tracker
@@ -771,25 +837,74 @@ def set_target_contact_by_priority(message):
 
 
 def set_target_contact(message):
-    # If we already have a destination set (eg incident tracking emails) no-op this
-    if 'destination' in message:
+    # If we already have a destination set (eg incident tracking emails or literal_target notifications) no-op this
+    if 'destination' in message and not message.get('multi-recipient'):
         return True
+
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
-    try:
-        if 'mode' in message or 'mode_id' in message:
-            # for out of band notification, we already have the mode *OR*
-            # mode_id set by API
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor()
-            cursor.execute('''
+    destination_query = '''
                 SELECT `destination` FROM `target_contact`
                 JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
                 JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
                 WHERE `target`.`name` = %(target)s
                 AND `target_type`.`name` = 'user'
                 AND (`target_contact`.`mode_id` = %(mode_id)s OR `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = %(mode)s))
+                LIMIT 1'''
+
+    # Handle multi-recipient messages. These are only allowed when mode is specified, not priority.
+    # Return True if we're able to resolve at least one target
+    if message.get('multi-recipient'):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        for t in message['target']:
+            try:
+                cursor.execute(destination_query, {'target': t['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                if t.get('bcc'):
+                    message['bcc_destination'].append(cursor.fetchone()[0])
+                else:
+                    message['destination'].append(cursor.fetchone()[0])
+            except (ValueError, TypeError):
+                continue
+        cursor.close()
+        connection.close()
+        return bool(message.get('destination') or message.get('bcc_destination'))
+
+    try:
+        if 'mode' in message or 'mode_id' in message:
+            # for out of band notification, we already have the mode *OR*
+            # mode_id set by API
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute(destination_query, {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+            message['destination'] = cursor.fetchone()[0]
+            cursor.close()
+            connection.close()
+            result = True
+        elif 'category' in message:
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor()
+            cursor.execute('''
+                SELECT `mode`.`id`, `mode`.`name` FROM `category_override`
+                JOIN `target` ON `target`.`id` = `category_override`.`user_id`
+                JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
+                WHERE `target`.`name` = %(target)s AND `category_override`.`category_id` = %(category_id)s
+            ''', {'target': message['target'], 'category_id': message['category_id']})
+            override_mode = cursor.fetchone()
+            if override_mode:
+                message['mode_id'] = override_mode[0]
+                message['mode'] = override_mode[1]
+            else:
+                message['mode_id'] = message['category_mode_id']
+                message['mode'] = message['category_mode']
+            cursor.execute('''
+                SELECT `destination` FROM `target_contact`
+                JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
+                JOIN `target_type` on `target_type`.`id` = `target`.`type_id`
+                WHERE `target`.`name` = %(target)s
+                AND `target_type`.`name` = 'user'
+                AND `target_contact`.`mode_id` = %(mode_id)s
                 LIMIT 1
-                ''', {'target': message['target'], 'mode_id': message.get('mode_id'), 'mode': message.get('mode')})
+                ''', {'target': message['target'], 'mode_id': message['mode_id']})
             message['destination'] = cursor.fetchone()[0]
             cursor.close()
             connection.close()
@@ -800,7 +915,7 @@ def set_target_contact(message):
         if result:
             cache.target_reprioritization(message)
         else:
-            logger.warn('target does not have mode %r', message)
+            logger.warning('target does not have mode %r', message)
             result = set_target_fallback_mode(message)
         return result
     except (ValueError, TypeError):
@@ -901,21 +1016,24 @@ def mark_message_as_sent(message):
     cursor = connection.cursor()
     if not message['subject']:
         message['subject'] = ''
-        logger.warn('Message id %s has blank subject', message.get('message_id', '?'))
+        logger.warning('Message id %s has blank subject', message.get('message_id', '?'))
 
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(max_retries):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(sql, params)
             connection.commit()
             break
         except DataError:
-            logger.exception('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
+            logger.warning('Failed updating message metadata status (message ID %s) (application %s)', message.get('message_id', '?'), message.get('application', '?'))
             break
         except Exception:
-            logger.exception('Failed running sent message update query. (Try %s/%s)', i + 1, max_retries)
+            if i == max_retries:
+                logger.warning('Failed running sent message update query. (Try %s/%s)', i, max_retries)
+            else:
+                logger.warning('Failed running sent message update query. (Try %s/%s)', i, max_retries)
             sleep(.2)
 
     # Clean messages cache
@@ -927,8 +1045,8 @@ def mark_message_as_sent(message):
         message['subject'] = message['subject'][:255]
 
     if len(message['body']) > MAX_MESSAGE_BODY_LENGTH:
-        logger.warn('Message id %s has a ridiculously long body (%s chars). Truncating it.',
-                    message.get('message_id', '?'), len(message['body']))
+        logger.warning('Message id %s has a ridiculously long body (%s chars). Truncating it.',
+                       message.get('message_id', '?'), len(message['body']))
         message['body'] = message['body'][:MAX_MESSAGE_BODY_LENGTH]
 
     if 'aggregated_ids' in message:
@@ -939,17 +1057,19 @@ def mark_message_as_sent(message):
     max_retries = 3
 
     # this deadlocks sometimes. try until it doesn't.
-    for i in xrange(max_retries):
+    for i in range(1, max_retries + 1):
         try:
             cursor.execute(UPDATE_MESSAGE_BODY_SQL, (message['body'], message['subject'], update_ids))
             connection.commit()
             break
         except DataError:
-            logger.exception('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
+            logger.warning('Failed updating message body+subject (message IDs %s) (application %s)', update_ids, message.get('application', '?'))
             break
         except Exception:
-            logger.exception('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i + 1, max_retries)
-            break
+            if i == max_retries:
+                logger.warning('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
+            else:
+                logger.warning('Failed updating message body+subject (message IDs %s) (application %s) (Try %s/%s)', update_ids, message.get('application', '?'), i, max_retries)
             sleep(.2)
 
     cursor.close()
@@ -972,30 +1092,55 @@ def update_message_sent_status(message, status):
         return
 
     session = db.Session()
-    try:
-        session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
-                           VALUES (:message_id, :status)
-                           ON DUPLICATE KEY UPDATE `status` =  :status''',
-                        {'message_id': message_id, 'status': status})
-        session.commit()
-    except (DataError, IntegrityError, InternalError):
-        logger.exception('Failed setting message sent status for message %s', message)
-    finally:
-        session.close()
+    retries = 0
+    max_retries = 3
+    while True:
+        retries += 1
+        try:
+            session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
+                        VALUES (:message_id, :status)
+                        ON DUPLICATE KEY UPDATE `status` =  :status''',
+                            {'message_id': message_id, 'status': status})
+            session.commit()
+        except Exception:
+            logger.warning('Failed setting message sent status for message %s (Try %s/%s)', message_id, retries, max_retries)
+            if retries < max_retries:
+                sleep(.2)
+                continue
+            else:
+                raise Exception('Failed setting message sent status for message retries exceeded')
+        else:
+            break
+
+    session.close()
 
 
 def mark_message_has_no_contact(message):
     message_id = message.get('message_id')
     if not message_id:
-        logger.warn('Cannot mark message "%s" as not having contact as message_id is missing', message)
+        logger.warning('Cannot mark message "%s" as not having contact as message_id is missing', message)
         return
 
     connection = db.engine.raw_connection()
     cursor = connection.cursor()
-    cursor.execute('UPDATE `message` set `active`=0 WHERE `id`=%s',
-                   message_id)
-    connection.commit()
-    cursor.close()
+    retries = 0
+    max_retries = 3
+    while True:
+        retries += 1
+        try:
+            cursor.execute('UPDATE `message` set `active`=0 WHERE `id`=%s',
+                           message_id)
+            connection.commit()
+            cursor.close()
+        except Exception:
+            logger.warning('Failed setting message %s as not having contact (Try %s/%s)', message_id, retries, max_retries)
+            if retries < max_retries:
+                sleep(.2)
+                continue
+            else:
+                raise Exception('Failed setting message as not having contact')
+        else:
+            break
     connection.close()
     auditlog.message_change(
         message_id, auditlog.MODE_CHANGE, target_fallback_mode, 'invalid',
@@ -1024,14 +1169,15 @@ def distributed_send_message(message, vendor_manager):
 
     # application is not present for incident tracking emails
     if 'application' in message:
+        notification_count = 1 if not message.get('target_list') else len(message['destination'])
         metrics_key = 'app_%(application)s_mode_%(mode)s_cnt' % message
         metrics.add_new_metrics({metrics_key: 0})
-        metrics.incr(metrics_key)
+        metrics.incr(metrics_key, inc=notification_count)
 
     if runtime is not None:
         return True, True
 
-    raise Exception('Failed sending message')
+    return False, False
 
 
 def fetch_and_send_message(send_queue, vendor_manager):
@@ -1045,7 +1191,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
     retry_count = message.get('retry_count')
     is_retry = retry_count is not None
     if is_retry and retry_count >= MAX_MESSAGE_RETRIES:
-        logger.warning('Maximum retry count for %s breached')
+        logger.warning('Maximum retry count for app: %s target:%s breached', message.get('application', '?'), message.get('target', '?'))
         return
 
     if not is_retry:
@@ -1060,7 +1206,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
     if not is_retry and not message_to_slave and not quota.allow_send(message):
-        logger.warn('Hard message quota exceeded; Dropping this message on floor: %s', message)
+        logger.warning('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
                   message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
@@ -1105,8 +1251,8 @@ def fetch_and_send_message(send_queue, vendor_manager):
         # body is too long and we were normally going to send it anyway.
         body_length = len(message['body'])
         if body_length > MAX_MESSAGE_BODY_LENGTH:
-            logger.warn('Message id %s has a ridiculously long body (%s chars). Dropping it.',
-                        message['message_id'], body_length)
+            logger.warning('Message id %s has a ridiculously long body (%s chars). Dropping it.',
+                           message['message_id'], body_length)
             spawn(auditlog.message_change,
                   message['message_id'], auditlog.MODE_CHANGE, message.get('mode', '?'), 'drop',
                   'Dropping due to excessive body length (%s > %s chars)' % (
@@ -1130,23 +1276,22 @@ def fetch_and_send_message(send_queue, vendor_manager):
     try:
         success, sent_locally = distributed_send_message(message, vendor_manager)
     except Exception:
-        logger.exception('Failed to send message: %s', message)
+        logger.warning('Failed to send message: %s', message)
         add_mode_stat(message['mode'], None)
-        if message['mode'] == 'email':
-            metrics.incr('task_failure')
-            logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-        else:
-            logger.error('reclassifying as email %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-            set_target_fallback_mode(message)
-            render(message)
-            try:
-                success, sent_locally = distributed_send_message(message, vendor_manager)
-            # nope - log and bail
-            except Exception:
-                metrics.incr('task_failure')
-                add_mode_stat(message['mode'], None)
-                logger.error('unable to send %(mode)s %(message_id)s %(application)s %(destination)s %(subject)s %(body)s', message)
-                sent_locally = True
+    if not success and not sent_locally:
+        if not message.get('unexpanded') and message['mode'] != 'email':
+            if message.get('target'):
+                logger.error('reclassifying as email %s', message)
+                set_target_fallback_mode(message)
+                render(message)
+                try:
+                    success, sent_locally = distributed_send_message(message, vendor_manager)
+                # nope - log and bail
+                except Exception:
+                    metrics.incr('task_failure')
+                    add_mode_stat(message['mode'], None)
+                    logger.error('unable to send %s', message)
+                    sent_locally = True
 
     # Take it out of our list of active queued messages if it's there
     if message['message_id']:
@@ -1229,7 +1374,7 @@ def maintain_workers(config):
         try:
             email_smtp_workers = iris_smtp.iris_smtp.determine_worker_count(email_vendor)
         except Exception:
-            logger.exception('Failed determining MX records this round')
+            logger.warning('Failed determining MX records this round')
             email_smtp_workers = None
 
         old_email_worker_count = workers_per_mode.pop('email', None)
@@ -1239,12 +1384,12 @@ def maintain_workers(config):
         # Remove all smtp vendor objects so they don't get initialized unnecessarily
         config['vendors'] = [vendor for vendor in config['vendors'] if vendor['type'] != 'iris_smtp']
 
-    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in workers_per_mode.iteritems()))
+    logger.info('Workers per mode: %s', ', '.join('%s: %s' % count for count in iter(workers_per_mode.items())))
 
     # Make sure all the counts and distributions for "normal" workers are proper, including email if we're not doing MX record
     # autoscaling
 
-    for mode, worker_count in workers_per_mode.iteritems():
+    for mode, worker_count in workers_per_mode.items():
         mode_tasks = worker_tasks[mode]
         if mode_tasks:
             for task in mode_tasks:
@@ -1254,7 +1399,7 @@ def maintain_workers(config):
                     task.update({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
                     metrics.incr('workers_respawn_cnt')
         else:
-            for x in xrange(worker_count):
+            for x in range(worker_count):
                 kill_set = gevent.event.Event()
                 mode_tasks.append({'greenlet': spawn(worker, per_mode_send_queues[mode], config, kill_set), 'kill_set': kill_set})
 
@@ -1265,7 +1410,7 @@ def maintain_workers(config):
         tasks_to_kill = []
 
         # Adjust worker count
-        for mx, correct_worker_count in email_smtp_workers.iteritems():
+        for mx, correct_worker_count in email_smtp_workers.items():
             mx_workers = autoscale_email_worker_tasks[mx]
             current_task_count = len(mx_workers)
 
@@ -1286,7 +1431,7 @@ def maintain_workers(config):
                 worker_config = copy.deepcopy(config)
                 worker_config['vendors'] = [email_vendor_config]
 
-                for x in xrange(new_task_count):
+                for x in range(new_task_count):
                     kill_set = gevent.event.Event()
                     mx_workers.append({'greenlet': spawn(worker, email_queue, worker_config, kill_set), 'kill_set': kill_set})
 
@@ -1294,14 +1439,14 @@ def maintain_workers(config):
             elif current_task_count > correct_worker_count:
                 kill_task_count = current_task_count - correct_worker_count
                 logger.info('Auto scaling MX record %s DOWN %d tasks', mx, kill_task_count)
-                for x in xrange(kill_task_count):
+                for x in range(kill_task_count):
                     try:
                         tasks_to_kill.append(mx_workers.pop())
                     except IndexError:
                         break
 
         # Kill MX records no longer in use
-        kill_mx = autoscale_email_worker_tasks.viewkeys() - email_smtp_workers.viewkeys()
+        kill_mx = autoscale_email_worker_tasks.keys() - email_smtp_workers.keys()
         for mx in kill_mx:
             workers = autoscale_email_worker_tasks[mx]
             if workers:
@@ -1310,7 +1455,7 @@ def maintain_workers(config):
             del autoscale_email_worker_tasks[mx]
 
         # Make sure all existing workers are alive
-        for mx, mx_tasks in autoscale_email_worker_tasks.iteritems():
+        for mx, mx_tasks in autoscale_email_worker_tasks.items():
             email_vendor_config = copy.deepcopy(email_vendor)
             email_vendor_config['smtp_server'] = mx
             email_vendor_config.pop('smtp_gateway', None)
@@ -1367,7 +1512,7 @@ def prune_old_audit_logs_worker():
             connection.commit()
             cursor.close()
         except Exception:
-            logger.exception('Failed pruning old audit logs')
+            logger.warning('Failed pruning old audit logs')
         finally:
             connection.close()
 
@@ -1400,26 +1545,64 @@ def sender_shutdown():
     # Stop sender RPC server
     rpc.shutdown()
 
-    for tasks in worker_tasks.itervalues():
+    for tasks in worker_tasks.values():
         for task in tasks:
             task['kill_set'].set()
 
-    for tasks in autoscale_email_worker_tasks.itervalues():
+    for tasks in autoscale_email_worker_tasks.values():
         for task in tasks:
             task['kill_set'].set()
 
     logger.info('Waiting for sender workers to shut down')
 
-    for tasks in worker_tasks.itervalues():
+    for tasks in worker_tasks.values():
         for task in tasks:
             task['greenlet'].join()
 
-    for tasks in autoscale_email_worker_tasks.itervalues():
+    for tasks in autoscale_email_worker_tasks.values():
         for task in tasks:
             task['greenlet'].join()
 
     # Force quit. Avoid sender process existing longer than it needs to
     os._exit(0)
+
+
+def modify_restricted_calls(message):
+    # check for known corner cases in message delivery and correct accordingly
+
+    # due to calling restrictions to china override mode and send as sms instead
+    if message['destination'].startswith('+86'):
+        message['mode'] = 'sms'
+        auditlog.message_change(
+            message['message_id'], auditlog.MODE_CHANGE, 'call', 'sms',
+            'Changing mode due to calling restriction')
+        # this message will appear before the contents of the sms template
+        message['body'] = 'Due to legal restrictions we are unable to deliver calls to China. Please check Iris for complete incident details and change your settings to use sms, slack, or email instead - ' + message.get('body', '')
+
+
+def modify_restricted_sms(message):
+
+    if message.get('incident_id'):
+        # Alter message to get around SMS restrictions in countries like India
+        # Replace body with pre-registered template so it won't be dropped by carriers
+
+        destination = message['destination']
+        message_id = message['message_id']
+        mode_id = message['mode_id']
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        # only replace messages for users that have opted in
+        cursor.execute('''SELECT count(`mode_template_override`.`target_id`)
+            FROM `mode_template_override` JOIN `target_contact`
+            ON `mode_template_override`.`target_id` = `target_contact`.`target_id`
+            WHERE `target_contact`.`destination` = %s and `target_contact`.`mode_id` = %s''', (destination, mode_id))
+        result = cursor.fetchone()[0]
+        connection.close()
+        if result:
+            body_template = config.get('sms_override_template')
+            message['body'] = body_template % message.get('incident_id')
+            auditlog.message_change(message_id, auditlog.CONTENT_CHANGE, 'sms', 'sms',
+                                    'Replaced SMS body to avoid being blocked by carrier')
 
 
 def message_send_enqueue(message):
@@ -1443,6 +1626,13 @@ def message_send_enqueue(message):
 
     message_mode = message.get('mode')
     if message_mode and message_mode in per_mode_send_queues:
+        # check for known corner case limitations and correct accordingly
+        if message['mode'] == 'call':
+            modify_restricted_calls(message)
+
+        if message['mode'] == 'sms':
+            modify_restricted_sms(message)
+
         if message_id is not None:
             message_ids_being_sent.add(message_id)
         per_mode_send_queues[message_mode].put(message)
@@ -1452,20 +1642,36 @@ def message_send_enqueue(message):
         metrics.incr('send_queue_puts_fail_cnt')
 
 
+def update_api_cache_worker():
+    while True:
+        logger.debug('Reinitializing cache')
+        api_cache.cache_priorities()
+        api_cache.cache_applications()
+        api_cache.cache_modes()
+        sleep(60)
+
+
+def log_sender_master():
+    while True:
+        sender_master = coordinator.get_current_master()
+        if sender_master:
+            logger.info("Current sender master: %s" % sender_master)
+        sleep(30)
+
+
 def init_sender(config):
-    gevent.signal(signal.SIGINT, sender_shutdown)
-    gevent.signal(signal.SIGTERM, sender_shutdown)
-    gevent.signal(signal.SIGQUIT, sender_shutdown)
+    gevent.signal_handler(signal.SIGINT, sender_shutdown)
+    gevent.signal_handler(signal.SIGTERM, sender_shutdown)
+    gevent.signal_handler(signal.SIGQUIT, sender_shutdown)
 
     process_title = config['sender'].get('process_title')
 
-    if process_title and isinstance(process_title, basestring):
+    if process_title and isinstance(process_title, str):
         setproctitle.setproctitle(process_title)
         logger.info('Changing process name to %s', process_title)
 
-    api_host = config['sender'].get('api_host', 'http://localhost:16649')
     db.init(config)
-    cache.init(api_host, config)
+    cache.init(config)
     metrics.init(config, 'iris-sender', default_sender_metrics)
     api_cache.cache_priorities()
     api_cache.cache_applications()
@@ -1488,7 +1694,7 @@ def init_sender(config):
         }]
 
     global quota
-    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'))
+    quota = ApplicationQuota(db, cache.targets_for_role, message_send_enqueue, config['sender'].get('sender_app'), config['sender'].get('default_rate_def', {}))
 
     global coordinator
     zk_hosts = config['sender'].get('zookeeper_cluster', False)
@@ -1516,6 +1722,7 @@ def main():
 
     logger.info('[-] bootstraping sender...')
     init_sender(config)
+    spawn(update_api_cache_worker)
     init_plugins(config.get('plugins', {}))
 
     if not rpc.run(config['sender']):
@@ -1529,6 +1736,7 @@ def main():
     ))
 
     spawn(coordinator.update_forever)
+    spawn(log_sender_master)
     send_task = spawn(send)
 
     maintain_workers(config)
@@ -1598,7 +1806,7 @@ def main():
             metrics.incr('task_failure')
             send_task = spawn(send)
 
-        for mode, send_queue in per_mode_send_queues.iteritems():
+        for mode, send_queue in per_mode_send_queues.items():
 
             # Set metric for size of worker queue
             metrics.set('send_queue_%s_size' % mode, len(send_queue))
@@ -1614,6 +1822,7 @@ def main():
 
         elapsed_time = now - runtime
         nap_time = max(0, interval - elapsed_time)
+
         logger.info('--> sender loop finished in %s seconds - sleeping %s seconds',
                     elapsed_time, nap_time)
         sleep(nap_time)
