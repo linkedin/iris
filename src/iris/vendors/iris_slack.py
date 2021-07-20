@@ -125,8 +125,8 @@ class iris_slack(object):
         try:
             response = requests.post(message_endpoint,
                                      headers={
-                                        'Authorization': 'Bearer %s' % self.config['auth_token'],
-                                        'Content-Type': 'application/json'
+                                         'Authorization': 'Bearer %s' % self.config['auth_token'],
+                                         'Content-Type': 'application/json'
                                      },
                                      data=ujson.dumps(payload),
                                      proxies=self.proxy,
