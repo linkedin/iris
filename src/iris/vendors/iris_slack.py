@@ -57,13 +57,13 @@ class iris_slack(object):
         return {
             'fallback': self.message_attachments.get('fallback'),
             'pretext': self.message_attachments.get('pretext'),
-            'title': 'Iris incident %r' % message['incident_id'],
+            'title': 'Iris incident %r' % message.get('incident_id'),
             'mrkdwn_in': ['pretext'],
             'attachment_type': 'default',
             'callback_id': message.get('message_id'),
             'color': 'danger',
             'title_link': '%s/%s' % (
-                self.config['iris_incident_url'], message['incident_id']),
+                self.config['iris_incident_url'], message.get('incident_id')),
             'actions': [
                 {
                     'name': 'claim',
@@ -108,6 +108,8 @@ class iris_slack(object):
                                              slack_message.get('text', ''))
         # For incidents, add the Iris attachments at the end
         if 'incident_id' in message:
+            slack_message['incident_id'] = message.get('incident_id')
+            slack_message['message_id'] = message.get('message_id')
             slack_message.setdefault('attachments', []).append(self.construct_attachment(slack_message))
         return slack_message
 
