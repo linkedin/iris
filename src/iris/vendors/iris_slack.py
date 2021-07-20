@@ -52,7 +52,7 @@ class iris_slack(object):
             logger.exception('Slack post request failed')
             raise
 
-    def construct_attachments(self, message):
+    def construct_attachment(self, message):
         # TODO: Verify title, title_link and text.
         return {
             'fallback': self.message_attachments.get('fallback'),
@@ -89,13 +89,12 @@ class iris_slack(object):
 
     def get_message_payload(self, message):
         slack_message = {
-            'token': self.config['auth_token'],
-            'channel': self.get_destination(message['destination'])
+            'channel': self.get_destination(message['destination']),
+            'text': message['body'],
         }
-        if not message['body'].startswith('{'):
-            slack_message['text'] = message['body']
-        else:
-            arguments = ujson.parse(message['body'])
+        # Support complex formatting if body is JSON
+        if message['body'].startswith('{'):
+            arguments = ujson.loads(message['body'])
             for key in {
                 'blocks', 'attachments',
                 'link_names', 'mrkdwn', 'parse',
@@ -104,12 +103,12 @@ class iris_slack(object):
             }:
                 if key in arguments:
                     slack_message[key] = arguments[key]
-        # Always prefix the application name
+        # Always prefix the application name for tracking
         slack_message['text'] = '[%s] %s' % (message.get('application', 'Iris incident'),
-                                             slack_message.get('text', '')).strip()
-        # only add interactive button for incidents
+                                             slack_message.get('text', ''))
+        # For incidents, add the Iris attachments at the end
         if 'incident_id' in message:
-            slack_message['attachments'] = slack_message.get('attachments', []).append(self.construct_attachments(message))
+            slack_message.setdefault('attachments', []).append(self.construct_attachment(slack_message))
         return slack_message
 
     def get_destination(self, destination):
@@ -126,6 +125,7 @@ class iris_slack(object):
         try:
             response = requests.post(message_endpoint,
                                      headers={
+                                        'Authorization': 'Bearer %s' % self.config['auth_token'],
                                         'Content-Type': 'application/json'
                                      },
                                      data=ujson.dumps(payload),
