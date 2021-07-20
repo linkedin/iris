@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 
 from iris.vendors.iris_slack import iris_slack
-import ujson as json
 
 
 def test_atttachments_construction_for_incident():
@@ -23,11 +22,10 @@ def test_atttachments_construction_for_incident():
     }
     msg_payload = slack_vendor.get_message_payload(fake_msg)
     assert msg_payload['text'] == '[grafana] %s' % fake_msg['body']
-    assert msg_payload['token'] == 'abc'
     assert msg_payload['channel'] == '@user1'
 
     attachments = msg_payload['attachments']
-    assert json.loads(attachments) == [{
+    assert attachments == [{
         'fallback': 'foo fallback',
         'pretext': 'foo pretext',
         'title': 'Iris incident %r' % fake_msg['incident_id'],
@@ -77,6 +75,5 @@ def test_atttachments_construction_for_notification():
     msg_payload = slack_vendor.get_message_payload(fake_msg)
     assert msg_payload == {
         'text': '[grafana] %s' % fake_msg['body'],
-        'token': 'abc',
         'channel': '@user1'
     }
