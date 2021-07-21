@@ -33,4 +33,4 @@ class alertmanager(webhook):
         '''
         alert_params = ujson.loads(req.context['body'])
         plan = alert_params['groupLabels']['iris_plan']
-        super().on_post(self, req, resp, plan)
+        super().on_post(req, resp, plan)

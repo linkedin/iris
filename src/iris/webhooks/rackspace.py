@@ -27,4 +27,4 @@ class rackspace(webhook):
         if plan is None:
             raise HTTPBadRequest('missing plan in rackspace webhook url parameters')
 
-        super().on_post(self, req, resp, plan)
+        super().on_post(req, resp, plan)
