@@ -78,7 +78,10 @@ class iris_twilio(object):
         client = self.get_twilio_client()
 
         sender = client.messages.create
-        from_ = self.config['twilio_number']
+        if message['application'] in self.config['application_override_mapping']:
+            from_ = self.config['application_override_mapping'][message['application']]
+        else:
+            from_ = self.config['twilio_number']
         start = time.time()
         content = self.generate_message_text(message)
         status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
@@ -111,7 +114,10 @@ class iris_twilio(object):
 
         client = self.get_twilio_client()
         sender = client.calls.create
-        from_ = self.config['twilio_number']
+        if message['application'] in self.config['application_override_mapping']:
+            from_ = self.config['application_override_mapping'][message['application']]
+        else:
+            from_ = self.config['twilio_number']
         status_callback_url = self.config['relay_base_url'] + '/api/v0/twilio/status'
         content = self.generate_message_text(message)
 

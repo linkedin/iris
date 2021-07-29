@@ -22,6 +22,7 @@ def test_twilio_notification_call_generate(mocker):
     twilio = iris_twilio({
         'twilio_number': fake_from_num,
         'relay_base_url': relay_base_url,
+        'application_override_mapping': {}
     })
     mock_twilio_client = mocker.MagicMock()
     mocker.patch.object(twilio, 'get_twilio_client').return_value = mock_twilio_client
@@ -42,6 +43,38 @@ def test_twilio_notification_call_generate(mocker):
     )
 
 
+def test_twilio_notification_call_generate_override(mocker):
+    mocker.patch('iris.vendors.iris_twilio.find_plugin')
+    from iris.vendors.iris_twilio import iris_twilio
+    relay_base_url = 'http://foo/relay'
+    fake_from_num = '123-123-1234'
+    fake_to_num = '123-123-1235'
+    override_num = '777-777-7777'
+
+    twilio = iris_twilio({
+        'twilio_number': fake_from_num,
+        'relay_base_url': relay_base_url,
+        'application_override_mapping': {'iris-sender': override_num}
+    })
+    mock_twilio_client = mocker.MagicMock()
+    mocker.patch.object(twilio, 'get_twilio_client').return_value = mock_twilio_client
+    twilio.send_call({
+        'destination': fake_to_num,
+        'application': 'iris-sender',
+        'subject': 'Hello',
+        'body': 'World',
+    })
+    mock_twilio_client.calls.create.assert_called_once_with(
+        to=fake_to_num,
+        from_=override_num,
+        if_machine='Continue',
+        url=relay_base_url + (
+            '/api/v0/twilio/calls/say?content=Hello.+World&'
+            'loop=3&source=iris-sender'),
+        status_callback=relay_base_url + '/api/v0/twilio/status'
+    )
+
+
 def test_twilio_incident_call_generate(mocker):
     mock_plugin = mocker.MagicMock()
     mock_plugin.get_phone_menu_text.return_value = 'Press 1 to pay'
@@ -54,6 +87,7 @@ def test_twilio_incident_call_generate(mocker):
     twilio = iris_twilio({
         'twilio_number': fake_from_num,
         'relay_base_url': relay_base_url,
+        'application_override_mapping': {}
     })
     mock_twilio_client = mocker.MagicMock()
     mocker.patch.object(twilio, 'get_twilio_client').return_value = mock_twilio_client
