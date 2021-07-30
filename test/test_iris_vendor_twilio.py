@@ -21,8 +21,7 @@ def test_twilio_notification_call_generate(mocker):
 
     twilio = iris_twilio({
         'twilio_number': fake_from_num,
-        'relay_base_url': relay_base_url,
-        'application_override_mapping': {}
+        'relay_base_url': relay_base_url
     })
     mock_twilio_client = mocker.MagicMock()
     mocker.patch.object(twilio, 'get_twilio_client').return_value = mock_twilio_client
@@ -86,8 +85,7 @@ def test_twilio_incident_call_generate(mocker):
     from iris.vendors.iris_twilio import iris_twilio
     twilio = iris_twilio({
         'twilio_number': fake_from_num,
-        'relay_base_url': relay_base_url,
-        'application_override_mapping': {}
+        'relay_base_url': relay_base_url
     })
     mock_twilio_client = mocker.MagicMock()
     mocker.patch.object(twilio, 'get_twilio_client').return_value = mock_twilio_client

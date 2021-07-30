@@ -78,7 +78,7 @@ class iris_twilio(object):
         client = self.get_twilio_client()
 
         sender = client.messages.create
-        if message['application'] in self.config['application_override_mapping']:
+        if message['application'] in self.config.get('application_override_mapping', {}):
             from_ = self.config['application_override_mapping'][message['application']]
         else:
             from_ = self.config['twilio_number']
@@ -114,7 +114,7 @@ class iris_twilio(object):
 
         client = self.get_twilio_client()
         sender = client.calls.create
-        if message['application'] in self.config['application_override_mapping']:
+        if message['application'] in self.config.get('application_override_mapping', {}):
             from_ = self.config['application_override_mapping'][message['application']]
         else:
             from_ = self.config['twilio_number']
