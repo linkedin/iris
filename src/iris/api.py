@@ -17,7 +17,7 @@ import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTP_400, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
@@ -35,8 +35,6 @@ from . import ui
 from . import app_stats
 from .config import load_config
 from iris.vendors.iris_slack import iris_slack
-from iris.role_lookup import IrisRoleLookupException
-from iris.sender import cache as sender_cache
 from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
@@ -5420,93 +5418,10 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
-class InternalApplicationsAuth():
-    allow_read_no_auth = False
-    internal_allowlist_only = True
-
-    def on_get(self, req, resp):
-
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-        cursor.execute('''SELECT `name`, `key` FROM `application` WHERE `auth_only` is False''')
-        apps = cursor.fetchall()
-
-        cursor.close()
-        connection.close()
-
-        payload = apps
-        resp.status = HTTP_200
-        resp.body = ujson.dumps(payload)
-
-
-class InternalIncident():
-    allow_read_no_auth = False
-    internal_allowlist_only = True
-
-    def on_post(self, req, resp, incident_id):
-
-        body = ujson.loads(req.context['body'])
-
-        if 'current_step' not in body or 'active' not in body:
-            raise HTTPBadRequest('Missing required fields "current_step" or "active" in body')
-
-        if not isinstance(body['current_step'], int):
-            raise HTTPBadRequest('"step" field must be an integer"')
-
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-
-        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s) as valid''', incident_id)
-        if not cursor.fetchone().get('valid'):
-            cursor.close()
-            connection.close()
-            raise HTTPBadRequest('Invalid incident id')
-
-        if body['active']:
-            active = 1
-        else:
-            active = 0
-
-        cursor.execute('''UPDATE `incident` SET `current_step` = %s, `active` = %s WHERE `id` = %s''', (body['current_step'], active, incident_id))
-        connection.commit()
-        cursor.close()
-        connection.close()
-        resp.status = HTTP_200
-
-
-class InternalTarget():
-    allow_read_no_auth = False
-    internal_allowlist_only = True
-
-    def on_get(self, req, resp):
-
-        role = req.get_param('role', required=True)
-        target = req.get_param('target', required=True)
-
-        payload = {"error": None, "users": {}}
-        try:
-            names = sender_cache.targets_for_role(role, target)
-        except IrisRoleLookupException as e:
-            names = None
-            payload['error'] = str(e)
-            resp.status = HTTP_400
-            resp.body = ujson.dumps(payload)
-            return
-
-        for username in names:
-            user_data = get_user_details(username)
-            payload['users'][username] = user_data
-
-        resp.status = HTTP_200
-        resp.body = ujson.dumps(payload)
-
-
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
         cache.init()
-        sender_cache.purge()
-        sender_cache.refresh()
         sleep(60)
 
 
@@ -5590,10 +5505,6 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
 
-    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
-    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
-    api.add_route('/v0/internal/target', InternalTarget())
-
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
         api.add_route('/v0/devices', Devices(mobile_config))
@@ -5619,7 +5530,6 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
-    sender_cache.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
