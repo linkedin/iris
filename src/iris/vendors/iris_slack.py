@@ -52,18 +52,18 @@ class iris_slack(object):
             logger.exception('Slack post request failed')
             raise
 
-    def construct_attachments(self, message):
+    def construct_attachment(self, message):
         # TODO: Verify title, title_link and text.
-        att_json = {
+        return {
             'fallback': self.message_attachments.get('fallback'),
             'pretext': self.message_attachments.get('pretext'),
-            'title': 'Iris incident %r' % message['incident_id'],
+            'title': 'Iris incident %r' % message.get('incident_id'),
             'mrkdwn_in': ['pretext'],
             'attachment_type': 'default',
             'callback_id': message.get('message_id'),
             'color': 'danger',
             'title_link': '%s/%s' % (
-                self.config['iris_incident_url'], message['incident_id']),
+                self.config['iris_incident_url'], message.get('incident_id')),
             'actions': [
                 {
                     'name': 'claim',
@@ -86,19 +86,31 @@ class iris_slack(object):
                 }
             ]
         }
-        return ujson.dumps([att_json])
 
     def get_message_payload(self, message):
         slack_message = {
-            # Display application if exists, otherwise it's an incident tracking message
-            'text': '[%s] %s' % (message.get('application', 'Iris incident'),
-                                 message['body']),
-            'token': self.config['auth_token'],
-            'channel': self.get_destination(message['destination'])
+            'channel': self.get_destination(message['destination']),
+            'text': message['body'],
         }
-        # only add interactive button for incidents
+        # Support complex formatting if body is JSON
+        if message['body'].startswith('{'):
+            arguments = ujson.loads(message['body'])
+            for key in {
+                'blocks', 'attachments',
+                'link_names', 'mrkdwn', 'parse',
+                'reply_broadcast', 'text', 'thread_ts',
+                'unfurl_links', 'unfurl_media'
+            }:
+                if key in arguments:
+                    slack_message[key] = arguments[key]
+        # Always prefix the application name for tracking
+        slack_message['text'] = '[%s] %s' % (message.get('application', 'Iris incident'),
+                                             slack_message.get('text', ''))
+        # For incidents, add the Iris attachments at the end
         if 'incident_id' in message:
-            slack_message['attachments'] = self.construct_attachments(message)
+            slack_message['incident_id'] = message.get('incident_id')
+            slack_message['message_id'] = message.get('message_id')
+            slack_message.setdefault('attachments', []).append(self.construct_attachment(slack_message))
         return slack_message
 
     def get_destination(self, destination):
@@ -111,9 +123,14 @@ class iris_slack(object):
         start = time.time()
         payload = self.get_message_payload(message)
         message_endpoint = self.config['base_url'] + "/chat.postMessage"
+
         try:
             response = requests.post(message_endpoint,
-                                     data=payload,
+                                     headers={
+                                         'Authorization': 'Bearer %s' % self.config['auth_token'],
+                                         'Content-Type': 'application/json'
+                                     },
+                                     data=ujson.dumps(payload),
                                      proxies=self.proxy,
                                      timeout=self.timeout)
             if response.status_code == 200:
@@ -125,8 +142,12 @@ class iris_slack(object):
                     return time.time() - start
                 # If message is invalid:
                 #   {u'ok': False, u'error': u'invalid_arg_name'}
-                logger.error('Received an error from slack api: %s',
-                             data['error'])
+                # if not in the channel, the error is expected so log a warning instead of an error
+                elif data.get('error') == 'not_in_channel':
+                    logger.warning('Iris bot not present in the designated channel %s', message.get('destination'))
+                    return time.time() - start
+                else:
+                    logger.error('Received an error from slack api: %s', data['error'])
             elif response.status_code == 429:
                 # Slack rate limiting. Sleep for a few seconds (chosen randomly to spread load),
                 # then raise error to retry

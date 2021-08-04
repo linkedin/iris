@@ -214,6 +214,7 @@ vendors: []
 #  account_sid: ''
 #  auth_token: ''
 #  twilio_number: ''
+#  application_override_mapping: ''
 #  relay_base_url: ''
 
 ## Hipchat support requires adding a new mode called "hipchat", in iris' mode table
