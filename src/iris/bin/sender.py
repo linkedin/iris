@@ -883,19 +883,32 @@ def set_target_contact(message):
         elif 'category' in message:
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
+            # get user category overrides if they exist
             cursor.execute('''
                 SELECT `mode`.`id`, `mode`.`name` FROM `category_override`
                 JOIN `target` ON `target`.`id` = `category_override`.`user_id`
                 JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
                 WHERE `target`.`name` = %(target)s AND `category_override`.`category_id` = %(category_id)s
-            ''', {'target': message['target'], 'category_id': message['category_id']})
+                ''', {'target': message['target'], 'category_id': message['category_id']})
             override_mode = cursor.fetchone()
             if override_mode:
                 message['mode_id'] = override_mode[0]
                 message['mode'] = override_mode[1]
             else:
-                message['mode_id'] = message['category_mode_id']
-                message['mode'] = message['category_mode']
+                # use app default for category
+                cursor.execute('''
+                SELECT `mode`.`id`, `mode`.`name` FROM `notification_category`
+                JOIN `mode` ON `mode`.`id` = `notification_category`.`mode_id`
+                WHERE `notification_category`.`id` = %(category_id)s
+                ''', {'category_id': message['category_id']})
+                override_mode = cursor.fetchone()
+
+                if override_mode:
+                    message['mode_id'] = override_mode[0]
+                    message['mode'] = override_mode[1]
+                else:
+                    message['mode_id'] = message['category_mode_id']
+                    message['mode'] = message['category_mode']
             cursor.execute('''
                 SELECT `destination` FROM `target_contact`
                 JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
