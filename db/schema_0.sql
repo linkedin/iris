@@ -60,13 +60,15 @@ CREATE TABLE `incident` (
   `current_step` int(11) NOT NULL,
   `active` tinyint(1) NOT NULL,
   `resolved` tinyint(1) unsigned NOT NULL DEFAULT '0',
+  `bucket_id` int(11) DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ix_incident_plan_id` (`plan_id`),
   KEY `ix_incident_updated` (`updated`),
   KEY `ix_incident_owner_id` (`owner_id`),
   KEY `ix_incident_active` (`active`),
   KEY `ix_incident_application_id` (`application_id`),
-  KEY `ix_incident_created` (`created`)
+  KEY `ix_incident_created` (`created`),
+  KEY `ix_incident_bucket_id` (`bucket_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -824,6 +826,28 @@ CREATE TABLE `category_override` (
   CONSTRAINT `category_override_user_id_ibfk` FOREIGN KEY (`user_id`) REFERENCES `user` (`target_id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `category_override_category_id_ibfk` FOREIGN KEY (`category_id`) REFERENCES `notification_category` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `category_override_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `IMP_cluster_members`;
+CREATE TABLE `IMP_cluster_members` (
+  `node_id` varchar(255) NOT NULL,
+  `hostname` varchar(255),
+  `last_modified` datetime,
+  PRIMARY KEY (`node_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `IMP_bucket_assignments`;
+CREATE TABLE `IMP_bucket_assignments` (
+  `node_id` varchar(255) NOT NULL,
+  `bucket_id` int(11) NOT NULL,
+  PRIMARY KEY (`bucket_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `IMP_bucket_changes`;
+CREATE TABLE `IMP_bucket_changes` (
+  `node_id` varchar(255) NOT NULL,
+  `bucket_id` int(11) NOT NULL,
+  PRIMARY KEY (`bucket_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
