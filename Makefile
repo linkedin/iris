@@ -20,10 +20,10 @@ docs:
 	make -C docs html
 
 e2e:
-	py.test -rxs -vv ./test/e2etest.py
+	export IRISPYTEST=True; py.test -rxs -vv ./test/e2etest.py
 
 unit:
-	py.test -vv test
+	export IRISPYTEST=True; py.test -vv test
 
 flake8:
 	flake8 src test setup.py
