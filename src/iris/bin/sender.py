@@ -23,7 +23,7 @@ from iris import metrics
 from uuid import uuid4
 from iris.gmail import Gmail
 from iris import db
-from iris.api import load_config
+from iris.config import load_config
 from iris.utils import sanitize_unicode_dict
 from iris.sender import rpc, cache
 from iris.sender.message import update_message_mode

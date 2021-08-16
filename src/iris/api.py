@@ -5652,18 +5652,17 @@ class SenderHeartbeat():
 
                 # node was not previously a member of this cluster so figure out what nodes to assign to itself
                 cursor.execute(
-                    "INSERT INTO IMP_cluster_members VALUES(%s, %s, NOW())", (node_id, "localhost"))
+                    "INSERT INTO IMP_cluster_members VALUES(%s, %s, NOW())", (node_id, req.remote_addr))
 
                 # node is the first node in the cluster, directly assign all buckets to it
                 if len(cluster_members) == 0:
                     insert_sql = "INSERT INTO IMP_bucket_assignments VALUES"
                     insert_values = []
                     # build bulk insert sql query
+                    insert_sql += ("(%s, %s)," * self.number_of_buckets)[:-1]
                     for i in range(self.number_of_buckets):
-                        insert_sql += "(%s, %s),"
                         insert_values.append(node_id)
                         insert_values.append(i)
-                    insert_sql = insert_sql[:-1]
                     cursor.execute(insert_sql, tuple(insert_values))
                     connection.commit()
 
@@ -5692,8 +5691,7 @@ class SenderHeartbeat():
                             row["node_id"], []).append(row["bucket_id"])
 
                     # how many total buckets does the new node need
-                    required_buckets = math.floor(self.number_of_buckets /
-                                                  (len(cluster_members) + 1))
+                    required_buckets = math.floor(self.number_of_buckets / (len(cluster_members) + 1))
 
                     # go node by node through existing nodes to determine what buckets we are going to take from each
                     for row in cluster_members:
@@ -5777,11 +5775,12 @@ class SenderHeartbeat():
                     cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
                                    (alive_nodes[i]["node_id"], bucket["bucket_id"]))
                     i += 1
-
-                #  delete dead nodes from cluster membership
-                cursor.execute(
-                    "DELETE FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s", self.sender_ttl)
                 connection.commit()
+                #  delete dead nodes from cluster membership
+                dead_node_ids = [node["node_id"] for node in dead_nodes]
+                with db.guarded_session() as session:
+                    session.execute("DELETE FROM IMP_cluster_members WHERE node_id IN :dead_node_ids", {"dead_node_ids": tuple(dead_node_ids)})
+                    session.commit()
 
             if self.zk_debug:
                 cursor.execute("SELECT * FROM IMP_bucket_assignments")
@@ -5881,8 +5880,7 @@ class InternalIncidents():
         cursor.close()
         connection.close()
         incident_ids = []
-        for row in result:
-            incident_ids.append(row["id"])
+        incident_ids = [row["id"] for row in result]
         resp.status = HTTP_200
         resp.body = ujson.dumps(incident_ids)
 
