@@ -5879,7 +5879,6 @@ class InternalIncidents():
         result = cursor.fetchall()
         cursor.close()
         connection.close()
-        incident_ids = []
         incident_ids = [row["id"] for row in result]
         resp.status = HTTP_200
         resp.body = ujson.dumps(incident_ids)
