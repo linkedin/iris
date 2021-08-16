@@ -28,6 +28,7 @@ allowed_text_response_actions = frozenset(['suppress', 'claim'])
 
 
 def generate_bucket_id():
+    # returns random integer value value from 0 to number_of_bucket-1, inclusive.
     bucket_id_max = config.get("iris-message-processor", {}).get("number_of_buckets", 100)
     return randrange(bucket_id_max)
 
