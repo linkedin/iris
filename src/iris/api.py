@@ -767,9 +767,7 @@ class ReqBodyMiddleware(object):
 
 
 class AuthMiddleware(object):
-    def __init__(self, config={}, debug=False):
-
-        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+    def __init__(self, debug=False):
         if debug:
             self.process_resource = self.debug_auth
 
@@ -891,12 +889,6 @@ class AuthMiddleware(object):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
-
-                            # if trying to access internal route ensure that the app is in the allowlist
-                            if hasattr(resource, "internal_allowlist_only"):
-                                if resource.internal_allowlist_only:
-                                    if app_name not in self.allowlisted_apps:
-                                        raise HTTPUnauthorized('This endpoint is only available for internal allowlisted applications', '', [])
                             return
                 # No successful HMACs match, fail auth.
                 if username_header:
@@ -915,8 +907,8 @@ class AuthMiddleware(object):
 
 
 class ACLMiddleware(object):
-    def __init__(self, config={}, debug=False):
-        self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
+    def __init__(self, debug):
+        pass
 
     def process_resource(self, req, resp, resource, params):
         self.process_frontend_routes(req, resource)
@@ -941,10 +933,6 @@ class ACLMiddleware(object):
         # Quickly check the username in the path matches who's logged in
         enforce_user = getattr(resource, 'enforce_user', False)
         app = req.context.get('app')
-
-        # internally allowlisted apps have access to all internal data
-        if req.context.get('app', {}).get('name') in self.allowlisted_apps:
-            return
 
         if not req.context['username']:
             # Check if we need to raise 401s when user must be enforced
@@ -5435,8 +5423,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     cors = CORS(allow_origins_list=allowed_origins)
     api = API(middleware=[
         ReqBodyMiddleware(),
-        AuthMiddleware(config=config, debug=debug),
-        ACLMiddleware(config=config, debug=debug),
+        AuthMiddleware(debug=debug),
+        ACLMiddleware(debug=debug),
         HeaderMiddleware(),
         cors.middleware
     ])
