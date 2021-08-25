@@ -7,15 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 class Coordinator():
-    def __init__(self, is_master, slaves=[]):
-        self.is_master = is_master
-        if is_master:
-            logger.info('I am the master sender')
+    def __init__(self, is_leader, followers=[]):
+        self.is_leader = is_leader
+        if is_leader:
+            logger.info('I am the leader sender')
         else:
-            logger.info('I am a slave sender')
+            logger.info('I am a follower sender')
 
-        self.slaves = cycle((slave['host'], slave['port']) for slave in slaves)
-        self.slave_count = len(slaves)
+        self.followers = cycle((follower['host'], follower['port']) for follower in followers)
+        self.follower_count = len(followers)
 
     def update_forever(self):
         pass
@@ -23,8 +23,8 @@ class Coordinator():
     def leave_cluster(self):
         pass
 
-    def am_i_master(self):
-        return self.is_master
+    def am_i_leader(self):
+        return self.is_leader
 
-    def get_current_master(self):
+    def get_current_leader(self):
         return None
