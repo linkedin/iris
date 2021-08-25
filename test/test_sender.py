@@ -316,14 +316,14 @@ def test_msgpack_handle_sets():
     assert msgpack_handle_sets(set([1, 2, 3, 4])) == [1, 2, 3, 4]
 
 
-def test_generate_follower_message_payload():
+def test_generate_slave_message_payload():
     from iris.sender.rpc import generate_msgpack_message_payload
     data = {
         'ids': set([1, 2, 3, 4])
     }
     result = generate_msgpack_message_payload(data)
     assert msgpack.unpackb(result) == {
-        'endpoint': 'v0/follower_send',
+        'endpoint': 'v0/slave_send',
         'data': {
             'ids': [1, 2, 3, 4]
         }

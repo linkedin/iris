@@ -49,8 +49,8 @@ source_suffix = '.rst'
 # The encoding of source files.
 #source_encoding = 'utf-8-sig'
 
-# The leader toctree document.
-leader_doc = 'index'
+# The master toctree document.
+master_doc = 'index'
 
 # General information about the project.
 project = u'Iris'
@@ -232,7 +232,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (leader_doc, 'Iris.tex', u'Iris Documentation',
+    (master_doc, 'Iris.tex', u'Iris Documentation',
      u'Joe Gillotti, Daniel Wang, Qingping Hou, Saif Ebrahim', 'manual'),
 ]
 
@@ -262,7 +262,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (leader_doc, 'iris', u'Iris Documentation',
+    (master_doc, 'iris', u'Iris Documentation',
      [author], 1)
 ]
 
@@ -276,7 +276,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (leader_doc, 'Iris', u'Iris Documentation',
+    (master_doc, 'Iris', u'Iris Documentation',
      author, 'Iris', 'One line description of project.',
      'Miscellaneous'),
 ]

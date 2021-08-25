@@ -27,10 +27,10 @@ def msgpack_handle_sets(obj):
 
 
 def generate_msgpack_message_payload(message):
-    return msgpack.packb({'endpoint': 'v0/follower_send', 'data': message}, default=msgpack_handle_sets)
+    return msgpack.packb({'endpoint': 'v0/slave_send', 'data': message}, default=msgpack_handle_sets)
 
 
-def send_message_to_follower(message, address):
+def send_message_to_slave(message, address):
     try:
         payload = generate_msgpack_message_payload(message)
     except TypeError:
@@ -173,28 +173,28 @@ def handle_api_notification_request(socket, address, req):
     socket.sendall(msgpack.packb('OK'))
 
 
-def handle_follower_send(socket, address, req):
+def handle_slave_send(socket, address, req):
     message = req['data']
     message_id = message.get('message_id', '?')
 
-    message['to_follower'] = True
+    message['to_slave'] = True
 
     try:
         runtime = send_funcs['message_send_enqueue'](message)
         response = 'OK'
-        access_logger.info('Message (ID %s) from leader %s queued successfully', message_id, address)
+        access_logger.info('Message (ID %s) from master %s queued successfully', message_id, address)
     except Exception:
         response = 'FAIL'
-        logger.exception('Queueing message (ID %s) from leader %s failed.')
-        access_logger.error('Failed queueing message (ID %s) from leader %s: %s', message_id, address, runtime)
-        metrics.incr('follower_message_send_fail_cnt')
+        logger.exception('Queueing message (ID %s) from master %s failed.')
+        access_logger.error('Failed queueing message (ID %s) from master %s: %s', message_id, address, runtime)
+        metrics.incr('slave_message_send_fail_cnt')
 
     socket.sendall(msgpack.packb(response))
 
 
 api_request_handlers = {
     'v0/send': handle_api_notification_request,
-    'v0/follower_send': handle_follower_send
+    'v0/slave_send': handle_slave_send
 }
 
 

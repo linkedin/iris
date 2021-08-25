@@ -28,61 +28,61 @@ class TestFailover():
         except socket.error:
             pytest.skip('Skipping this test as ZK server is not running/reachable.')
 
-        # Create an initial instance which should become leader
+        # Create an initial instance which should become master
         self.instances['c1'] = Coordinator(zk_url, 'testinstance', '1001', True)
         spawn(self.instances['c1'].update_forever)
         sleep(3)
-        assert self.instances['c1'].am_i_leader()
+        assert self.instances['c1'].am_i_master()
 
-        # Make another instance which should become follower
+        # Make another instance which should become slave
         self.instances['c2'] = Coordinator(zk_url, 'testinstance', '1002', True)
         spawn(self.instances['c2'].update_forever)
         sleep(3)
-        assert self.instances['c2'].am_i_leader() is False
+        assert self.instances['c2'].am_i_master() is False
 
-        # Verify it became follower
+        # Verify it became slave
         sleep(3)
-        assert self.instances['c1'].follower_count == 1
-        assert next(self.instances['c1'].followers) == ('testinstance', 1002)
+        assert self.instances['c1'].slave_count == 1
+        assert next(self.instances['c1'].slaves) == ('testinstance', 1002)
 
         # Verify API can see these instances
         self.instances['api'] = Coordinator(zk_url, None, None, False)
-        assert self.instances['api'].get_current_leader() == ('testinstance', 1001)
-        assert ('testinstance', 1002) in self.instances['api'].get_current_followers()
+        assert self.instances['api'].get_current_master() == ('testinstance', 1001)
+        assert ('testinstance', 1002) in self.instances['api'].get_current_slaves()
 
-        # Kill off first leader and see if follower becomes leader with no followers
+        # Kill off first master and see if slave becomes master with no slaves
         self.instances['c1'].leave_cluster()
         sleep(5)
-        assert self.instances['c2'].am_i_leader()
-        assert self.instances['c2'].follower_count == 0
+        assert self.instances['c2'].am_i_master()
+        assert self.instances['c2'].slave_count == 0
 
-        # Start old leader again and see if it becomes a follower
+        # Start old master again and see if it becomes a slave
         self.instances['c1'] = Coordinator(zk_url, 'testinstance', '1001', True)
         spawn(self.instances['c1'].update_forever)
         sleep(5)
-        assert self.instances['c1'].am_i_leader() is False
+        assert self.instances['c1'].am_i_master() is False
 
-        # It should show up as a follower to self.instances['c2'] which is now leader
-        assert self.instances['c2'].am_i_leader()
-        assert self.instances['c2'].follower_count == 1
-        assert next(self.instances['c2'].followers) == ('testinstance', 1001)
+        # It should show up as a slave to self.instances['c2'] which is now master
+        assert self.instances['c2'].am_i_master()
+        assert self.instances['c2'].slave_count == 1
+        assert next(self.instances['c2'].slaves) == ('testinstance', 1001)
 
 
 def test_non_cluster():
     from iris.coordinator.noncluster import Coordinator
 
-    assert Coordinator(False, []).am_i_leader() is False
+    assert Coordinator(False, []).am_i_master() is False
 
-    leader_without_followers = Coordinator(True, [])
-    assert leader_without_followers.am_i_leader()
-    assert leader_without_followers.follower_count == 0
+    master_without_slaves = Coordinator(True, [])
+    assert master_without_slaves.am_i_master()
+    assert master_without_slaves.slave_count == 0
 
-    leader_with_followers = Coordinator(True, [{'host': 'testinstance', 'port': 1001}, {'host': 'testinstance', 'port': 1002}])
-    assert leader_with_followers.am_i_leader()
-    assert leader_with_followers.follower_count == 2
+    master_with_slaves = Coordinator(True, [{'host': 'testinstance', 'port': 1001}, {'host': 'testinstance', 'port': 1002}])
+    assert master_with_slaves.am_i_master()
+    assert master_with_slaves.slave_count == 2
 
-    followers = leader_with_followers.followers
-    assert next(followers) == ('testinstance', 1001)
-    assert next(followers) == ('testinstance', 1002)
-    assert next(followers) == ('testinstance', 1001)
-    assert next(followers) == ('testinstance', 1002)
+    slaves = master_with_slaves.slaves
+    assert next(slaves) == ('testinstance', 1001)
+    assert next(slaves) == ('testinstance', 1002)
+    assert next(slaves) == ('testinstance', 1001)
+    assert next(slaves) == ('testinstance', 1002)
