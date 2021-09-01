@@ -119,7 +119,7 @@ sender:
     #hipchat: 10
 
   ## Default sender to reach out to if we can't determine one programmatically
-  master_sender:
+  leader_sender:
     host: 127.0.0.1
     port: 2321
 
@@ -139,9 +139,9 @@ sender:
   disable_gwatch_renewer: True
 
   ## If you're not using zookeeper, the following determines
-  ## whether this sender is a master and you hard code in
+  ## whether this sender is a leader and you hard code in
   ## slaves to be cycled through
-  is_master: True
+  is_leader: True
 
   # default_rate_def:
   #   # how many messages in a period before they are dropped
