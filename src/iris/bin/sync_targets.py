@@ -710,7 +710,7 @@ def sync_ldap_lists(ldap_settings, engine):
                 try:
                     user_id = session.execute('''SELECT `target_id` FROM `target_contact`
                                                 JOIN `target` ON `target`.`id` = `target_id`
-                                                WHERE `destination` = :name
+                                                WHERE `destination` = :name AND `active` = 1
                                                 AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
                                                 AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', {'name': member}).scalar()
                     if user_id is None:
