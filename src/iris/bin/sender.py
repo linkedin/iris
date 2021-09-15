@@ -236,7 +236,7 @@ message_queue = queue.Queue()
 # Quota object used for rate limiting
 quota = None
 
-# Coordinator object for sender master election
+# Coordinator object for sender leader election
 coordinator = None
 
 # Mode -> [{'greenlet': greenlet, 'kill_set': gevent.Event}]
@@ -265,7 +265,7 @@ default_sender_metrics = {
     'oncall_error': 0, 'role_target_lookup_error': 0, 'target_not_found': 0, 'message_send_cnt': 0,
     'notification_cnt': 0, 'api_request_cnt': 0, 'api_request_timeout_cnt': 0,
     'rpc_message_pass_success_cnt': 0, 'rpc_message_pass_fail_cnt': 0,
-    'slave_message_send_success_cnt': 0, 'slave_message_send_fail_cnt': 0,
+    'follower_message_send_success_cnt': 0, 'follower_message_send_fail_cnt': 0,
     'msg_drop_length_cnt': 0, 'send_queue_gets_cnt': 0, 'send_queue_puts_cnt': 0, 'send_queue_puts_fail_cnt': 0,
     'send_queue_email_size': 0, 'send_queue_im_size': 0, 'send_queue_slack_size': 0, 'send_queue_call_size': 0,
     'send_queue_sms_size': 0, 'send_queue_drop_size': 0, 'new_incidents_cnt': 0, 'workers_respawn_cnt': 0,
@@ -883,19 +883,32 @@ def set_target_contact(message):
         elif 'category' in message:
             connection = db.engine.raw_connection()
             cursor = connection.cursor()
+            # get user category overrides if they exist
             cursor.execute('''
                 SELECT `mode`.`id`, `mode`.`name` FROM `category_override`
                 JOIN `target` ON `target`.`id` = `category_override`.`user_id`
                 JOIN `mode` ON `mode`.`id` = `category_override`.`mode_id`
                 WHERE `target`.`name` = %(target)s AND `category_override`.`category_id` = %(category_id)s
-            ''', {'target': message['target'], 'category_id': message['category_id']})
+                ''', {'target': message['target'], 'category_id': message['category_id']})
             override_mode = cursor.fetchone()
             if override_mode:
                 message['mode_id'] = override_mode[0]
                 message['mode'] = override_mode[1]
             else:
-                message['mode_id'] = message['category_mode_id']
-                message['mode'] = message['category_mode']
+                # use app default for category
+                cursor.execute('''
+                SELECT `mode`.`id`, `mode`.`name` FROM `notification_category`
+                JOIN `mode` ON `mode`.`id` = `notification_category`.`mode_id`
+                WHERE `notification_category`.`id` = %(category_id)s
+                ''', {'category_id': message['category_id']})
+                override_mode = cursor.fetchone()
+
+                if override_mode:
+                    message['mode_id'] = override_mode[0]
+                    message['mode'] = override_mode[1]
+                else:
+                    message['mode_id'] = message['category_mode_id']
+                    message['mode'] = message['category_mode']
             cursor.execute('''
                 SELECT `destination` FROM `target_contact`
                 JOIN `target` ON `target`.`id` = `target_contact`.`target_id`
@@ -1150,19 +1163,19 @@ def mark_message_has_no_contact(message):
 
 
 def distributed_send_message(message, vendor_manager):
-    # If I am the master and this message isn't for a slave, attempt
-    # sending my messages through my slaves.
-    if not message.get('to_slave') and coordinator.am_i_master():
+    # If I am the leader and this message isn't for a follower, attempt
+    # sending my messages through my followers.
+    if not message.get('to_follower') and coordinator.am_i_leader():
         try:
-            if coordinator.slave_count and coordinator.slaves:
-                for i, address in enumerate(coordinator.slaves):
-                    if i >= coordinator.slave_count:
-                        logger.error('Failed using all configured slaves; resorting to local send_message')
+            if coordinator.follower_count and coordinator.followers:
+                for i, address in enumerate(coordinator.followers):
+                    if i >= coordinator.follower_count:
+                        logger.error('Failed using all configured followers; resorting to local send_message')
                         break
-                    if rpc.send_message_to_slave(message, address):
+                    if rpc.send_message_to_follower(message, address):
                         return True, False
         except StopIteration:
-            logger.warning('No more slaves. Sending locally.')
+            logger.warning('No more followers. Sending locally.')
 
     logger.info('Sending message (ID %s) locally', message.get('message_id', '?'))
 
@@ -1202,12 +1215,12 @@ def fetch_and_send_message(send_queue, vendor_manager):
     if 'message_id' not in message:
         message['message_id'] = None
 
-    message_to_slave = message.get('to_slave', False)
+    message_to_follower = message.get('to_follower', False)
 
     drop_mode_id = api_cache.modes.get('drop')
 
     # If this app breaches hard quota, drop message on floor, and update in UI if it has an ID
-    if not is_retry and not message_to_slave and not quota.allow_send(message):
+    if not is_retry and not message_to_follower and not quota.allow_send(message):
         logger.warning('Hard message quota exceeded; Dropping this message on floor: %s', message)
         if message['message_id']:
             spawn(auditlog.message_change,
@@ -1243,7 +1256,7 @@ def fetch_and_send_message(send_queue, vendor_manager):
 
     # Only render this message and validate its body/etc if it's not a retry, in which case this
     # step would have been done before
-    if not is_retry and not message_to_slave:
+    if not is_retry and not message_to_follower:
         render(message)
 
         if message.get('body') is None:
@@ -1304,8 +1317,8 @@ def fetch_and_send_message(send_queue, vendor_manager):
         if message['message_id'] and sent_locally:
             mark_message_as_sent(message)
 
-        if message_to_slave:
-            metrics.incr('slave_message_send_success_cnt')
+        if message_to_follower:
+            metrics.incr('follower_message_send_success_cnt')
 
     else:
         # If we're not successful, try retrying it
@@ -1314,8 +1327,8 @@ def fetch_and_send_message(send_queue, vendor_manager):
         metrics.incr('message_retry_cnt')
         logger.info('Message %s failed. Re-queuing for retry (%s/%s).', message, message['retry_count'], MAX_MESSAGE_RETRIES)
 
-        if message_to_slave:
-            metrics.incr('slave_message_send_fail_cnt')
+        if message_to_follower:
+            metrics.incr('follower_message_send_fail_cnt')
 
     if message['message_id'] and sent_locally:
         update_message_sent_status(message, success)
@@ -1480,8 +1493,8 @@ def gwatch_renewer():
     gmail_config = config['gmail']
     gcli = Gmail(gmail_config, config.get('gmail_proxy'))
     while True:
-        # If we stop being master, bail out of this
-        if coordinator is not None and not coordinator.am_i_master():
+        # If we stop being leader, bail out of this
+        if coordinator is not None and not coordinator.am_i_leader():
             return
 
         logger.info('[-] start gmail watcher loop...')
@@ -1503,8 +1516,8 @@ def gwatch_renewer():
 
 def prune_old_audit_logs_worker():
     while True:
-        # If we stop being master, bail out of this
-        if coordinator is not None and not coordinator.am_i_master():
+        # If we stop being leader, bail out of this
+        if coordinator is not None and not coordinator.am_i_leader():
             return
 
         try:
@@ -1540,7 +1553,7 @@ def sender_shutdown():
         shutdown_started = True
         logger.info('Shutting server..')
 
-    # Immediately release all locks and give up any master status and slave presence
+    # Immediately release all locks and give up any leader status and follower presence
     if coordinator:
         coordinator.leave_cluster()
 
@@ -1653,11 +1666,11 @@ def update_api_cache_worker():
         sleep(60)
 
 
-def log_sender_master():
+def log_sender_leader():
     while True:
-        sender_master = coordinator.get_current_master()
-        if sender_master:
-            logger.info("Current sender master: %s" % sender_master)
+        sender_leader = coordinator.get_current_leader()
+        if sender_leader:
+            logger.info("Current sender leader: %s" % sender_leader)
         sleep(30)
 
 
@@ -1709,10 +1722,10 @@ def init_sender(config):
                                   port=config['sender'].get('port', 2321),
                                   join_cluster=True)
     else:
-        logger.info('ZK cluster info not specified. Using master status from config')
+        logger.info('ZK cluster info not specified. Using leader status from config')
         from iris.coordinator.noncluster import Coordinator
-        coordinator = Coordinator(is_master=config['sender'].get('is_master', True),
-                                  slaves=config['sender'].get('slaves', []))
+        coordinator = Coordinator(is_leader=config['sender'].get('is_leader', True),
+                                  followers=config['sender'].get('followers', []))
 
 
 def main():
@@ -1738,7 +1751,7 @@ def main():
     ))
 
     spawn(coordinator.update_forever)
-    spawn(log_sender_master)
+    spawn(log_sender_leader)
     send_task = spawn(send)
 
     maintain_workers(config)
@@ -1765,9 +1778,9 @@ def main():
         cache.refresh()
         cache.purge()
 
-        # If we're currently a master, ensure our master-greenlets are running
-        # and we're doing the master duties
-        if coordinator.am_i_master():
+        # If we're currently a leader, ensure our leader-greenlets are running
+        # and we're doing the leader duties
+        if coordinator.am_i_leader():
             if not disable_gwatch_renewer and not bool(gwatch_renewer_task):
                 if should_mock_gwatch_renewer:
                     gwatch_renewer_task = spawn(mock_gwatch_renewer)
@@ -1786,20 +1799,20 @@ def main():
                 metrics.incr('task_failure')
                 logger.exception("Exception occured in main loop.")
 
-        # If we're not master, don't do the master tasks and make sure those other
+        # If we're not leader, don't do the leader tasks and make sure those other
         # greenlets are stopped if they're running
         else:
-            logger.info('I am not the master so I am not doing master sender tasks.')
+            logger.info('I am not the leader so I am not doing leader sender tasks.')
 
             # Stop these task greenlets if they're running. Technically this should
-            # never happen because if we're the master, we'll likely only stop being the
-            # master if our process exits, which would kill these greenlets anyway.
+            # never happen because if we're the leader, we'll likely only stop being the
+            # leader if our process exits, which would kill these greenlets anyway.
             if bool(gwatch_renewer_task):
-                logger.info('I am not master anymore so stopping the gwatch renewer')
+                logger.info('I am not leader anymore so stopping the gwatch renewer')
                 gwatch_renewer_task.kill()
 
             if bool(prune_audit_logs_task):
-                logger.info('I am not master anymore so stopping the audit logs worker')
+                logger.info('I am not leader anymore so stopping the audit logs worker')
                 prune_audit_logs_task.kill()
 
         # check status for all background greenlets and respawn if necessary

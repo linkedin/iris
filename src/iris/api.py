@@ -2213,7 +2213,7 @@ class Notifications(object):
                                            port=None,
                                            join_cluster=False)
         else:
-            logger.info('Not using ZK to get senders. Using host %s for master instead.', default_sender_addr)
+            logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
             self.coordinator = None
 
     def on_post(self, req, resp):
@@ -2428,36 +2428,36 @@ class Notifications(object):
 
         message['application'] = req.context['app']['name']
 
-        # If we're using ZK, try that to get master
+        # If we're using ZK, try that to get leader
         if self.coordinator:
             sender_addr = None
             with Timeout(self.timeout, False):
-                sender_addr = self.coordinator.get_current_master()
+                sender_addr = self.coordinator.get_current_leader()
             if sender_addr:
-                logger.debug('Relaying message to current master sender: %s', sender_addr)
+                logger.debug('Relaying message to current leader sender: %s', sender_addr)
             else:
                 sender_addr = self.default_sender_addr
-                logger.error('Failed getting current sender master. Falling back to %s', sender_addr)
+                logger.error('Failed getting current sender leader. Falling back to %s', sender_addr)
         else:
             sender_addr = self.default_sender_addr
 
         s = None
 
-        # First try master
+        # First try leader
         try:
             s = socket.create_connection(sender_addr)
 
-        # Then try slaves
+        # Then try followers
         except Exception:
             if self.coordinator:
-                logger.exception('Failed contacting master (%s). Resorting to slaves.', sender_addr)
-                for slave_address in self.coordinator.get_current_slaves():
+                logger.exception('Failed contacting leader (%s). Resorting to followers.', sender_addr)
+                for follower_address in self.coordinator.get_current_followers():
                     try:
-                        logger.info('Trying slave %s..', slave_address)
-                        s = socket.create_connection(slave_address)
+                        logger.info('Trying follower %s..', follower_address)
+                        s = socket.create_connection(follower_address)
                         break
                     except Exception:
-                        logger.exception('Failed reaching slave %s', slave_address)
+                        logger.exception('Failed reaching follower %s', follower_address)
 
         # If none of that works, bail
         if not s:
@@ -6025,7 +6025,6 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
-    sender_cache.init(config)
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
@@ -6037,14 +6036,14 @@ def get_api(config):
     if config['server'].get('disable_auth'):
         debug = True
 
-    default_master_sender = config['sender'].get('master_sender', config['sender'])
-    default_master_sender_addr = (default_master_sender['host'], default_master_sender['port'])
+    default_leader_sender = config['sender'].get('leader_sender', config['sender'])
+    default_leader_sender_addr = (default_leader_sender['host'], default_leader_sender['port'])
     zk_hosts = config['sender'].get('zookeeper_cluster', False)
     supported_timezones = config.get('supported_timezones', [])
 
-    # all notifications go through master sender for now
+    # all notifications go through leader sender for now
     app = construct_falcon_api(
-        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_master_sender_addr, supported_timezones, config)
+        debug, healthcheck_path, allowed_origins, iris_sender_app, zk_hosts, default_leader_sender_addr, supported_timezones, config)
 
     # Need to call this after all routes have been created
     app = ui.init(config, app)
