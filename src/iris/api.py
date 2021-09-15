@@ -21,7 +21,7 @@ from contextlib import ExitStack
 from kazoo.client import KazooClient
 from urllib.parse import parse_qs
 import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTP_400, HTTPBadRequest,
+from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
                     HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
                     HTTPInternalServerError, API)
 from falcon_cors import CORS
@@ -37,10 +37,10 @@ from . import utils
 from . import cache
 from . import ui
 from . import app_stats
+from .role_lookup import get_role_lookups
 from .config import load_config
 from iris.vendors.iris_slack import iris_slack
 from iris.role_lookup import IrisRoleLookupException
-from iris.sender import cache as sender_cache
 from iris.sender import auditlog
 from iris.bin.sender import set_target_contact, render
 from iris.utils import sanitize_unicode_dict
@@ -5432,6 +5432,9 @@ class InternalBuildMessages():
     allow_read_no_auth = False
     internal_allowlist_only = True
 
+    def __init__(self, config):
+        self.cfg = config
+
     def on_get(self, req, resp):
         notification = ujson.loads(req.context['body'])
         if 'application' not in notification:
@@ -5474,14 +5477,14 @@ class InternalBuildMessages():
                                 notification['destination'].append(target)
                             has_literal_target = True
                         else:
-                            expanded = cache.targets_for_role(role, target)
-                            expanded_targets += [{'target': e, 'bcc': bcc} for e in expanded]
+                            names = direct_lookup(self.cfg, role, target)
+                            expanded_targets += [{'target': e, 'bcc': bcc} for e in names]
                     except IrisRoleLookupException:
                         # Maintain best-effort delivery for remaining targets if one fails to resolve
                         continue
             else:
                 try:
-                    expanded_targets = sender_cache.targets_for_role(role, target)
+                    expanded_targets = direct_lookup(self.cfg, role, target)
                 except IrisRoleLookupException:
                     expanded_targets = None
             if not expanded_targets and not has_literal_target:
@@ -5587,20 +5590,16 @@ class InternalTarget():
     allow_read_no_auth = False
     internal_allowlist_only = True
 
+    def __init__(self, config):
+        self.cfg = config
+
     def on_get(self, req, resp):
 
         role = req.get_param('role', required=True)
         target = req.get_param('target', required=True)
 
         payload = {"error": None, "users": {}}
-        try:
-            names = sender_cache.targets_for_role(role, target)
-        except IrisRoleLookupException as e:
-            names = None
-            payload['error'] = str(e)
-            resp.status = HTTP_400
-            resp.body = ujson.dumps(payload)
-            return
+        names = direct_lookup(self.cfg, role, target)
 
         for username in names:
             user_data = get_user_details(username)
@@ -5608,6 +5607,17 @@ class InternalTarget():
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
+
+
+def direct_lookup(config, role, target):
+    targets = None
+    for role_lookup in get_role_lookups(config):
+        targets = role_lookup.get(role, target)
+        if targets is not None:
+            break
+        else:
+            targets = []
+    return targets
 
 
 class SenderHeartbeat():
@@ -5908,8 +5918,6 @@ def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
         cache.init()
-        sender_cache.purge()
-        sender_cache.refresh()
         sleep(60)
 
 
@@ -5995,8 +6003,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
     api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
-    api.add_route('/v0/internal/target', InternalTarget())
-    api.add_route('/v0/internal/build_message', InternalBuildMessages())
+    api.add_route('/v0/internal/target', InternalTarget(config))
+    api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents())
 
