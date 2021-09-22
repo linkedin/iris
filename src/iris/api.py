@@ -37,6 +37,7 @@ from . import utils
 from . import cache
 from . import ui
 from . import app_stats
+from . import client
 from .role_lookup import get_role_lookups
 from .config import load_config
 from iris.vendors.iris_slack import iris_slack
@@ -2203,9 +2204,9 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, zk_hosts, default_sender_addr, timeout):
+    def __init__(self, zk_hosts, default_sender_addr, config):
         self.default_sender_addr = default_sender_addr
-        self.timeout = timeout
+        self.timeout = config.get('zookeeper_timeout', 1)
         if zk_hosts:
             from iris.coordinator.kazoo import Coordinator
             self.coordinator = Coordinator(zk_hosts=zk_hosts,
@@ -2215,6 +2216,16 @@ class Notifications(object):
         else:
             logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
             self.coordinator = None
+
+        # if external sender is enabled forward notifications to that sender instead
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = not config['server'].get('disable_auth', False)
 
     def on_post(self, req, resp):
         '''
@@ -2427,6 +2438,19 @@ class Notifications(object):
         utils.sanitize_unicode_dict(message)
 
         message['application'] = req.context['app']['name']
+
+        # if external sender is enabled send notification requests there
+        if self.external_sender_enabled:
+            retries = 0
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            while retries < 3:
+                retries += 1
+                r = external_sender_client.post('notification', json=message, verify=self.verify)
+                if r.ok:
+                    resp.status = HTTP_200
+                    return
+            resp.status = HTTP_503
+            return
 
         # If we're using ZK, try that to get leader
         if self.coordinator:
@@ -5525,7 +5549,14 @@ class InternalBuildMessages():
 
         messages = []
         for notification in notifications:
-            message = set_target_contact(notification)[1]
+            success = False
+            try:
+                success, message = set_target_contact(notification)
+            except (ValueError, TypeError):
+                success = False
+            if not success:
+                logger.warning('Dropping OOB message, could not resolve target contacts %s' % ujson.dumps(notification))
+                continue
             message = render(message)
             messages.append(message)
         resp.status = HTTP_200
@@ -5906,12 +5937,16 @@ class InternalIncidents():
         if len(body['incident_ids']) < 1:
             raise HTTPBadRequest('incident_ids list cannot be empty')
 
-        with db.guarded_session() as session:
-            print(tuple(body['incident_ids']))
-            incidents = session.execute('SELECT * FROM `incident` WHERE `active` = 1 AND `id` IN :incident_ids', {'incident_ids': tuple(body['incident_ids'])}).fetchall()
-        session.close()
+        query = incident_query % ', '.join(incident_columns[f] for f in incident_columns)
+        query += ' WHERE `incident`.`active` = 1 AND `incident`.`id` IN %s'
+        sql_values = [tuple(body['incident_ids'])]
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.ss_dict_cursor)
+        cursor.execute(query, sql_values)
         resp.status = HTTP_200
-        resp.body = ujson.dumps(incidents)
+        resp.body = ujson.dumps(stream_incidents_with_context(cursor, False))
+        cursor.close()
+        connection.close()
 
 
 def update_cache_worker():
@@ -5952,7 +5987,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
     api.add_route('/v0/messages', Messages())
 
-    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config.get('zookeeper_timeout', 1)))
+    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config))
 
     api.add_route('/v0/targets/{target_type}', Target())
     api.add_route('/v0/targets', Targets())

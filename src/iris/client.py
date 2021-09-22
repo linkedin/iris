@@ -24,7 +24,7 @@ class IrisAuth(requests.auth.AuthBase):
         path = request.path_url.encode('utf8')
         method = request.method.encode('utf8')
         body = request.body or b''
-        window = str(int(time.time()) // 5).encode('utf8')
+        window = str(int(time.time()) // 30).encode('utf8')
         HMAC.update(b'%s %s %s %s' % (window, method, path, body))
 
         digest = base64.urlsafe_b64encode(HMAC.digest())

@@ -926,7 +926,10 @@ def set_target_contact(message):
             # message triggered by incident will only have priority
             result, message = set_target_contact_by_priority(message)
         if result:
-            message = cache.target_reprioritization(message)
+            if cache.target_reprioritization is None:
+                message = cache.TargetReprioritization(db.engine)(message)
+            else:
+                message = cache.target_reprioritization(message)
         else:
             logger.warning('target does not have mode %r', message)
             result, message = set_target_fallback_mode(message)
@@ -963,7 +966,11 @@ def render(message):
             message['body'] = ''
         error = None
         try:
-            template = cache.templates[message['template']]
+            template = None
+            if cache.templates is None:
+                template = cache.Templates(db.engine)[message['template']]
+            else:
+                template = cache.templates[message['template']]
             try:
                 application_template = template[message['application']]
                 try:
