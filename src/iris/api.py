@@ -5559,6 +5559,27 @@ class InternalBuildMessages():
                 continue
             message = render(message)
             messages.append(message)
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        # Find custom sender address for application, currently only emails are supported
+        cursor.execute('''
+            SELECT `sender_address` FROM `application_custom_sender_address`
+            JOIN `application` on `application_custom_sender_address`.`application_id` = `application`.`id`
+            JOIN `mode` on `application_custom_sender_address`.`mode_id` = `mode`.`id`
+            WHERE `application`.`name` = %s AND `mode`.`name` = %s
+            ''', (notification['application'], 'email'))
+        sender_address = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if sender_address is not None:
+            for idx, message in enumerate(messages):
+                # add sender address as message attribute to emails
+                if message['mode'] == 'email':
+                    message['sender_address'] = sender_address[0]
+                    messages[idx] = message
+
         resp.status = HTTP_200
         resp.body = ujson.dumps(messages)
 
