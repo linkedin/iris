@@ -5559,6 +5559,27 @@ class InternalBuildMessages():
                 continue
             message = render(message)
             messages.append(message)
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        # Find custom sender address for application, currently only emails are supported
+        cursor.execute('''
+            SELECT `sender_address` FROM `application_custom_sender_address`
+            JOIN `application` on `application_custom_sender_address`.`application_id` = `application`.`id`
+            JOIN `mode` on `application_custom_sender_address`.`mode_id` = `mode`.`id`
+            WHERE `application`.`name` = %s AND `mode`.`name` = %s
+            ''', (notification['application'], 'email'))
+        sender_address = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if sender_address is not None:
+            for idx, message in enumerate(messages):
+                # add sender address as message attribute to emails
+                if message['mode'] == 'email':
+                    message['sender_address'] = sender_address[0]
+                    messages[idx] = message
+
         resp.status = HTTP_200
         resp.body = ujson.dumps(messages)
 
@@ -5949,6 +5970,22 @@ class InternalIncidents():
         connection.close()
 
 
+class PlanAggregationSettings():
+    allow_read_no_auth = True
+    internal_allowlist_only = False
+
+    def on_get(self, req, resp):
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('SELECT `plan`.`id`, `plan`.`name`, `plan`.`threshold_window`, `plan`.`threshold_count`, `plan`.`aggregation_window`, `plan`.`aggregation_reset` FROM `plan` INNER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`')
+        result = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(result)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -6039,6 +6076,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
     api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
     api.add_route('/v0/internal/target', InternalTarget(config))
+    api.add_route('/v0/internal/plan_aggregation_settings', PlanAggregationSettings())
     api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents())
