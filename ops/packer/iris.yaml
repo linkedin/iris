@@ -45,9 +45,10 @@ builders:
       version: '{{ user `app_version` }}'
 
   - type: "docker"
-    image: "ubuntu:16.04"
+    image: "ubuntu:20.04"
     changes:
       - 'EXPOSE 16649'
+      - "ENTRYPOINT []"
       - 'CMD ["sudo", "-EHu", "iris", "bash", "-c", "source /home/iris/env/bin/activate && python /home/iris/entrypoint.py"]'
     commit: True
 
@@ -64,6 +65,10 @@ provisioners:
   - type: "file"
     source: "../../setup.py"
     destination: "/tmp/repo/setup.py"
+  
+  - type: "file"
+    source: "../../README.md"
+    destination: "/tmp/repo/README.md"
 
   - type: "file"
     source: "../../db"
@@ -80,7 +85,7 @@ provisioners:
   - type: "shell"
     only: ["docker"]
     inline:
-      - "apt-get update && apt-get -y install sudo"
+      - "apt update && apt -y install sudo"
 
   - type: "shell"
     only: ["amazon-ebs"]
@@ -89,7 +94,8 @@ provisioners:
 
   - type: "shell"
     inline:
-      - 'sudo apt-get -y install curl python-pip uwsgi unzip virtualenv sudo python-dev libyaml-dev libsasl2-dev libldap2-dev nginx uwsgi-plugin-python uwsgi-plugin-gevent-python mysql-client && sudo rm -rf /var/cache/apt/archives/*'
+      # for ubuntu:20.04, Python 3.8 is used
+      - 'DEBIAN_FRONTEND=noninteractive sudo -E apt -y install python3 python3-pip python3-virtualenv && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install libldap2-dev libsasl2-dev && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install nginx uwsgi uwsgi-plugin-python3 uwsgi-plugin-gevent-python3 && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install mysql-client && sudo rm -rf /var/cache/apt/archives/*'
       - sudo useradd -m -s /bin/bash iris
       - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
       - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run
