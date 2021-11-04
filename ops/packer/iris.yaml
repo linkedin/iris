@@ -94,7 +94,8 @@ provisioners:
 
   - type: "shell"
     inline:
-      - 'sudo apt -y install python3 python3-pip python3-virtualenv && sudo apt -y install libldap2-dev libsasl2-dev && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install nginx uwsgi uwsgi-plugin-python3 uwsgi-plugin-gevent-python3 && sudo rm -rf /var/cache/apt/archives/*'
+      # for ubuntu:20.04, Python 3.8 is used
+      - 'DEBIAN_FRONTEND=noninteractive sudo -E apt -y install python3 python3-pip python3-virtualenv && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install libldap2-dev libsasl2-dev && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install nginx uwsgi uwsgi-plugin-python3 uwsgi-plugin-gevent-python3 && DEBIAN_FRONTEND=noninteractive sudo -E apt -y install mysql-client && sudo rm -rf /var/cache/apt/archives/*'
       - sudo useradd -m -s /bin/bash iris
       - sudo chown -R iris:iris /home/iris /var/log/nginx /var/lib/nginx
       - sudo -Hu iris mkdir -p /home/iris/var/log/uwsgi /home/iris/var/log/nginx /home/iris/var/run

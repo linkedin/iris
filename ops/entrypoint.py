@@ -88,7 +88,9 @@ def main():
             initialize_mysql_schema(mysql_config)
 
     os.execv('/usr/bin/uwsgi',
-             ['', '--yaml', os.environ.get('UWSGI_CONFIG', '/home/iris/daemons/uwsgi.yaml:prod')])
+             # first array element is ARGV0, since python 3.6 it cannot be empty, using space
+             # https://bugs.python.org/issue28732
+             [' ', '--yaml', os.environ.get('UWSGI_CONFIG', '/home/iris/daemons/uwsgi.yaml:prod')])
 
 
 if __name__ == '__main__':
