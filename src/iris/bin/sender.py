@@ -931,6 +931,19 @@ def set_target_contact(message):
         else:
             logger.warning('target does not have mode %r', message)
             result, message = set_target_fallback_mode(message)
+
+        # include any device ids for the target to send optional push notifications
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        # get user category overrides if they exist
+        cursor.execute('''
+            SELECT `device`.`registration_id` FROM `device`
+            JOIN `target` ON `target`.`id` = `device`.`user_id`
+            WHERE `target`.`name` = %(target)s''', {'target': message['target']})
+        device_ids = cursor.fetchall()
+        message['device_ids'] = [i[0] for i in device_ids]
+        cursor.close()
+        connection.close()
         return (result, message)
     except (ValueError, TypeError):
         logger.exception('target does not have mode %r', message)
