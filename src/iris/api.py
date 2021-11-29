@@ -5462,21 +5462,41 @@ class InternalBuildMessages():
     def on_get(self, req, resp):
         notification = ujson.loads(req.context['body'])
         if 'application' not in notification:
-            logger.warning('Dropping OOB message due to missing application key')
+            logger.warning('Failed to build due to missing application key')
             raise HTTPBadRequest('INVALID application')
+
+        if "incident_id" in notification and "dynamic_index" in notification:
+            # check if plan is dynamic and retrieve role & target for incident
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+
+            # resolve dynamic role and target
+            cursor.execute('''
+                SELECT `target_role`.`name` as role, `target`.`name` as target FROM `dynamic_plan_map`
+                JOIN `target` ON `target`.`id` = `dynamic_plan_map`.`target_id`
+                JOIN `target_role` ON `dynamic_plan_map`.`role_id` = `target_role`.`id`
+                WHERE `dynamic_plan_map`.`incident_id` = %s AND `dynamic_plan_map`.`dynamic_index` = %s
+                ''', (notification["incident_id"], notification["dynamic_index"]))
+            result = cursor.fetchone()
+            if result is not None:
+                dynamic_role, dynamic_target = result
+                notification['target'] = dynamic_target
+                notification['role'] = dynamic_role
+            cursor.close()
+            conn.close()
 
         notification['subject'] = '[%s] %s' % (notification['application'],
                                                notification.get('subject', ''))
         target_list = notification.get('target_list')
         role = notification.get('role')
         if not role and not target_list:
-            logger.warning('Dropping OOB message with invalid role "%s" from app %s',
+            logger.warning('Failed to build message with invalid role "%s" from app %s',
                            role, notification['application'])
             raise HTTPBadRequest('INVALID role')
 
         target = notification.get('target')
         if not (target or target_list):
-            logger.warning('Dropping OOB message with invalid target "%s" from app %s',
+            logger.warning('Failed to build message with invalid target "%s" from app %s',
                            target, notification['application'])
             raise HTTPBadRequest('INVALID target')
         expanded_targets = None
@@ -5512,7 +5532,7 @@ class InternalBuildMessages():
                 except IrisRoleLookupException:
                     expanded_targets = None
             if not expanded_targets and not has_literal_target:
-                logger.warning('Dropping OOB message with invalid role:target "%s:%s" from app %s',
+                logger.warning('Failed to build with invalid role:target "%s:%s" from app %s',
                                role, target, notification['application'])
                 raise HTTPBadRequest('INVALID role:target')
 
@@ -5522,7 +5542,7 @@ class InternalBuildMessages():
         # needed iris key.
         if 'template' in notification:
             if 'context' not in notification:
-                logger.warning('Dropping OOB message due to missing context from app %s',
+                logger.warning('Failed to build due to missing context from app %s',
                                notification['application'])
                 raise HTTPBadRequest('INVALID context')
             else:
@@ -5530,7 +5550,7 @@ class InternalBuildMessages():
                 notification['context']['iris'] = {}
         elif 'email_html' in notification:
             if not isinstance(notification['email_html'], str):
-                logger.warning('Dropping OOB message with invalid email_html from app %s: %s',
+                logger.warning('Failed to build with invalid email_html from app %s: %s',
                                notification['application'], notification['email_html'])
                 raise HTTPBadRequest('INVALID email_html')
 
@@ -5555,7 +5575,7 @@ class InternalBuildMessages():
             except (ValueError, TypeError):
                 success = False
             if not success:
-                logger.warning('Dropping OOB message, could not resolve target contacts %s' % ujson.dumps(notification))
+                logger.warning('Failed to build, could not resolve target contacts %s' % ujson.dumps(notification))
                 continue
             message = render(message)
             messages.append(message)
@@ -5883,7 +5903,6 @@ class SenderHeartbeat():
             zk.close()
 
         duration = datetime.datetime.now() - start
-        print("%s time taken: %s", (node_id, duration.total_seconds()))
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
