@@ -5731,8 +5731,6 @@ class SenderHeartbeat():
         self.zk_debug = config.get("zk_debug", True)
 
     def on_get(self, req, resp, node_id):
-
-        start = datetime.datetime.now()
         payload = {}
 
         # configure sql client
@@ -5901,8 +5899,6 @@ class SenderHeartbeat():
         if not self.zk_debug:
             zk.stop()
             zk.close()
-
-        duration = datetime.datetime.now() - start
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
