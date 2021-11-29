@@ -5580,6 +5580,32 @@ class InternalBuildMessages():
                     message['sender_address'] = sender_address[0]
                     messages[idx] = message
 
+        if notification.get('multi-recipient'):
+            # if multirecipient separate into multiple messages
+            # TODO: rewrite target expansion to preserve proper multirecipient target->destination relationship, for now format messages like literal_target role
+            split_msgs = []
+            multi_msg = messages[0]
+            for dest in multi_msg["destination"]:
+                # copy message and format as a single message
+                individual_msg = multi_msg.copy()
+                del individual_msg["destination"]
+                del individual_msg["bcc_destination"]
+                del individual_msg["target_list"]
+                individual_msg["destination"] = dest
+                individual_msg["target"] = dest
+                split_msgs.append(individual_msg)
+            for bcc_dest in multi_msg["bcc_destination"]:
+                # copy message and format as a single message
+                individual_msg = multi_msg.copy()
+                del individual_msg["destination"]
+                del individual_msg["bcc_destination"]
+                del individual_msg["target_list"]
+                individual_msg["bcc_destination"] = bcc_dest
+                individual_msg["target"] = bcc_dest
+                split_msgs.append(individual_msg)
+            # replace the multi-message formatted list with the individual formatted messages list
+            messages = split_msgs
+
         resp.status = HTTP_200
         resp.body = ujson.dumps(messages)
 
