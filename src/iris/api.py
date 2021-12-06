@@ -1872,7 +1872,7 @@ class Incident(object):
         if incident:
             # if external sender fetch message and audit logs from it instead
             if self.external_sender_enabled:
-                # get message changelogs
+                # get messages for incident
                 external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
                 r = external_sender_client.get('messages?incident_id=' + str(incident['id']), verify=self.verify)
                 if r.ok:
