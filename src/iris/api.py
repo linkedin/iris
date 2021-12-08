@@ -1489,6 +1489,15 @@ class Incidents(object):
             self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
         else:
             self.custom_incident_handler_module = None
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = not config['server'].get('disable_auth', False)
 
     def on_get(self, req, resp):
         '''
@@ -1554,19 +1563,40 @@ class Incidents(object):
         req.params.pop('target', None)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
-        if target:
+        if target and not self.external_sender_enabled:
             query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
-        if target:
+        if target and not self.external_sender_enabled:
             where.append('''`message`.`target_id` IN
                 (SELECT `id`
                 FROM `target`
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
+        if self.external_sender_enabled and target:
+            message_query_string = 'messages?limit=500'
+            if req.params.get('created__ge'):
+                message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
+            if req.params.get('created__le'):
+                message_query_string += '&sent__le=' + str(req.params.get('created__le'))
+            for t in target:
+                message_query_string = message_query_string + '&target=' + str(t)
+            # get messages for incident
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.get(message_query_string, verify=self.verify)
+            if r.ok:
+                incident_IDs = []
+                messages = r.json()
+                if len(messages) > 0:
+                    for message in messages:
+                        incident_IDs.append(message.get('incident_id'))
+                    where.append('''`incident`.`id` IN %s''')
+                    sql_values.append(tuple(incident_IDs))
+            else:
+                logger.error('failed retrieving messages from external sender')
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
