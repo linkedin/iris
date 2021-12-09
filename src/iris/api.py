@@ -1596,7 +1596,7 @@ class Incidents(object):
                     where.append('''`incident`.`id` IN %s''')
                     sql_values.append(tuple(incident_IDs))
             else:
-                logger.error('failed retrieving messages from external sender')
+                logger.error('failed retrieving messages from external sender %s', r.text)
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
@@ -1908,7 +1908,7 @@ class Incident(object):
                 if r.ok:
                     incident['steps'] = r.json()
                 else:
-                    logger.error("failed retrieving messages from external sender")
+                    logger.error("failed retrieving messages from external sender: %s", r.text)
             else:
                 cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
                 incident['steps'] = cursor.fetchall()
@@ -2601,6 +2601,7 @@ class Notifications(object):
                 if r.ok:
                     resp.status = HTTP_200
                     return
+            logger.error("failed posting notification via external sender: %s", r.text)
             resp.status = HTTP_503
             return
 
@@ -4737,6 +4738,17 @@ class ResponseSlack(ResponseMixin):
 class TwilioDeliveryUpdate(object):
     allow_read_no_auth = False
 
+    def __init__(self, config):
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = not config['server'].get('disable_auth', False)
+
     def on_post(self, req, resp):
         post_dict = falcon.uri.parse_query_string(req.context['body'].decode('utf-8'))
 
@@ -4748,6 +4760,21 @@ class TwilioDeliveryUpdate(object):
             raise HTTPBadRequest('Invalid keys in payload')
 
         affected = False
+        # if external sender is enabled send an api to update it there instead
+        if self.external_sender_enabled:
+            payload = {
+                'status': status,
+                'vendor_identifier': sid
+            }
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.post('message_status', json=payload, verify=self.verify)
+            if r.ok:
+                resp.status = HTTP_200
+                return
+            logger.error("failed updating message status via external sender: %s", r.text)
+            resp.status = str(r.status_code)
+            return
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
         try:
@@ -6258,7 +6285,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
     api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
     api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
-    api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
+    api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate(config))
 
     api.add_route('/v0/categories', NotificationCategories())
     api.add_route('/v0/categories/{application}', NotificationCategories())
