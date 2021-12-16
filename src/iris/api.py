@@ -4525,7 +4525,7 @@ def process_email_response(req):
     subject = email_headers.get('Subject')
     source = email_headers.get('From')
     if not source:
-        return (None, None, None)
+        return (None, None, None, 'no source found')
     to = email_headers.get('To', [])
     # 'To' will either be string of single recipient or list of several
     if isinstance(to, str):
@@ -4556,9 +4556,7 @@ def process_email_response(req):
                     logger.warning(('Not creating incident for email %s as this '
                                     'is an email reply, rather than a fresh email.'),
                                    to)
-                    resp.status = HTTP_204
-                    resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
-                    return (None, None, None)
+                    return (None, None, None, 'Not created (email reply not fresh email)')
 
                 app_template_count = session.execute('''
                     SELECT EXISTS (
@@ -4577,10 +4575,7 @@ def process_email_response(req):
                     logger.warning(('Not creating incident for email %s as no template '
                                     'actions for this app.'),
                                    to)
-                    resp.status = HTTP_204
-                    resp.set_header('X-IRIS-INCIDENT',
-                                    'Not created (no template actions for this app)')
-                    return (None, None, None)
+                    return (None, None, None, 'Not created (no template actions for this app)')
 
                 incident_info = {
                     'application_id': email_check_result['application_id'],
@@ -4596,22 +4591,20 @@ def process_email_response(req):
                     incident_info).lastrowid
                 session.commit()
                 session.close()
-                resp.status = HTTP_204
-                # Pass the new incident id back through a header so we can test this
-                resp.set_header('X-IRIS-INCIDENT', str(incident_id))
-                return (None, None, None)
+                return (None, None, None, str(incident_id))
 
             session.close()
 
     # only parse first line of email content for now
     first_line = content.split('\n', 1)[0].strip()
-    return (first_line, subject, source)
+    return (first_line, subject, source, 'no incident created')
 
 
 class ResponseEmail(ResponseMixin):
     def on_post(self, req, resp):
 
-        first_line, subject, source = process_email_response(req)
+        first_line, subject, source, header = process_email_response(req)
+        resp.set_header('X-IRIS-INCIDENT', header)
         if source is None:
             resp.status = HTTP_204
             return
@@ -4886,8 +4879,8 @@ class ResponseSlackExternal(object):
             return
         target = utils.lookup_username_from_contact(self.mode, source)
         if not target:
-            logger.error('Failed resolving %s:%s to target name', mode, source)
-            return ('Failed resolving %s:%s to target name', mode, source)
+            logger.error('Failed resolving %s:%s to target name', self.mode, source)
+            return ('Failed resolving %s:%s to target name', self.mode, source)
         if incident_id is None or target is None:
             raise HTTPBadRequest('Missing incident_id or target')
         utils.claim_incident(incident_id, target)
@@ -4909,7 +4902,8 @@ class ResponseEmailExternal(object):
         self.mode = mode
 
     def on_post(self, req, resp):
-        first_line, subject, source = process_email_response(req)
+        first_line, subject, source, header = process_email_response(req)
+        resp.set_header('X-IRIS-INCIDENT', header)
         if source is None:
             resp.status = HTTP_204
             return
