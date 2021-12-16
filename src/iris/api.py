@@ -4519,94 +4519,102 @@ class ResponseMixin(object):
             return app, resp
 
 
+def process_email_response(req):
+    gmail_params = ujson.loads(req.context['body'])
+    email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
+    subject = email_headers.get('Subject')
+    source = email_headers.get('From')
+    if not source:
+        return (None, None, None)
+    to = email_headers.get('To', [])
+    # 'To' will either be string of single recipient or list of several
+    if isinstance(to, str):
+        to = [to]
+    # source is in the format of "First Last <user@email.com>",
+    # but we only want the email part
+    source = source.split(' ')[-1].strip('<>')
+    content = gmail_params['body'].strip()
+
+    # Some people want to use emails to create iris incidents. Facilitate this.
+    if to:
+        to = [t.split(' ')[-1].strip('<>') for t in to]
+        with db.guarded_session() as session:
+            email_check_result = session.execute(
+                '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                    FROM `incident_emails`
+                    JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
+                    WHERE `email` IN :email
+                    AND `email` NOT IN (
+                        SELECT `destination`
+                        FROM `target_contact`
+                        WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                    )''',
+                {'email': to}).fetchone()
+            # Only create incident for first email match
+            if email_check_result:
+                if 'In-Reply-To' in email_headers:
+                    logger.warning(('Not creating incident for email %s as this '
+                                    'is an email reply, rather than a fresh email.'),
+                                   to)
+                    resp.status = HTTP_204
+                    resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
+                    return (None, None, None)
+
+                app_template_count = session.execute('''
+                    SELECT EXISTS (
+                        SELECT 1 FROM
+                        `plan_notification`
+                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                        WHERE `plan_notification`.`plan_id` = :plan_id
+                        AND `template_content`.`application_id` = :app_id
+                    )
+                ''', {'app_id': email_check_result['application_id'],
+                      'plan_id': email_check_result['plan_id']}).scalar()
+
+                if not app_template_count:
+                    session.close()
+                    logger.warning(('Not creating incident for email %s as no template '
+                                    'actions for this app.'),
+                                   to)
+                    resp.status = HTTP_204
+                    resp.set_header('X-IRIS-INCIDENT',
+                                    'Not created (no template actions for this app)')
+                    return (None, None, None)
+
+                incident_info = {
+                    'application_id': email_check_result['application_id'],
+                    'created': datetime.datetime.utcnow(),
+                    'plan_id': email_check_result['plan_id'],
+                    'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source}),
+                    'bucket_id': utils.generate_bucket_id()
+                }
+                incident_id = session.execute(
+                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                            `current_step`, `active`, `application_id`, `bucket_id`)
+                    VALUES (:plan_id, :created, :context, 0, TRUE, :application_id, :bucket_id) ''',
+                    incident_info).lastrowid
+                session.commit()
+                session.close()
+                resp.status = HTTP_204
+                # Pass the new incident id back through a header so we can test this
+                resp.set_header('X-IRIS-INCIDENT', str(incident_id))
+                return (None, None, None)
+
+            session.close()
+
+    # only parse first line of email content for now
+    first_line = content.split('\n', 1)[0].strip()
+    return (first_line, subject, source)
+
+
 class ResponseEmail(ResponseMixin):
     def on_post(self, req, resp):
-        gmail_params = ujson.loads(req.context['body'])
-        email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
-        subject = email_headers.get('Subject')
-        source = email_headers.get('From')
-        if not source:
-            msg = 'No source found in headers: %s' % gmail_params['headers']
-            raise HTTPBadRequest('Missing source', msg)
-        to = email_headers.get('To', [])
-        # 'To' will either be string of single recipient or list of several
-        if isinstance(to, str):
-            to = [to]
-        # source is in the format of "First Last <user@email.com>",
-        # but we only want the email part
-        source = source.split(' ')[-1].strip('<>')
-        content = gmail_params['body'].strip()
 
-        # Some people want to use emails to create iris incidents. Facilitate this.
-        if to:
-            to = [t.split(' ')[-1].strip('<>') for t in to]
-            with db.guarded_session() as session:
-                email_check_result = session.execute(
-                    '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
-                       FROM `incident_emails`
-                       JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                       WHERE `email` IN :email
-                       AND `email` NOT IN (
-                           SELECT `destination`
-                           FROM `target_contact`
-                           WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                       )''',
-                    {'email': to}).fetchone()
-                # Only create incident for first email match
-                if email_check_result:
-                    if 'In-Reply-To' in email_headers:
-                        logger.warning(('Not creating incident for email %s as this '
-                                        'is an email reply, rather than a fresh email.'),
-                                       to)
-                        resp.status = HTTP_204
-                        resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
-                        return
-
-                    app_template_count = session.execute('''
-                        SELECT EXISTS (
-                            SELECT 1 FROM
-                            `plan_notification`
-                            JOIN `template` ON `template`.`name` = `plan_notification`.`template`
-                            JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
-                            WHERE `plan_notification`.`plan_id` = :plan_id
-                            AND `template_content`.`application_id` = :app_id
-                        )
-                    ''', {'app_id': email_check_result['application_id'],
-                          'plan_id': email_check_result['plan_id']}).scalar()
-
-                    if not app_template_count:
-                        session.close()
-                        logger.warning(('Not creating incident for email %s as no template '
-                                        'actions for this app.'),
-                                       to)
-                        resp.status = HTTP_204
-                        resp.set_header('X-IRIS-INCIDENT',
-                                        'Not created (no template actions for this app)')
-                        return
-
-                    incident_info = {
-                        'application_id': email_check_result['application_id'],
-                        'created': datetime.datetime.utcnow(),
-                        'plan_id': email_check_result['plan_id'],
-                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source}),
-                        'bucket_id': utils.generate_bucket_id()
-                    }
-                    incident_id = session.execute(
-                        '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                                `current_step`, `active`, `application_id`, `bucket_id`)
-                        VALUES (:plan_id, :created, :context, 0, TRUE, :application_id, :bucket_id) ''',
-                        incident_info).lastrowid
-                    session.commit()
-                    session.close()
-                    resp.status = HTTP_204
-                    # Pass the new incident id back through a header so we can test this
-                    resp.set_header('X-IRIS-INCIDENT', str(incident_id))
-                    return
-
-                session.close()
-
-        # only parse first line of email content for now
-        first_line = content.split('\n', 1)[0].strip()
+        first_line, subject, source = process_email_response(req)
+        if source is None:
+            resp.status = HTTP_204
+            return
         try:
             msg_id, cmd = utils.parse_email_response(first_line, subject, source)
         except (ValueError, IndexError):
@@ -4733,6 +4741,181 @@ class ResponseSlack(ResponseMixin):
         else:
             resp.status = HTTP_200
             resp.body = ujson.dumps({'app_response': response})
+
+
+def handle_response_external(self, response, mode, source):
+
+    target_name = utils.lookup_username_from_contact(mode, source)
+    if not target_name:
+        logger.error('Failed resolving %s:%s to target name', mode, source)
+        return ('Failed resolving %s:%s to target name', mode, source)
+    external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+    claim_all = False
+    claim_last = False
+    if response.lower().startswith('f'):
+        return 'Sincerest apologies'
+    # One-letter shortcuts for claim all/last
+    elif response.lower() == 'a':
+        claim_all = True
+    elif response.lower() == 'l':
+        claim_last = True
+
+    incident_id = ""
+    # Skip message splitting for single-letter responses
+    if not (claim_all or claim_last):
+        halves = response.split(' ', 1)
+        if len(halves) != 2:
+            return 'could not resolve action'
+        if halves[0].lower() == 'claim' and halves[1].isdigit():
+            incident_id = halves[1]
+        elif halves[1].lower() == 'claim' and halves[0].isdigit():
+            incident_id = halves[0]
+
+        # get incident id from external sender and claim it
+        if incident_id != "":
+            utils.claim_incident(incident_id, target_name)
+            return 'claimed: %s' % incident_id
+
+    if claim_last or response.lower() == 'claim all':
+        r = external_sender_client.get('messages?active=1&limit=1&target=%s' % target_name, verify=self.verify)
+        if r.ok:
+            messages = r.json()
+            incident_ids = []
+            for message in messages:
+                incident_ids.append(message.get('incident_id', ''))
+            utils.claim_bulk_incidents(incident_ids, target_name)
+            return 'claimed: %s' % incident_ids
+        else:
+            logger.error("failed retrieving messages from external sender: %s", r.text)
+            return 'could not resolve action'
+
+    elif claim_all or response.lower() == 'claim all':
+        last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+        date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
+        r = external_sender_client.get('messages?active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
+        if r.ok:
+            messages = r.json()
+            incident_ids = []
+            for message in messages:
+                incident_ids.append(message.get('incident_id', ''))
+            utils.claim_bulk_incidents(incident_ids, target_name)
+            return 'claimed: %s' % incident_ids
+        else:
+            logger.error("failed retrieving messages from external sender: %s", r.text)
+            return 'could not resolve action'
+
+    return 'could not resolve action'
+
+
+class ResponseTwilioMessageExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = not config['server'].get('disable_auth', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        post_dict = parse_qs(req.context['body'])
+        if b'Body' not in post_dict:
+            raise HTTPBadRequest('SMS body not found', 'Missing Body argument in post body')
+
+        if b'From' not in post_dict:
+            raise HTTPBadRequest('From argument not found', 'Missing From in post body')
+        source = post_dict[b'From'][0].decode('utf-8')
+        body = post_dict[b'Body'][0].decode('utf-8')
+
+        response = handle_response_external(self, body.strip(), self.mode, source)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseTwilioCallExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = not config['server'].get('disable_auth', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+
+        incident_id = req.get_param('incident_id', required=True)
+        target = req.get_param('target', required=True)
+        if incident_id is None or target is None:
+            raise HTTPBadRequest('Missing incident_id or target')
+        utils.claim_incident(incident_id, target)
+        response = 'claimed %s' % incident_id
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseSlackExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = not config['server'].get('disable_auth', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        slack_params = ujson.loads(req.context['body'])
+        try:
+            incident_id = int(slack_params['callback_id'])
+            source = slack_params['source']
+            content = slack_params['content']
+        except KeyError:
+            raise HTTPBadRequest('Post body missing required key')
+
+        if content == 'claim all':
+            response = handle_response_external(self, content, self.mode, source)
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({'app_response': response})
+            return
+        target = utils.lookup_username_from_contact(self.mode, source)
+        if not target:
+            logger.error('Failed resolving %s:%s to target name', mode, source)
+            return ('Failed resolving %s:%s to target name', mode, source)
+        if incident_id is None or target is None:
+            raise HTTPBadRequest('Missing incident_id or target')
+        utils.claim_incident(incident_id, target)
+        response = 'claimed %s' % incident_id
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseEmailExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = not config['server'].get('disable_auth', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        first_line, subject, source = process_email_response(req)
+        if source is None:
+            resp.status = HTTP_204
+            return
+        response = handle_response_external(self, first_line, self.mode, source)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
 
 
 class TwilioDeliveryUpdate(object):
@@ -6228,7 +6411,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         HeaderMiddleware(),
         cors.middleware
     ])
-
+    external_sender_enabled = config.get('external_sender', {}).get('external_sender_enabled', False)
     api.set_error_serializer(json_error_serializer)
 
     api.add_route('/v0/plans/{plan_id}', Plan())
@@ -6279,12 +6462,18 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/priorities', Priorities())
 
-    api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
-    api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
-    api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
-    api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
-    api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
-    api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
+    if external_sender_enabled:
+        api.add_route('/v0/response/email', ResponseEmailExternal(config, 'email'))
+        api.add_route('/v0/response/twilio/calls', ResponseTwilioCallExternal(config, 'call'))
+        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessageExternal(config, 'sms'))
+        api.add_route('/v0/response/slack', ResponseSlackExternal(config, 'slack'))
+    else:
+        api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
+        api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
+        api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
+        api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
+        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
+        api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate(config))
 
     api.add_route('/v0/categories', NotificationCategories())
