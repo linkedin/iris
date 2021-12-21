@@ -6094,6 +6094,7 @@ class SenderPeerCount():
         resp.status = HTTP_200
         resp.body = ujson.dumps(result)
 
+
 class SenderHeartbeat():
     allow_read_no_auth = False
     internal_allowlist_only = True
