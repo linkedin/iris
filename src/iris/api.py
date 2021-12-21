@@ -1585,18 +1585,21 @@ class Incidents(object):
             for t in target:
                 message_query_string = message_query_string + '&target=' + str(t)
             # get messages for incident
-            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
-            r = external_sender_client.get(message_query_string, verify=self.verify)
-            if r.ok:
-                incident_IDs = []
-                messages = r.json()
-                if len(messages) > 0:
-                    for message in messages:
-                        incident_IDs.append(message.get('incident_id'))
-                    where.append('''`incident`.`id` IN %s''')
-                    sql_values.append(tuple(incident_IDs))
-            else:
-                logger.error('failed retrieving messages from external sender %s', r.text)
+            try:
+                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                r = external_sender_client.get(message_query_string, verify=self.verify)
+                if r.ok:
+                    incident_IDs = []
+                    messages = r.json()
+                    if len(messages) > 0:
+                        for message in messages:
+                            incident_IDs.append(message.get('incident_id'))
+                        where.append('''`incident`.`id` IN %s''')
+                        sql_values.append(tuple(incident_IDs))
+                else:
+                    logger.error('failed retrieving messages from external sender %s', r.text)
+            except Exception as e:
+                logger.exception('failed to establish connection with iris message processor')
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
@@ -1903,12 +1906,15 @@ class Incident(object):
             # if external sender fetch message and audit logs from it instead
             if self.external_sender_enabled:
                 # get messages for incident
-                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
-                r = external_sender_client.get('messages?incident_id=' + str(incident['id']), verify=self.verify)
-                if r.ok:
-                    incident['steps'] = r.json()
-                else:
-                    logger.error("failed retrieving messages from external sender: %s", r.text)
+                try:
+                    external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                    r = external_sender_client.get('messages?incident_id=' + str(incident['id']), verify=self.verify)
+                    if r.ok:
+                        incident['steps'] = r.json()
+                    else:
+                        logger.error("failed retrieving messages from external sender: %s", r.text)
+                except Exception as e:
+                    logger.exception('failed to establish connection with iris message processor')
             else:
                 cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
                 incident['steps'] = cursor.fetchall()
