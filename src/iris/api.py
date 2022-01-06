@@ -6080,6 +6080,21 @@ def direct_lookup(config, role, target):
     return targets
 
 
+class SenderPeerCount():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute("SELECT count(`node_id`) as peer_count FROM `IMP_cluster_members`")
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(result)
+
+
 class SenderHeartbeat():
     allow_read_no_auth = False
     internal_allowlist_only = True
@@ -6489,6 +6504,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents())
+    api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
