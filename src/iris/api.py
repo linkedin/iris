@@ -12,7 +12,6 @@ import os
 import random
 import datetime
 import logging
-import importlib
 import jinja2
 from jinja2.sandbox import SandboxedEnvironment
 from urllib.parse import parse_qs
@@ -40,6 +39,7 @@ from iris.sender.quota import (get_application_quotas_query, insert_application_
                                required_quota_keys, quota_int_keys)
 
 from iris.custom_import import import_custom_module
+from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
 
 from .constants import (
     XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
@@ -1462,12 +1462,7 @@ class Incidents(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp):
         '''
@@ -1749,7 +1744,7 @@ class Incidents(object):
         }
 
         # optional incident handler to do additional tasks after the incident has been created
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -1773,19 +1768,14 @@ class Incidents(object):
             plan_details['steps'] = steps
             connection.close()
             incident_data["plan_details"] = plan_details
-            self.custom_incident_handler_module.process_create(incident_data)
+            self.custom_incident_handler_dispatcher.process_create(incident_data)
 
 
 class Incident(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp, incident_id):
         '''
@@ -1927,7 +1917,7 @@ class Incident(object):
                                  'active': is_active})
 
         # optional incident handler to do additional tasks after the incident has been claimed
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -1940,19 +1930,14 @@ class Incident(object):
             incident_data['context'] = ujson.loads(incident_data['context'])
             cursor.close()
             connection.close()
-            self.custom_incident_handler_module.process_claim(incident_data)
+            self.custom_incident_handler_dispatcher.process_claim(incident_data)
 
 
 class Resolved(object):
     allow_read_no_auth = False
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_post(self, req, resp, incident_id):
 
@@ -1978,7 +1963,7 @@ class Resolved(object):
                                  'resolved': resolved})
 
         # optional incident handler to do additional tasks after the incident has been resolved
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -1991,19 +1976,14 @@ class Resolved(object):
 
             cursor.close()
             connection.close()
-            self.custom_incident_handler_module.process_resolve(incident_data)
+            self.custom_incident_handler_dispatcher.process_resolve(incident_data)
 
 
 class ClaimIncidents(object):
     allow_read_no_auth = False
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_post(self, req, resp):
         params = ujson.loads(req.context['body'])
@@ -2040,7 +2020,7 @@ class ClaimIncidents(object):
                                  'unclaimed': unclaimed})
 
         # optional incident handler to do additional tasks after the incidents have been claimed
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
             for incident_id in incident_ids:
@@ -2051,7 +2031,7 @@ class ClaimIncidents(object):
                 cursor.execute(single_incident_query_comments, incident_id)
                 incident_data['comments'] = cursor.fetchall()
                 incident_data['context'] = ujson.loads(incident_data['context'])
-                self.custom_incident_handler_module.process_claim(incident_data)
+                self.custom_incident_handler_dispatcher.process_claim(incident_data)
             cursor.close()
             connection.close()
 

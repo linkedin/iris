@@ -96,8 +96,10 @@ qr_login_url: Null
 webhooks:
   - alertmanager
 
-## custom incident handler can be created to do additional tasks after incident creation
+## custom incident handler can be created to do additional tasks after incident creation, claim, or resolve
 # custom_incident_handler_module: iris.custom_incident_handler
+# *OR* the following for multiple handlers
+# custom_incident_handler_modules: [ iris.custom_incident_handler ]
 
 ## allows listed applications to access internal API endpoints that return sensitive data including application API keys
 ## this should only be used by applications that are essentially extensions of iris itself like a custom sender
