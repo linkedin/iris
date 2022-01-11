@@ -42,7 +42,7 @@ from iris.custom_import import import_custom_module
 from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
 
 from .constants import (
-    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
+    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION, PRIORITY_PRECEDENCE_MAP
 )
 
 from .plugins import init_plugins, find_plugin
@@ -1757,6 +1757,8 @@ class Incidents(object):
             step = 0
             steps = []
             cursor.execute(single_plan_query_steps, plan_id)
+            highest_seen_priority_rank = -1
+            incident_data['priority'] = ''
             for notification in cursor:
                 s = notification['step']
                 if s != step:
@@ -1765,6 +1767,15 @@ class Incidents(object):
                     step = s
                 else:
                     l.append(notification)
+
+                # calculate priority for this incident based on the most severe priority
+                # across all notifications within the plan
+                priority_name = notification['priority']
+                priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
+                if priority_rank is not None and priority_rank > highest_seen_priority_rank:
+                    highest_seen_priority_rank = priority_rank
+                    incident_data['priority'] = priority_name
+
             plan_details['steps'] = steps
             connection.close()
             incident_data["plan_details"] = plan_details
