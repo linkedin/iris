@@ -1624,6 +1624,8 @@ class Incidents(object):
         if 'plan' not in incident_params:
             raise HTTPBadRequest('missing plan name attribute')
 
+        app = req.context['app']
+
         with db.guarded_session() as session:
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': incident_params['plan']}).scalar()
@@ -1634,8 +1636,7 @@ class Incidents(object):
                                           'WHERE `plan_id` = :plan_id',
                                           {'plan_id': plan_id}).scalar()
 
-            app = req.context['app']
-
+            # Support overriding the app which created this incident
             if 'application' in incident_params:
                 if not req.context['app']['allow_other_app_incidents']:
                     raise HTTPForbidden(
@@ -1646,6 +1647,7 @@ class Incidents(object):
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
+
             if num_dynamic > 0:
                 target_list = incident_params.get('dynamic_targets', [])
                 if num_dynamic != len(target_list):
@@ -1739,7 +1741,7 @@ class Incidents(object):
             'id': incident_id,
             'plan': incident_params['plan'],
             'created': int(time.time()),
-            'application': req.context['app']['name'],
+            'application': app['name'],
             'context': context
         }
 
