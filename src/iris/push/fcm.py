@@ -20,8 +20,8 @@ class fcm(object):
         if 'proxy' in self.config:
             host = self.config['proxy']['host']
             port = self.config['proxy']['port']
-            self.proxy = {'http': 'http://%s:%s' % (host, port),
-                          'https': 'https://%s:%s' % (host, port)}
+            self.proxy = {'http': '%s:%s' % (host, port),
+                          'https': '%s:%s' % (host, port)}
         self.client = FCMNotification(api_key=self.api_key, proxy_dict=self.proxy)
 
     def send_push(self, message):
