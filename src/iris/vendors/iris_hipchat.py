@@ -21,8 +21,8 @@ class iris_hipchat(object):
         if 'proxy' in self.config:
             host = self.config['proxy']['host']
             port = self.config['proxy']['port']
-            self.proxy = {'http': 'http://%s:%s' % (host, port),
-                          'https': 'https://%s:%s' % (host, port)}
+            self.proxy = {'http': '%s:%s' % (host, port),
+                          'https': '%s:%s' % (host, port)}
         self.token = self.config.get('auth_token')
         self.room_id = int(self.config.get('room_id'))
         self.debug = self.config.get('debug')
