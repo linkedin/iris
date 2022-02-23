@@ -1491,7 +1491,7 @@ class Incidents(object):
             self.custom_incident_handler_module = None
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -1563,20 +1563,20 @@ class Incidents(object):
         req.params.pop('target', None)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
-        if target and not self.external_sender_enabled:
+        if target and not self.external_sender_incident_processing:
             query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
-        if target and not self.external_sender_enabled:
+        if target and not self.external_sender_incident_processing:
             where.append('''`message`.`target_id` IN
                 (SELECT `id`
                 FROM `target`
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
-        if self.external_sender_enabled and target:
+        if self.external_sender_incident_processing and target:
             message_query_string = 'messages?limit=500'
             if req.params.get('created__ge'):
                 message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
@@ -1843,7 +1843,7 @@ class Incident(object):
             self.custom_incident_handler_module = None
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -1904,7 +1904,7 @@ class Incident(object):
 
         if incident:
             # if external sender fetch message and audit logs from it instead
-            if self.external_sender_enabled:
+            if self.external_sender_incident_processing:
                 # get messages for incident
                 try:
                     external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
@@ -2140,7 +2140,7 @@ class Message(object):
 
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -2185,7 +2185,7 @@ class Message(object):
         '''
 
         # if external sender is enabled send message api requests there
-        if self.external_sender_enabled:
+        if self.external_sender_incident_processing:
             message_data = {}
             # get message
             external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
@@ -2238,7 +2238,7 @@ class MessageAuditLog(object):
 
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -2276,7 +2276,7 @@ class MessageAuditLog(object):
         '''
 
         # if external sender is enabled send message api requests there
-        if self.external_sender_enabled:
+        if self.external_sender_incident_processing:
             # get message changelogs
             external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
             r = external_sender_client.get('message_changelogs?id=' + message_id, verify=self.verify)
@@ -2302,7 +2302,7 @@ class Messages(object):
     def __init__(self, config):
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -2313,7 +2313,7 @@ class Messages(object):
     def on_get(self, req, resp):
 
         # if external sender is enabled send message api requests there
-        if self.external_sender_enabled:
+        if self.external_sender_incident_processing:
             if len(req.query_string) == 0:
                 raise HTTPBadRequest('Message query too broad, add a filter')
             # get messages
@@ -2377,7 +2377,7 @@ class Notifications(object):
 
         # if external sender is enabled forward notifications to that sender instead
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_notification_processing = external_sender_configs.get('external_sender_notification_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -2598,7 +2598,7 @@ class Notifications(object):
         message['application'] = req.context['app']['name']
 
         # if external sender is enabled send notification requests there
-        if self.external_sender_enabled:
+        if self.external_sender_notification_processing:
             retries = 0
             external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
             while retries < 3:
@@ -4924,7 +4924,7 @@ class TwilioDeliveryUpdate(object):
     def __init__(self, config):
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
-        self.external_sender_enabled = external_sender_configs.get('external_sender_enabled', False)
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -4944,7 +4944,7 @@ class TwilioDeliveryUpdate(object):
 
         affected = False
         # if external sender is enabled send an api to update it there instead
-        if self.external_sender_enabled:
+        if self.external_sender_incident_processing:
             payload = {
                 'status': status,
                 'vendor_identifier': sid
@@ -6426,7 +6426,8 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         HeaderMiddleware(),
         cors.middleware
     ])
-    external_sender_enabled = config.get('external_sender', {}).get('external_sender_enabled', False)
+    external_sender_incident_processing = config.get('external_sender', {}).get('external_sender_incident_processing', False)
+
     api.set_error_serializer(json_error_serializer)
 
     api.add_route('/v0/plans/{plan_id}', Plan())
@@ -6477,7 +6478,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/priorities', Priorities())
 
-    if external_sender_enabled:
+    if external_sender_incident_processing:
         api.add_route('/v0/response/email', ResponseEmailExternal(config, 'email'))
         api.add_route('/v0/response/twilio/calls', ResponseTwilioCallExternal(config, 'call'))
         api.add_route('/v0/response/twilio/messages', ResponseTwilioMessageExternal(config, 'sms'))
