@@ -323,6 +323,29 @@ sync_script_nap_time: 3600 # wait time before syncing again
 #
 
 #####################
+### Iris-owa-incident
+#####################
+# owa_incident:
+#   credentials:
+#     username: 'foouser@example.com'
+#     password: ''
+#   account:
+#     autodiscover: false  # needs to be False for OWA365
+#     primary_smtp_address: foouser@example.com
+#   config:
+#     server: outlook.office365.com  # need to hardcode this for OWA365
+# ### proxies are optional but you can configure them here
+# ##  proxies:
+# ##    https: http://yourproxy:yourport
+# ##    http: http://yourproxy:yourport
+# #  # need a valid iris application for for owa script to connect to api to relay emails
+#   iris_app: ''
+#   iris_app_key: ''
+#   iris_plan: ''
+#   api_host: http://localhost:16649
+#   sleep_interval: 60
+
+#####################
 ### Iris-process-retention
 #####################
 ## To automatically prune DB of messages & incidents older than $x days
