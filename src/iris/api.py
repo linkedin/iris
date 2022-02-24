@@ -1483,12 +1483,6 @@ class Incidents(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
         self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
@@ -1848,12 +1842,6 @@ class Incident(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
         # if external sender is enabled forward message query through external sender api
         external_sender_configs = config.get('external_sender', {})
         self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
