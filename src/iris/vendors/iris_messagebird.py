@@ -25,8 +25,8 @@ class iris_messagebird(object):
         if 'proxy' in self.config:
             host = self.config['proxy']['host']
             port = self.config['proxy']['port']
-            self.proxy = {'http': 'http://%s:%s' % (host, port),
-                          'https': 'https://%s:%s' % (host, port)}
+            self.proxy = {'http': '%s:%s' % (host, port),
+                          'https': '%s:%s' % (host, port)}
 
         base_url = 'https://rest.messagebird.com'
         self.endpoint_url_messages = base_url + '/messages'

@@ -26,8 +26,8 @@ class iris_slack(object):
         if 'proxy' in self.config:
             host = self.config['proxy']['host']
             port = self.config['proxy']['port']
-            self.proxy = {'http': 'http://%s:%s' % (host, port),
-                          'https': 'https://%s:%s' % (host, port)}
+            self.proxy = {'http': '%s:%s' % (host, port),
+                          'https': '%s:%s' % (host, port)}
         self.timeout = config.get('timeout', 10)
         self.sleep_range = config.get('sleep_range', 4)
         self.message_attachments = self.config.get('message_attachments', {})

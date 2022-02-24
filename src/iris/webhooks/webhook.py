@@ -20,8 +20,8 @@ class webhook(object):
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
         if len(context_json_str) > 65535:
-            logger.warn('POST to {} exceeded acceptable size'.format(self.__name__))
-            raise HTTPBadRequest('Context too long')
+            logger.warn('POST exceeded acceptable size of 65535 characters')
+            raise HTTPBadRequest('Context too long, must be < 65535 characters')
 
         return context_json_str
 
