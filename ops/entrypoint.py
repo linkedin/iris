@@ -15,9 +15,12 @@ initializedfile = os.environ.get('INIT_FILE', '/home/iris/db_initialized')
 
 def load_sqldump(config, sqlfile, one_db=True):
     print('Importing %s...' % sqlfile)
+    effective_port = 3306
+    if 'port' in config:
+        effective_port = config['port']
     with open(sqlfile) as h:
         cmd = ['/usr/bin/mysql', '-h', config['host'], '-u',
-               config['user'], '-p' + config['password']]
+               config['user'], '-p' + config['password'], '-P' + str(effective_port)]
         if one_db:
             cmd += ['-o', config['database']]
         proc = subprocess.Popen(cmd, stdin=h)
@@ -35,7 +38,12 @@ def load_sqldump(config, sqlfile, one_db=True):
 
 def wait_for_mysql(config):
     print('Checking MySQL liveness on %s...' % config['host'])
-    db_address = (config['host'], 3306)
+
+    effective_port = 3306
+    if 'port' in config:
+        effective_port = config['port']
+
+    db_address = (config['host'], effective_port)
     tries = 0
     while True:
         try:
@@ -88,7 +96,9 @@ def main():
             initialize_mysql_schema(mysql_config)
 
     os.execv('/usr/bin/uwsgi',
-             ['', '--yaml', os.environ.get('UWSGI_CONFIG', '/home/iris/daemons/uwsgi.yaml:prod')])
+             # first array element is ARGV0, since python 3.6 it cannot be empty, using space
+             # https://bugs.python.org/issue28732
+             [' ', '--yaml', os.environ.get('UWSGI_CONFIG', '/home/iris/daemons/uwsgi.yaml:prod')])
 
 
 if __name__ == '__main__':

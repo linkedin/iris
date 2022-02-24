@@ -1,5 +1,5 @@
 prod:
-    plugins: python,logfile,gevent_python
+    plugins: python3,logfile,gevent_python3
     chdir: /home/iris/source/src
     socket: /home/iris/var/run/uwsgi.sock
     chmod-socket: 666
@@ -8,7 +8,7 @@ prod:
     # uid: 1000
     # gid: 1000
     workers: 12
-    gevent: 100
+    #gevent: 100 # workers die, if specified with gevent_python3 (why?)
     lazy-apps: true
     master-fifo: /home/iris/var/run/uwsgi_master_fifo
     touch-reload: /home/iris/var/run/uwsgi_touch_reload

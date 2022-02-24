@@ -12,7 +12,6 @@ import os
 import random
 import datetime
 import logging
-import importlib
 import jinja2
 import uuid
 import math
@@ -49,9 +48,10 @@ from iris.sender.quota import (get_application_quotas_query, insert_application_
                                required_quota_keys, quota_int_keys)
 
 from iris.custom_import import import_custom_module
+from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
 
 from .constants import (
-    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION
+    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION, PRIORITY_PRECEDENCE_MAP
 )
 
 from .plugins import init_plugins, find_plugin
@@ -1498,6 +1498,7 @@ class Incidents(object):
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
         self.verify = not config['server'].get('disable_auth', False)
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp):
         '''
@@ -1683,6 +1684,8 @@ class Incidents(object):
         if 'plan' not in incident_params:
             raise HTTPBadRequest('missing plan name attribute')
 
+        app = req.context['app']
+
         with db.guarded_session() as session:
             plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
                                       {'plan': incident_params['plan']}).scalar()
@@ -1693,8 +1696,7 @@ class Incidents(object):
                                           'WHERE `plan_id` = :plan_id',
                                           {'plan_id': plan_id}).scalar()
 
-            app = req.context['app']
-
+            # Support overriding the app which created this incident
             if 'application' in incident_params:
                 if not req.context['app']['allow_other_app_incidents']:
                     raise HTTPForbidden(
@@ -1799,12 +1801,12 @@ class Incidents(object):
             'id': incident_id,
             'plan': incident_params['plan'],
             'created': int(time.time()),
-            'application': req.context['app']['name'],
+            'application': app['name'],
             'context': context
         }
 
         # optional incident handler to do additional tasks after the incident has been created
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -1817,6 +1819,8 @@ class Incidents(object):
             step = 0
             steps = []
             cursor.execute(single_plan_query_steps, plan_id)
+            highest_seen_priority_rank = -1
+            incident_data['priority'] = ''
             for notification in cursor:
                 s = notification['step']
                 if s != step:
@@ -1825,10 +1829,19 @@ class Incidents(object):
                     step = s
                 else:
                     l.append(notification)
+
+                # calculate priority for this incident based on the most severe priority
+                # across all notifications within the plan
+                priority_name = notification['priority']
+                priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
+                if priority_rank is not None and priority_rank > highest_seen_priority_rank:
+                    highest_seen_priority_rank = priority_rank
+                    incident_data['priority'] = priority_name
+
             plan_details['steps'] = steps
             connection.close()
             incident_data["plan_details"] = plan_details
-            self.custom_incident_handler_module.process_create(incident_data)
+            self.custom_incident_handler_dispatcher.process_create(incident_data)
 
 
 class Incident(object):
@@ -1850,6 +1863,7 @@ class Incident(object):
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
         self.verify = not config['server'].get('disable_auth', False)
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp, incident_id):
         '''
@@ -2004,7 +2018,7 @@ class Incident(object):
                                  'active': is_active})
 
         # optional incident handler to do additional tasks after the incident has been claimed
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -2017,19 +2031,14 @@ class Incident(object):
             incident_data['context'] = ujson.loads(incident_data['context'])
             cursor.close()
             connection.close()
-            self.custom_incident_handler_module.process_claim(incident_data)
+            self.custom_incident_handler_dispatcher.process_claim(incident_data)
 
 
 class Resolved(object):
     allow_read_no_auth = False
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_post(self, req, resp, incident_id):
 
@@ -2055,7 +2064,7 @@ class Resolved(object):
                                  'resolved': resolved})
 
         # optional incident handler to do additional tasks after the incident has been resolved
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
 
@@ -2068,19 +2077,14 @@ class Resolved(object):
 
             cursor.close()
             connection.close()
-            self.custom_incident_handler_module.process_resolve(incident_data)
+            self.custom_incident_handler_dispatcher.process_resolve(incident_data)
 
 
 class ClaimIncidents(object):
     allow_read_no_auth = False
 
     def __init__(self, config):
-        custom_incident_handler_module = config.get('custom_incident_handler_module')
-        if custom_incident_handler_module is not None:
-            module = importlib.import_module(custom_incident_handler_module)
-            self.custom_incident_handler_module = getattr(module, 'IncidentHandler')(config)
-        else:
-            self.custom_incident_handler_module = None
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_post(self, req, resp):
         params = ujson.loads(req.context['body'])
@@ -2117,7 +2121,7 @@ class ClaimIncidents(object):
                                  'unclaimed': unclaimed})
 
         # optional incident handler to do additional tasks after the incidents have been claimed
-        if self.custom_incident_handler_module is not None:
+        if self.custom_incident_handler_dispatcher.handlers:
             connection = db.engine.raw_connection()
             cursor = connection.cursor(db.dict_cursor)
             for incident_id in incident_ids:
@@ -2128,7 +2132,7 @@ class ClaimIncidents(object):
                 cursor.execute(single_incident_query_comments, incident_id)
                 incident_data['comments'] = cursor.fetchall()
                 incident_data['context'] = ujson.loads(incident_data['context'])
-                self.custom_incident_handler_module.process_claim(incident_data)
+                self.custom_incident_handler_dispatcher.process_claim(incident_data)
             cursor.close()
             connection.close()
 

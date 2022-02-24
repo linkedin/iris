@@ -25,6 +25,11 @@ Build Docker image:
 packer build -only=docker ./output/iris.json
 ```
 
+or use
+
+```bash
+make docker
+```
 
 Usage
 -----

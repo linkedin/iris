@@ -9,8 +9,8 @@ Iris core, API, UI and sender service. For third-party integration support, see 
 Setup database
 --------------
 
-1. remove `ONLY_FULL_GROUP_BY` from MySQL config `sql_mode`
-1. create mysql schema: `mysql -u USER -p < ./db/schema_0.sql`
+1. remove `ONLY_FULL_GROUP_BY` from MySQL config `sql_mode` or run mysqld in permisive mode (i.e. `--sql_mode=''`)
+1. create mysql schema: `mysql -u USER -p < ./db/schema_0.sql`  (WARNING: This will drop any existing tables)
 1. import dummy data: `mysql -u USER -p -o iris < ./db/dummy_data.sql`
 
 `dummy_data.sql` contains the following entities:
