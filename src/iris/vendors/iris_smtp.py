@@ -3,7 +3,7 @@
 
 from gevent import sleep
 from iris.constants import EMAIL_SUPPORT, IM_SUPPORT
-from smtplib import SMTP
+from smtplib import SMTP_SSL
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
@@ -139,8 +139,7 @@ class iris_smtp(object):
         else:
             for mx in self.mx_sorted:
                 try:
-                    smtp = SMTP(timeout=self.smtp_timeout)
-                    smtp.connect(mx[1], self.config.get('port', 25))
+                    smtp = SMTP_SSL(mx[1], port=self.config.get('port', 25), timeout=self.smtp_timeout)
                     if self.config.get('username', None) is not None and self.config.get('password', None) is not None:
                         smtp.login(self.config.get('username', None), self.config.get('password', None))
                     conn = smtp
@@ -167,7 +166,7 @@ class iris_smtp(object):
             # giving up
             for mx in self.mx_sorted:
                 try:
-                    smtp = SMTP(timeout=self.smtp_timeout)
+                    smtp = SMTP_SSL(mx[1], port=self.config.get('port', 25), timeout=self.smtp_timeout)
                     smtp.connect(mx[1], 25)
                     conn = smtp
                     self.last_conn = conn
