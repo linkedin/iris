@@ -119,6 +119,7 @@ sender:
   workers_per_mode:
     email: 500
     #hipchat: 10
+    #pushover: 10
 
   ## Default sender to reach out to if we can't determine one programmatically
   leader_sender:
@@ -232,6 +233,16 @@ vendors: []
 #  debug: False
 #  base_url: 'https://api.hipchat.com'
 #  room_id: 1234567
+
+## Pushover support requires adding a new mode called "pushover", in iris' mode table
+## Also, uncomment the pushover workers to the sender['workers_per_mode'] hash above
+#- type: iris_pushover
+#  name: pushover
+#  debug: False
+#  app_token: ''
+#  priority: 1
+#  sound: 'climb'
+#  api_url: 'https://api.pushover.net/1/messages.json'
 
 ## Metrics
 metrics: dummy # output metrics to logs
