@@ -47,7 +47,8 @@ stats_reset = {
     'ldap_memberships_removed': 0,
     'ldap_lists_failed_to_add': 0,
     'ldap_memberships_failed_to_add': 0,
-    'ldap_reconnects': 0
+    'ldap_reconnects': 0,
+    'failed_tasks': 0
 }
 
 # logging
@@ -736,6 +737,34 @@ def sync_ldap_lists(ldap_settings, engine):
     session.close()
 
 
+def oncall_sync_loop(config, engine, interval):
+
+    while True:
+        logger.info('Starting oncall sync...')
+        try:
+            run_start = time.time()
+            sync_from_oncall(config, engine)
+            logger.info('oncall sync took %.2f seconds', time.time() - run_start)
+        except Exception:
+            metrics.incr('failed_tasks')
+            logger.exception('Error syncing from oncall!')
+        sleep(interval)
+
+
+def ldap_sync_loop(ldap_lists, engine, interval):
+    sleep(60)
+    while True:
+        logger.info('Starting ldap sync...')
+        try:
+            run_start = time.time()
+            sync_ldap_lists(ldap_lists, engine)
+            logger.info('Ldap mailing list sync took %.2f seconds', time.time() - run_start)
+        except Exception:
+            metrics.incr('failed_tasks')
+            logger.exception('Error syncing from ldap!')
+        sleep(interval)
+
+
 def main():
     global ldap_timeout
     global ldap_pagination_size
@@ -746,15 +775,18 @@ def main():
     default_ldap_timeout = 60
     default_ldap_pagination_size = 400
     default_update_sleep = 0
-    default_nap_time = 3600
+    default_ldap_nap_time = 3600
+    default_oncall_nap_time = 60
 
     ldap_timeout = int(config.get('sync_script_ldap_timeout', default_ldap_timeout))
     ldap_pagination_size = int(config.get('sync_script_ldap_pagination_size', default_ldap_pagination_size))
     update_sleep = float(config.get('target_update_pause', default_update_sleep))
     try:
-        nap_time = int(config.get('sync_script_nap_time', default_nap_time))
+        ldap_nap_time = int(config.get('sync_script_ldap_nap_time', default_ldap_nap_time))
+        oncall_nap_time = int(config.get('sync_script_oncall_nap_time', default_oncall_nap_time))
     except ValueError:
-        nap_time = default_nap_time
+        ldap_nap_time = default_ldap_nap_time
+        oncall_nap_time = default_oncall_nap_time
 
     # check if we are using special connection settings for this script
     if config.get('db_target_sync'):
@@ -777,36 +809,36 @@ def main():
     metrics.set('ldap_memberships_found', 0)
 
     metrics_task = spawn(metrics.emit_forever)
+    oncall_task = spawn(oncall_sync_loop, config, engine, oncall_nap_time)
+
+    if ldap_lists:
+        if 'ldap_cert_path' in ldap_lists:
+            ldap_cert_path = ldap_lists['ldap_cert_path']
+            if not os.access(ldap_cert_path, os.R_OK):
+                logger.error("Failed to read ldap_cert_path certificate")
+                raise IOError
+            else:
+                ldap_lists['cert_path'] = ldap_cert_path
+        ldap_task = spawn(ldap_sync_loop, ldap_lists, engine, ldap_nap_time)
 
     while True:
         if not bool(metrics_task):
+            metrics.incr('failed_tasks')
             logger.error('metrics task failed, %s', metrics_task.exception)
-            metrics_task = spawn(metrics.emit_forever)
-        try:
-            sync_from_oncall(config, engine)
-        except Exception:
-            logger.exception('Error syncing from oncall!')
+            spawn(metrics.emit_forever)
 
-        # Do ldap mailing list sync *after* we do the normal sync, to ensure we have the users
-        # which will be in ldap already populated.
+        if not bool(oncall_task):
+            metrics.incr('failed_tasks')
+            logger.error('oncall task failed, %s', oncall_task.exception)
+            metrics_task = spawn(oncall_sync_loop, config, engine, oncall_nap_time)
+
         if ldap_lists:
+            if not bool(ldap_task):
+                metrics.incr('failed_tasks')
+                logger.error('ldap task failed, %s', ldap_task.exception)
+                ldap_task = spawn(ldap_sync_loop, ldap_lists, engine, ldap_nap_time)
 
-            if 'ldap_cert_path' in ldap_lists:
-                ldap_cert_path = ldap_lists['ldap_cert_path']
-                if not os.access(ldap_cert_path, os.R_OK):
-                    logger.error("Failed to read ldap_cert_path certificate")
-                    raise IOError
-                else:
-                    ldap_lists['cert_path'] = ldap_cert_path
-            try:
-                list_run_start = time.time()
-                sync_ldap_lists(ldap_lists, engine)
-                logger.info('Ldap mailing list sync took %.2f seconds', time.time() - list_run_start)
-            except Exception:
-                logger.exception('Error syncing from ldap!')
-
-        logger.info('Sleeping for %d seconds' % nap_time)
-        sleep(nap_time)
+        sleep(10)
 
 
 if __name__ == '__main__':
