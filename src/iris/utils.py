@@ -9,9 +9,7 @@ from phonenumbers import (format_number as pn_format_number, parse as pn_parse,
 from gevent import sleep
 import datetime
 import ujson
-import os
 from . import db
-from iris.config import load_config
 import re
 import msgpack
 import logging
@@ -19,18 +17,15 @@ from random import randrange
 
 logger = logging.getLogger(__name__)
 
-config = {}
-if 'IRISPYTEST' not in os.environ:
-    config = load_config()
-
+BUCKET_ID_MAX = 100
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 allowed_text_response_actions = frozenset(['suppress', 'claim'])
 
 
 def generate_bucket_id():
-    # returns random integer value value from 0 to number_of_bucket-1, inclusive.
-    bucket_id_max = config.get("iris-message-processor", {}).get("number_of_buckets", 100)
-    return randrange(bucket_id_max)
+    # returns random integer value value from 0 to BUCKET_ID_MAX-1, inclusive.
+    # TODO properly mock config loading in testing to not rely on environmental variables and make this configurable in configs
+    return randrange(BUCKET_ID_MAX)
 
 
 def normalize_phone_number(num):
