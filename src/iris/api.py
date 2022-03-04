@@ -6340,8 +6340,8 @@ class SenderHeartbeat():
 
 
 class InternalIncidents():
-    allow_read_no_auth = True
-    internal_allowlist_only = False
+    allow_read_no_auth = False
+    internal_allowlist_only = True
 
     def __init__(self, config):
         external_sender_configs = config.get('external_sender', {})
