@@ -6340,10 +6340,22 @@ class SenderHeartbeat():
 
 
 class InternalIncidents():
-    allow_read_no_auth = False
-    internal_allowlist_only = True
+    allow_read_no_auth = True
+    internal_allowlist_only = False
+
+    def __init__(self, config):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        # allow external sender to process incidents into messages if it is in dryrun and will not send them
+        self.external_sender_incident_dryrun = external_sender_configs.get('external_sender_incident_dryrun', False)
 
     def on_get(self, req, resp, node_id):
+
+        if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
+            # do not return any incidents
+            resp.status = HTTP_200
+            resp.body = ujson.dumps([])
+            return
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
@@ -6496,7 +6508,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/plan_aggregation_settings', PlanAggregationSettings())
     api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
-    api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents())
+    api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))  # should not be giving away incidents if not enabled
     api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
 
     mobile_config = config.get('iris-mobile', {})
