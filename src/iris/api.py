@@ -6508,7 +6508,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/plan_aggregation_settings', PlanAggregationSettings())
     api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
-    api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))  # should not be giving away incidents if not enabled
+    api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))
     api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
 
     mobile_config = config.get('iris-mobile', {})
