@@ -3,21 +3,15 @@
 
 import requests
 import logging
-from iris import metrics
+from iris.metrics import stats
 import oncallclient
 from iris.role_lookup import IrisRoleLookupException
 
 logger = logging.getLogger(__name__)
 
-# metrics
-stats_reset = {
-    'oncall_error': 0
-}
-
 
 class oncall(object):
     def __init__(self, config):
-        metrics.init(config, 'oncall-client', stats_reset)
         headers = requests.utils.default_headers()
         headers['User-Agent'] = 'iris role lookup (%s)' % headers.get('User-Agent')
         app = config.get('oncall-app', '')
@@ -34,7 +28,7 @@ class oncall(object):
         try:
             r = self.requests.get(url)
         except Exception:
-            metrics.incr('oncall_error')
+            stats['oncall_error'] += 1
             msg = 'Failed hitting oncall-api for url "%s"' % url
             logger.exception(msg)
             raise IrisRoleLookupException(msg)
@@ -45,7 +39,7 @@ class oncall(object):
                 logger.warning('422 for url "%s", likely invalid plan' % url)
                 return None
             else:
-                metrics.incr('oncall_error')
+                stats['oncall_error'] += 1
                 msg = 'Invalid response from oncall-api for URL "%s". Code: %s. Content: "%s"' \
                     % (url, r.status_code, r.content)
                 logger.error(msg)
@@ -54,13 +48,13 @@ class oncall(object):
         try:
             data = r.json()
             if not isinstance(data, expected_type):
-                metrics.incr('oncall_error')
+                stats['oncall_error'] += 1
                 msg = 'Invalid data recieved from oncall-api for URL %s' % url
                 logger.error(msg)
                 raise IrisRoleLookupException(msg)
             return data
         except ValueError:
-            metrics.incr('oncall_error')
+            stats['oncall_error'] += 1
             msg = 'Failed decoding json from oncall-api. URL: "%s" Code: %s' % (url, r.status_code)
             logger.exception(msg)
             raise IrisRoleLookupException(msg)
