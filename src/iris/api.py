@@ -5933,6 +5933,8 @@ class InternalBuildMessages():
                 continue
             message = render(message)
             messages.append(message)
+        if len(messages) == 0:
+            raise HTTPBadRequest('Failed to build, could not resolve any messages from notification')
 
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
