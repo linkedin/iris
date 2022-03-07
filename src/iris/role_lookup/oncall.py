@@ -28,7 +28,7 @@ class oncall(object):
         try:
             r = self.requests.get(url)
         except Exception:
-            if stats.get('oncall_error'):
+            if 'oncall_error' in stats:
                 stats['oncall_error'] += 1
             msg = 'Failed hitting oncall-api for url "%s"' % url
             logger.exception(msg)
@@ -40,7 +40,7 @@ class oncall(object):
                 logger.warning('422 for url "%s", likely invalid plan' % url)
                 return None
             else:
-                if stats.get('oncall_error'):
+                if 'oncall_error' in stats:
                     stats['oncall_error'] += 1
                 msg = 'Invalid response from oncall-api for URL "%s". Code: %s. Content: "%s"' \
                     % (url, r.status_code, r.content)
@@ -50,14 +50,14 @@ class oncall(object):
         try:
             data = r.json()
             if not isinstance(data, expected_type):
-                if stats.get('oncall_error'):
+                if 'oncall_error' in stats:
                     stats['oncall_error'] += 1
                 msg = 'Invalid data recieved from oncall-api for URL %s' % url
                 logger.error(msg)
                 raise IrisRoleLookupException(msg)
             return data
         except ValueError:
-            if stats.get('oncall_error'):
+            if 'oncall_error' in stats:
                     stats['oncall_error'] += 1
             msg = 'Failed decoding json from oncall-api. URL: "%s" Code: %s' % (url, r.status_code)
             logger.exception(msg)
