@@ -12,7 +12,7 @@ db: &db
     kwargs:
       scheme: mysql+pymysql
       user: root
-      password: ""
+      password: '1234'
       host: 127.0.0.1
       port: 3306
       database: iris
@@ -68,13 +68,13 @@ user_session:
   sign_key: '123'
 
 supported_timezones:
+  - 'Asia/Kolkata'
   - 'US/Pacific'
   - 'US/Eastern'
   - 'US/Central'
   - 'US/Mountain'
   - 'US/Alaska'
   - 'US/Hawaii'
-  - 'Asia/Kolkata'
   - 'Asia/Shanghai'
   - 'UTC'
 
