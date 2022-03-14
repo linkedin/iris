@@ -1491,7 +1491,7 @@ class Incidents(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp):
@@ -1850,7 +1850,7 @@ class Incident(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp, incident_id):
@@ -2138,7 +2138,7 @@ class Message(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_get(self, req, resp, message_id):
         '''
@@ -2236,7 +2236,7 @@ class MessageAuditLog(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_get(self, req, resp, message_id):
         '''
@@ -2300,7 +2300,7 @@ class Messages(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_get(self, req, resp):
 
@@ -2375,7 +2375,7 @@ class Notifications(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_post(self, req, resp):
         '''
@@ -4807,7 +4807,7 @@ class ResponseTwilioMessageExternal(object):
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.mode = mode
 
     def on_post(self, req, resp):
@@ -4834,7 +4834,7 @@ class ResponseTwilioCallExternal(object):
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.mode = mode
 
     def on_post(self, req, resp):
@@ -4858,7 +4858,7 @@ class ResponseSlackExternal(object):
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.mode = mode
 
     def on_post(self, req, resp):
@@ -4896,7 +4896,7 @@ class ResponseEmailExternal(object):
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.mode = mode
 
     def on_post(self, req, resp):
@@ -4922,7 +4922,7 @@ class TwilioDeliveryUpdate(object):
         self.external_sender_key = external_sender_configs.get('external_sender_key')
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
-        self.verify = not config['server'].get('disable_auth', False)
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_post(self, req, resp):
         post_dict = falcon.uri.parse_query_string(req.context['body'].decode('utf-8'))
