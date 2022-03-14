@@ -28,7 +28,7 @@ COPY ops/daemons /home/iris/daemons
 COPY ops/daemons/uwsgi-docker.yaml /home/iris/daemons/uwsgi.yaml
 COPY db /home/iris/db
 COPY configs /home/iris/config
-COPY healthcheck.py /tmp/status
+COPY healthcheck /tmp/status
 COPY ops/entrypoint.py /home/iris/entrypoint.py
 
 RUN chown -R iris:iris /home/iris/

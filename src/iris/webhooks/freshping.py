@@ -5,8 +5,6 @@ import json
 import re
 from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
 
-from iris.webhooks.webhook import webhook
-
 from iris import db
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,7 @@ class freshping(object):
         elif isinstance(element, dict):
             for key in element.keys():
                 element[key] = self.cleanup(element[key])
-        elif isinstance(element, basestring):
+        elif isinstance(element, str):
             element = self.unhtml(element)
 
         return element
@@ -68,7 +66,7 @@ class freshping(object):
                 raise HTTPInvalidParam('plan does not exist or is not active')
 
             app = req.context['app']
-            
+
             if not session.execute('SELECT EXISTS(SELECT 1 FROM `application` WHERE id = :id)', {'id': app['id']}).scalar():
                 raise HTTPBadRequest('Invalid application')
 
