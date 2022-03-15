@@ -68,13 +68,13 @@ user_session:
   sign_key: '123'
 
 supported_timezones:
-  - 'Asia/Kolkata'
   - 'US/Pacific'
   - 'US/Eastern'
   - 'US/Central'
   - 'US/Mountain'
   - 'US/Alaska'
   - 'US/Hawaii'
+  - 'Asia/Kolkata'
   - 'Asia/Shanghai'
   - 'UTC'
 
@@ -133,7 +133,7 @@ sender:
   ## RPC access log
   access_log:
     maxBytes: 10485760
-    filename: '/home/iris/var/log/sender_rpc.access.log'
+    filename: './logs/sender_rpc.access.log'
 
   ## Optionally, use zookeeper for sender high availability.
   #zookeeper_cluster: localhost:2181
