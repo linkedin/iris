@@ -5819,6 +5819,9 @@ class InternalBuildMessages():
             logger.warning('Failed to build due to missing application key')
             raise HTTPBadRequest('INVALID application')
 
+        if notification.get('role') == 'literal_target':
+            notification['unexpanded'] = True
+
         if "incident_id" in notification and "dynamic_index" in notification:
             # check if plan is dynamic and retrieve role & target for incident
             conn = db.engine.raw_connection()
