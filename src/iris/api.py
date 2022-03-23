@@ -2600,10 +2600,15 @@ class Notifications(object):
                 external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
                 while retries < 3:
                     retries += 1
-                    r = external_sender_client.post('notification', json=message, verify=self.verify)
-                    if r.ok:
-                        resp.status = HTTP_200
-                        return
+                    try:
+                        r = external_sender_client.post('notification', json=message, verify=self.verify)
+                        if r.ok:
+                            resp.status = HTTP_200
+                            return
+                    except Exception as e:
+                        logger.exception('failed to send notification to external sender')
+                        if retries >=3:
+                            raise HTTPInternalServerError(str(e))
                 logger.error("failed posting notification via external sender: %s", r.text)
                 raise HTTPBadRequest(r.text)
 
