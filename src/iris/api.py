@@ -2609,6 +2609,10 @@ class Notifications(object):
                         logger.exception('failed to send notification to external sender')
                         if retries >= 3:
                             raise HTTPInternalServerError(str(e))
+                    else:
+                        # don't bother retrying a bad query
+                        if r.status_code == 400:
+                            break
                 logger.error("failed posting notification via external sender: %s", r.text)
                 raise HTTPBadRequest(r.text)
 
