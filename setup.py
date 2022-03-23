@@ -49,7 +49,7 @@ setuptools.setup(
         'msgpack==1.0.0',
         'cssmin',
         'beaker',
-        'cryptography==3.2',
+        'cryptography==3.3.2',
         'webassets',
         'python-ldap==3.1.0',
         'exchangelib==2.2.0',
