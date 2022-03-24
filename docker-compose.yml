@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  iris-web:
+    build: .
+    ports:
+      - "16649:16649"
+    environment:
+      - DOCKER_DB_BOOTSTRAP=1
+    volumes:
+      - ./configs/config.dev.yaml:/home/iris/config/config.yaml
+
+  iris-mysql:
+    image: mysql:5.5
+    environment:
+      - MYSQL_ROOT_PASSWORD=1234
