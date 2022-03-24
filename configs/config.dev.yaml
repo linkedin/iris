@@ -14,9 +14,10 @@ db: &db
       user: root
       password: ""
       host: 127.0.0.1
+      port: 3306
       database: iris
       charset: utf8
-    str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+    str: "%(scheme)s://%(user)s:%(password)s@%(host)s:%(port)s/%(database)s?charset=%(charset)s"
   query_limit: 500
   kwargs:
     pool_recycle: 3600
@@ -35,7 +36,7 @@ db: &db
 #       host: 127.0.0.1
 #       database: iris
 #       charset: utf8
-#     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+#    str: "%(scheme)s://%(user)s:%(password)s@%(host)s:%(port)s/%(database)s?charset=%(charset)s"
 #   kwargs:
 #     pool_recycle: 3600
 #     echo: False
