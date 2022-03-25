@@ -2370,6 +2370,8 @@ class Notifications(object):
         # if external sender is enabled forward notifications to that sender instead
         external_sender_configs = config.get('external_sender', {})
         self.external_sender_notification_processing = external_sender_configs.get('external_sender_notification_processing', False)
+        # percentage of notifications that will be sent to external sender for processing
+        self.external_notification_processing_ramp_percentage = external_sender_configs.get('external_notification_processing_ramp_percentage', 100)
         self.external_sender_address = external_sender_configs.get('external_sender_address')
         self.external_sender_app = external_sender_configs.get('external_sender_app')
         self.external_sender_key = external_sender_configs.get('external_sender_key')
@@ -2591,16 +2593,28 @@ class Notifications(object):
 
         # if external sender is enabled send notification requests there
         if self.external_sender_notification_processing:
-            retries = 0
-            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
-            while retries < 3:
-                retries += 1
-                r = external_sender_client.post('notification', json=message, verify=self.verify)
-                if r.ok:
-                    resp.status = HTTP_200
-                    return
-            logger.error("failed posting notification via external sender: %s", r.text)
-            raise HTTPBadRequest(r.text)
+            # when ramped at 100% range is [1,1] when 50% range is [1,2] at 10% range is [1,10] and so on
+            num_range = int(100 / self.external_notification_processing_ramp_percentage)
+            if random.randint(1, num_range) == 1:
+                retries = 0
+                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                while retries < 3:
+                    retries += 1
+                    try:
+                        r = external_sender_client.post('notification', json=message, verify=self.verify)
+                        if r.ok:
+                            resp.status = HTTP_200
+                            return
+                    except Exception as e:
+                        logger.exception('failed to send notification to external sender')
+                        if retries >= 3:
+                            raise HTTPInternalServerError(str(e))
+                    else:
+                        # don't bother retrying a bad query
+                        if r.status_code == 400:
+                            break
+                logger.error("failed posting notification via external sender: %s", r.text)
+                raise HTTPBadRequest(r.text)
 
         # If we're using ZK, try that to get leader
         if self.coordinator:
