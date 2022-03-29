@@ -107,6 +107,15 @@ webhooks:
 # allowlisted_internal_apps:
 #   - iris-internal-application
 
+## configs for external sender
+## THIS FUNCTIONALITY IS CURRENTLY UNRELEASED, LEAVE COMMENTED
+# external_sender:
+#   external_sender_enabled: True
+#   external_sender_address: "https://127.0.0.1:14724"
+#   external_sender_app: 'iris'
+#   external_sender_key: '1234'
+#   external_sender_version: 0
+
 #####################
 ### Iris-sender
 #####################

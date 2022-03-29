@@ -420,11 +420,11 @@ class TargetReprioritization(object):
                 self.__call__(message, seen)
                 auditlog.message_change(message['message_id'], auditlog.MODE_CHANGE, original_mode, dst_mode, 'Changing mode due to reprioritization')
             else:
-                return
+                return message
         except KeyError:
             # target has no reprioritization rules defined
             # leave existing mode
-            return
+            return message
 
 
 class RoleTargets():
