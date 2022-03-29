@@ -6448,7 +6448,7 @@ class PlanAggregationSettings():
 
 def update_cache_worker():
     while True:
-        logger.info('Reinitializing cache')
+        logger.debug('Reinitializing cache')
         cache.init()
         sleep(60)
 
@@ -6574,6 +6574,7 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
+    cache.init()
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
