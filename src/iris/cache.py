@@ -3,7 +3,7 @@
 
 from . import db
 import logging
-import gevent
+import gevent.lock
 
 logger = logging.getLogger(__name__)
 
