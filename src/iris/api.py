@@ -1554,6 +1554,7 @@ class Incidents(object):
         - application: Application that created this incident (string)
         - plan: Escalation plan name (string)
         - plan_id: Escalation plan id (int)
+        - claimed: Claimed status (bool)
 
         This endpoint also allows specification of a limit via another query parameter, which limits
         results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
@@ -1579,6 +1580,13 @@ class Incidents(object):
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
+        claimed_filter = req.get_param_as_bool('claimed')
+        if claimed_filter is not None:
+            if claimed_filter:
+                where.append('''`incident`.`owner_id` IS NOT NULL''')
+            else:
+                where.append('''`incident`.`owner_id` IS NULL''')
+
         if target and not self.external_sender_incident_processing:
             where.append('''`message`.`target_id` IN
                 (SELECT `id`
