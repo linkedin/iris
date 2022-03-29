@@ -23,7 +23,7 @@ from iris import metrics
 from uuid import uuid4
 from iris.gmail import Gmail
 from iris import db
-from iris.api import load_config
+from iris.config import load_config
 from iris.utils import sanitize_unicode_dict
 from iris.sender import rpc, cache
 from iris.sender.message import update_message_mode
@@ -277,7 +277,7 @@ default_sender_metrics = {
 # TODO: make this configurable
 target_fallback_mode = 'email'
 should_mock_gwatch_renewer = False
-config = None
+config = {}
 
 
 # msg_info takes the form [(incident_id, plan_notification_id), ...]
@@ -761,12 +761,12 @@ def set_target_fallback_mode(message):
             auditlog.message_change(
                 message_id, auditlog.MODE_CHANGE, old_mode, message['mode'],
                 'Changing mode due to original mode failure')
-        return True
+        return (True, message)
     # target doesn't have email either - bail
     except ValueError:
         logger.exception('target does not have mode(%s) %r', target_fallback_mode, message)
         message['destination'] = message['mode'] = message['mode_id'] = None
-        return False
+        return (False, message)
 
 
 def set_target_contact_by_priority(message):
@@ -827,19 +827,19 @@ def set_target_contact_by_priority(message):
 
     if not destination and mode != 'drop':
         logger.error('Did not find destination for message %s and mode is not drop', message)
-        return False
+        return (False, message)
 
     message['destination'] = destination
     message['mode'] = mode
     message['mode_id'] = mode_id
 
-    return True
+    return (True, message)
 
 
 def set_target_contact(message):
     # If we already have a destination set (eg incident tracking emails or literal_target notifications) no-op this
     if 'destination' in message and not message.get('multi-recipient'):
-        return True
+        return (True, message)
 
     # returns True if contact has been set (even if it has been changed to the fallback). Otherwise, returns False
     destination_query = '''
@@ -867,7 +867,7 @@ def set_target_contact(message):
                 continue
         cursor.close()
         connection.close()
-        return bool(message.get('destination') or message.get('bcc_destination'))
+        return (bool(message.get('destination') or message.get('bcc_destination')), message)
 
     try:
         if 'mode' in message or 'mode_id' in message:
@@ -924,16 +924,31 @@ def set_target_contact(message):
             result = True
         else:
             # message triggered by incident will only have priority
-            result = set_target_contact_by_priority(message)
+            result, message = set_target_contact_by_priority(message)
         if result:
-            cache.target_reprioritization(message)
+            if cache.target_reprioritization is not None:
+                message = cache.target_reprioritization(message)
         else:
             logger.warning('target does not have mode %r', message)
-            result = set_target_fallback_mode(message)
-        return result
+            result, message = set_target_fallback_mode(message)
+
+        # include any device ids for the target to send optional push notifications
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        # get user category overrides if they exist
+        cursor.execute('''
+            SELECT `device`.`registration_id` FROM `device`
+            JOIN `target` ON `target`.`id` = `device`.`user_id`
+            WHERE `target`.`name` = %(target)s''', {'target': message['target']})
+        device_ids = cursor.fetchall()
+        message['device_ids'] = [i[0] for i in device_ids]
+        cursor.close()
+        connection.close()
+        return (result, message)
     except (ValueError, TypeError):
         logger.exception('target does not have mode %r', message)
-        return set_target_fallback_mode(message)
+        result, message = set_target_fallback_mode(message)
+        return (result, message)
 
 
 def render(message):
@@ -952,7 +967,7 @@ def render(message):
         else:
             # out of band message does not have id and should already have the
             # content populated
-            return
+            return message
     elif 'aggregated_ids' in message:
         message['subject'] = '[%%(application)s] %s messages from plan %%(plan)s' % len(message['aggregated_ids']) % message
         message['body'] = 'Batch ID: %(batch_id)s' % message
@@ -962,7 +977,11 @@ def render(message):
             message['body'] = ''
         error = None
         try:
-            template = cache.templates[message['template']]
+            template = None
+            if cache.templates is None:
+                template = cache.Templates(db.engine)[message['template']]
+            else:
+                template = cache.templates[message['template']]
             try:
                 application_template = template[message['application']]
                 try:
@@ -1006,6 +1025,7 @@ def render(message):
                     'incident_id': message['incident_id']
                 }
                 message['extra_html'] = additional_body
+    return message
 
 
 def mark_message_as_sent(message):
@@ -1630,7 +1650,7 @@ def message_send_enqueue(message):
     # queue it gets inserted into. Skip this step if it's a retry because we'd
     # already have the message's contact info decided
     if not message.get('retry_count'):
-        has_contact = set_target_contact(message)
+        has_contact = set_target_contact(message)[0]
         if not has_contact:
             mark_message_has_no_contact(message)
             metrics.incr('task_failure')

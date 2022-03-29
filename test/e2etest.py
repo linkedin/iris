@@ -3038,6 +3038,81 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
         conn.commit()
 
 
+def test_register_sender_nodes(superuser_application):
+
+    # add 5 sender nodes to the cluster
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_1',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_2',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_3',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_4',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_5',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    re = requests.get(base_url + 'internal/sender_heartbeat/node_1',
+                      headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    node_assignments = {'node_1': 0, 'node_2': 0, 'node_3': 0, 'node_4': 0, 'node_5': 0}
+    for bucket in assignments:
+        node_assignments[bucket.get('node_id')] += 1
+
+    # check that all the buckets are distributed evenly
+    assert node_assignments['node_1'] == 20
+    assert node_assignments['node_2'] == 20
+    assert node_assignments['node_3'] == 20
+    assert node_assignments['node_4'] == 20
+    assert node_assignments['node_5'] == 20
+
+    # remove some of the nodes
+    re = requests.delete(base_url + 'internal/sender_heartbeat/node_3',
+                         headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    re = requests.delete(base_url + 'internal/sender_heartbeat/node_4',
+                         headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    re = requests.delete(base_url + 'internal/sender_heartbeat/node_5',
+                         headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 200
+    assignments = re.json()
+    assert len(assignments) == 100
+
+    node_assignments = {'node_1': 0, 'node_2': 0, 'node_3': 0, 'node_4': 0, 'node_5': 0}
+    for bucket in assignments:
+        node_assignments[bucket.get('node_id')] += 1
+
+    # check that all the buckets are distributed evenly
+    assert node_assignments['node_3'] == 0
+    assert node_assignments['node_4'] == 0
+    assert node_assignments['node_5'] == 0
+    assert node_assignments['node_1'] >= 49
+    assert node_assignments['node_2'] >= 49
+    assert node_assignments['node_1'] + node_assignments['node_2'] == 100
+
+
 def test_ui_routes_redirect(sample_user, sample_admin_user):
     # When not logged in, various pages redirect to login page
     re = requests.get(ui_url + 'user', allow_redirects=False)

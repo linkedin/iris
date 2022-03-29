@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime
 import iris.cache
 from iris import metrics
+from iris import utils
 import logging
 import ujson
 
@@ -41,9 +42,9 @@ insert_application_quota_query = '''INSERT INTO `application_quota` (`applicatio
                                                             `target_id` = :target_id,
                                                             `wait_time` = :wait_time'''
 
-create_incident_query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`)
+create_incident_query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`, `current_step`, `active`, `application_id`, `bucket_id`)
                            VALUES ((SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan_name),
-                                   :created, :context, 0, TRUE, :sender_app_id)'''
+                                   :created, :context, 0, TRUE, :sender_app_id, :bucket_id)'''
 
 check_incident_claimed_query = '''SELECT `active` FROM `incident` WHERE `id` = :id'''
 
@@ -245,7 +246,8 @@ class ApplicationQuota(object):
                     'limit': limit,
                     'duration': duration
                 }
-            })
+            }),
+            'bucket_id': utils.generate_bucket_id()
         }
 
         incident_id = session.execute(create_incident_query, incident_data).lastrowid
