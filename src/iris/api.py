@@ -701,7 +701,10 @@ def is_valid_tracking_settings(t, k, tpl):
                 except jinja2.TemplateSyntaxError as e:
                     return False, 'Invalid jinja syntax in email html: %s' % e
     else:
-        if t not in cache.modes:
+        cache.api_cache_lock.acquire()
+        mode = cache.modes.get(t)
+        cache.api_cache_lock.release()
+        if not mode:
             return False, 'Unknown tracking type: %s' % t
 
         environment = SandboxedEnvironment()
@@ -793,7 +796,9 @@ class AuthMiddleware(object):
         # API call, but set 'app' to the internal iris user as some routes (test incident creation)
         # need it.
         if req.context['username']:
+            cache.api_cache_lock.acquire()
             req.context['app'] = cache.applications.get('iris')
+            cache.api_cache_lock.release()
             return
 
         # For the purpose of e2etests, allow setting username via header, rather than going
@@ -815,12 +820,14 @@ class AuthMiddleware(object):
                 app = req.get_param('application', required=True)
             else:
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
-
-            if app not in cache.applications:
+            cache.api_cache_lock.acquire()
+            app = cache.applications.get(app)
+            cache.api_cache_lock.release()
+            if not app:
                 logger.warning('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
-            req.context['app'] = cache.applications[app]
+            req.context['app'] = app
         except TypeError:
             return
 
@@ -834,7 +841,9 @@ class AuthMiddleware(object):
         # Ignore HMAC requirements for custom webhooks
         if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
             app_name = req.get_param('application', required=True)
+            cache.api_cache_lock.acquire()
             app = cache.applications.get(app_name)
+            cache.api_cache_lock.release()
             if not app:
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
@@ -852,7 +861,9 @@ class AuthMiddleware(object):
         # API call, but set 'app' to the internal iris user as some routes (test incident creation)
         # need it.
         if req.context['username']:
+            cache.api_cache_lock.acquire()
             req.context['app'] = cache.applications.get('iris')
+            cache.api_cache_lock.release()
             return
 
         # If this is a frontend route, and we're not logged in, don't fall through to process as
@@ -873,7 +884,9 @@ class AuthMiddleware(object):
             username_header = req.get_header('X-IRIS-USERNAME')
             try:
                 app_name, client_digest = auth[5:].split(':', 1)
+                cache.api_cache_lock.acquire()
                 app = cache.applications.get(app_name)
+                cache.api_cache_lock.release()
                 if not app:
                     logger.warning('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
@@ -1428,8 +1441,10 @@ class Plans(object):
                     if step['optional'] == 0:
                         only_optional_flag = False
 
+                    cache.api_cache_lock.acquire()
                     priority = cache.priorities.get(step['priority'])
                     role = cache.target_roles.get(step.get('role'))
+                    cache.api_cache_lock.release()
 
                     if priority:
                         step['priority_id'] = priority['id']
@@ -1697,7 +1712,9 @@ class Incidents(object):
                         ('This application %s does not allow creating incidents as '
                          'other applications') % req.context['app']['name'])
 
+                cache.api_cache_lock.acquire()
                 app = cache.applications.get(incident_params['application'])
+                cache.api_cache_lock.release()
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
@@ -2507,7 +2524,9 @@ class Notifications(object):
         if 'target_list' in message:
             message['multi-recipient'] = True
             if 'mode' in message:
+                cache.api_cache_lock.acquire()
                 mode_id = cache.modes.get(message['mode'])
+                cache.api_cache_lock.release()
                 if not mode_id or message['mode'] != 'email':
                     raise HTTPBadRequest('Invalid mode', message['mode'])
                 message['mode_id'] = mode_id
@@ -2516,12 +2535,16 @@ class Notifications(object):
         else:
             # If both priority and mode are passed in, priority overrides mode
             if 'priority' in message:
+                cache.api_cache_lock.acquire()
                 priority = cache.priorities.get(message['priority'])
+                cache.api_cache_lock.release()
                 if not priority:
                     raise HTTPBadRequest('Invalid priority', message['priority'])
                 message['priority_id'] = priority['id']
             elif 'mode' in message:
+                cache.api_cache_lock.acquire()
                 mode_id = cache.modes.get(message['mode'])
+                cache.api_cache_lock.release()
                 if not mode_id:
                     raise HTTPBadRequest('Invalid mode', message['mode'])
                 message['mode_id'] = mode_id
@@ -3070,11 +3093,14 @@ class Target(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
-        if target_type not in cache.target_types:
+        cache.api_cache_lock.acquire()
+        type_id = cache.target_types.get(target_type)
+        cache.api_cache_lock.release()
+        if not type_id:
             raise HTTPBadRequest('Target type %s not found' % target_type)
 
         filters_sql = []
-        req.params['type_id'] = cache.target_types[target_type]
+        req.params['type_id'] = type_id
         filters_sql.append('`type_id` = :type_id')
 
         if 'startswith' in req.params:
@@ -4389,10 +4415,11 @@ class ResponseMixin(object):
             return result
 
     def create_email_message(self, application, dest, subject, body):
-        if application not in cache.applications:
+        cache.api_cache_lock.acquire()
+        app = cache.applications.get(application)
+        cache.api_cache_lock.release()
+        if not app:
             return False, 'Application "%s" not found in %s.' % (application, list(cache.applications.keys()))
-
-        app = cache.applications[application]
 
         with db.guarded_session() as session:
             sql = '''SELECT `target`.`id` FROM `target`
@@ -5763,7 +5790,9 @@ class CategoryOverrides(object):
                     del_categories.append(categories[category])
                 # Otherwise, add info to query params
                 else:
+                    cache.api_cache_lock.acquire()
                     query_params += [user_id, categories[category], cache.modes[mode]]
+                    cache.api_cache_lock.release()
                     insert_count += 1
 
             # Insert all the new settings, then delete the ones that need to go
@@ -6425,7 +6454,7 @@ class PlanAggregationSettings():
 
 def update_cache_worker():
     while True:
-        logger.debug('Reinitializing cache')
+        logger.info('Reinitializing cache')
         cache.init()
         sleep(60)
 
