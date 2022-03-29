@@ -13,7 +13,7 @@ target_types = {}  # name -> id
 target_roles = {}  # name -> id
 modes = {}         # name -> id
 slack_ids = {}     # name -> id
-api_cache_lock = gevent.lock.Semaphore(1)
+api_cache_lock = gevent.lock.BoundedSemaphore(1)
 
 
 def cache_applications():
