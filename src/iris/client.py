@@ -42,7 +42,7 @@ class IrisClient(requests.Session):
 
         if iris_app and iris_app_key:
             self.auth = IrisAuth(iris_app, iris_app_key)
-            logger.info('Initializing iris api client with auth using app %s', iris_app)
+            logger.debug('Initializing iris api client with auth using app %s', iris_app)
         else:
             logger.warning('Initializing iris api client without auth')
 
