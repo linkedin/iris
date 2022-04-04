@@ -1607,6 +1607,11 @@ class Incidents(object):
                             incident_IDs.append(message.get('incident_id'))
                         where.append('''`incident`.`id` IN %s''')
                         sql_values.append(tuple(incident_IDs))
+                    elif target:
+                        # if target field is specified and there are no matching messages that means there are no incidents that match the query
+                        resp.status = HTTP_200
+                        resp.body = ujson.dumps([])
+                        return
                 else:
                     logger.error('failed retrieving messages from external sender %s', r.text)
             except Exception as e:
