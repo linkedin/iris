@@ -5848,8 +5848,8 @@ class CategoryOverrides(object):
 
 
 class InternalRenderJinja():
-    allow_read_no_auth = True
-    internal_allowlist_only = False
+    allow_read_no_auth = False
+    internal_allowlist_only = True
 
     def __init__(self):
         # Autoescape needs to be False to avoid html-encoding ampersands in emails.
