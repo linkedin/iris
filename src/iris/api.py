@@ -5913,7 +5913,6 @@ class InternalBuildMessages():
             cursor.close()
             conn.close()
 
-        notification['subject'] = '[%s] %s' % (notification['application'], notification.get('subject', ''))
         target_list = notification.get('target_list')
         role = notification.get('role')
         if not role and not target_list:
