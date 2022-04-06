@@ -5968,6 +5968,9 @@ class InternalBuildMessages():
             if 'context' not in notification:
                 logger.warning('Failed to build due to missing context from app %s', notification['application'])
                 raise HTTPBadRequest('INVALID context')
+            elif 'iris' not in notification.get('context', {}):
+                # fill in dummy iris meta data for OOB notifications messages
+                notification['context']['iris'] = {}
         elif 'email_html' in notification:
             if not isinstance(notification['email_html'], str):
                 logger.warning('Failed to build with invalid email_html from app %s: %s', notification['application'], notification['email_html'])
