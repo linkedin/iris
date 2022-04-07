@@ -24,7 +24,7 @@ class IrisAuth(requests.auth.AuthBase):
         path = request.path_url.encode('utf8')
         method = request.method.encode('utf8')
         body = request.body or b''
-        window = str(int(time.time()) // 5).encode('utf8')
+        window = str(int(time.time()) // 30).encode('utf8')
         HMAC.update(b'%s %s %s %s' % (window, method, path, body))
 
         digest = base64.urlsafe_b64encode(HMAC.digest())
@@ -42,7 +42,7 @@ class IrisClient(requests.Session):
 
         if iris_app and iris_app_key:
             self.auth = IrisAuth(iris_app, iris_app_key)
-            logger.info('Initializing iris api client with auth using app %s', iris_app)
+            logger.debug('Initializing iris api client with auth using app %s', iris_app)
         else:
             logger.warning('Initializing iris api client without auth')
 

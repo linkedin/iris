@@ -1904,7 +1904,11 @@ iris = {
           template_vars = {changes: []};
       $.getJSON(self.data.url + path).done(function(data) {
           if (data.generic_message_sent_status != null) {
-              data.generic_message_sent_status = data.generic_message_sent_status ? 'sent' : 'failed to send';
+            if (data.generic_message_sent_status == 1) {
+              data.generic_message_sent_status = 'sent'
+            } else if (data.generic_message_sent_status == 0) {
+              data.generic_message_sent_status = 'failed to send'
+            }
           }
           $.extend(template_vars, data);
           $.getJSON(self.data.url + path + '/auditlog').done(function(data) {

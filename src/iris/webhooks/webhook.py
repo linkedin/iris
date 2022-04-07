@@ -1,11 +1,10 @@
-from __future__ import absolute_import
-
 import datetime
 import logging
 import ujson
 from falcon import HTTP_201, HTTPBadRequest, HTTPNotFound
 
 from iris import db
+from iris import utils
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +65,13 @@ class webhook(object):
                 'context': context_json_str,
                 'current_step': 0,
                 'active': True,
+                'bucket_id': utils.generate_bucket_id()
             }
 
             incident_id = session.execute(
                 '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                           `current_step`, `active`, `application_id`)
-                   VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                                           `current_step`, `active`, `application_id`, `bucket_id`)
+                   VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                 data).lastrowid
 
             session.commit()

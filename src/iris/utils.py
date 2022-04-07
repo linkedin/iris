@@ -13,11 +13,19 @@ from . import db
 import re
 import msgpack
 import logging
+from random import randrange
 
 logger = logging.getLogger(__name__)
 
+BUCKET_ID_MAX = 100
 uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
 allowed_text_response_actions = frozenset(['suppress', 'claim'])
+
+
+def generate_bucket_id():
+    # returns random integer value value from 0 to BUCKET_ID_MAX-1, inclusive.
+    # TODO properly mock config loading in testing to not rely on environmental variables and make this configurable in configs
+    return randrange(BUCKET_ID_MAX)
 
 
 def normalize_phone_number(num):

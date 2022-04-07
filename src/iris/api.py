@@ -14,7 +14,11 @@ import datetime
 import logging
 import importlib
 import jinja2
+import uuid
+import math
 from jinja2.sandbox import SandboxedEnvironment
+from contextlib import ExitStack
+from kazoo.client import KazooClient
 from urllib.parse import parse_qs
 import ujson
 from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
@@ -33,10 +37,14 @@ from . import utils
 from . import cache
 from . import ui
 from . import app_stats
+from . import client
+from .role_lookup import get_role_lookups
 from .config import load_config
 from iris.vendors.iris_slack import iris_slack
+from iris.role_lookup import IrisRoleLookupException
 from iris.sender import auditlog
-from iris.bin.sender import set_target_contact, render
+from iris.bin import sender
+from iris.utils import sanitize_unicode_dict
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
 
@@ -694,7 +702,9 @@ def is_valid_tracking_settings(t, k, tpl):
                 except jinja2.TemplateSyntaxError as e:
                     return False, 'Invalid jinja syntax in email html: %s' % e
     else:
-        if t not in cache.modes:
+        with cache.api_cache_lock:
+            mode = cache.modes.get(t)
+        if not mode:
             return False, 'Unknown tracking type: %s' % t
 
         environment = SandboxedEnvironment()
@@ -784,7 +794,8 @@ class AuthMiddleware(object):
         # API call, but set 'app' to the internal iris user as some routes (test incident creation)
         # need it.
         if req.context['username']:
-            req.context['app'] = cache.applications.get('iris')
+            with cache.api_cache_lock:
+                req.context['app'] = cache.applications.get('iris')
             return
 
         # For the purpose of e2etests, allow setting username via header, rather than going
@@ -806,12 +817,13 @@ class AuthMiddleware(object):
                 app = req.get_param('application', required=True)
             else:
                 app, client_digest = req.get_header('AUTHORIZATION', '')[5:].split(':', 1)
-
-            if app not in cache.applications:
+            with cache.api_cache_lock:
+                app = cache.applications.get(app)
+            if not app:
                 logger.warning('Tried authenticating with nonexistent app: "%s"', app)
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
-            req.context['app'] = cache.applications[app]
+            req.context['app'] = app
         except TypeError:
             return
 
@@ -825,7 +837,8 @@ class AuthMiddleware(object):
         # Ignore HMAC requirements for custom webhooks
         if req.env['PATH_INFO'].startswith('/v0/webhooks/'):
             app_name = req.get_param('application', required=True)
-            app = cache.applications.get(app_name)
+            with cache.api_cache_lock:
+                app = cache.applications.get(app_name)
             if not app:
                 raise HTTPUnauthorized('Authentication failure',
                                        'Application not found', [])
@@ -843,7 +856,8 @@ class AuthMiddleware(object):
         # API call, but set 'app' to the internal iris user as some routes (test incident creation)
         # need it.
         if req.context['username']:
-            req.context['app'] = cache.applications.get('iris')
+            with cache.api_cache_lock:
+                req.context['app'] = cache.applications.get('iris')
             return
 
         # If this is a frontend route, and we're not logged in, don't fall through to process as
@@ -864,7 +878,8 @@ class AuthMiddleware(object):
             username_header = req.get_header('X-IRIS-USERNAME')
             try:
                 app_name, client_digest = auth[5:].split(':', 1)
-                app = cache.applications.get(app_name)
+                with cache.api_cache_lock:
+                    app = cache.applications.get(app_name)
                 if not app:
                     logger.warning('Tried authenticating with nonexistent app: "%s"', app_name)
                     raise HTTPUnauthorized('Authentication failure', '', [])
@@ -1409,8 +1424,9 @@ class Plans(object):
                     if step['optional'] == 0:
                         only_optional_flag = False
 
-                    priority = cache.priorities.get(step['priority'])
-                    role = cache.target_roles.get(step.get('role'))
+                    with cache.api_cache_lock:
+                        priority = cache.priorities.get(step['priority'])
+                        role = cache.target_roles.get(step.get('role'))
 
                     if priority:
                         step['priority_id'] = priority['id']
@@ -1464,6 +1480,15 @@ class Incidents(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp):
@@ -1511,6 +1536,7 @@ class Incidents(object):
         - application: Application that created this incident (string)
         - plan: Escalation plan name (string)
         - plan_id: Escalation plan id (int)
+        - claimed: Claimed status (bool)
 
         This endpoint also allows specification of a limit via another query parameter, which limits
         results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
@@ -1530,19 +1556,55 @@ class Incidents(object):
         req.params.pop('target', None)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
-        if target:
+        if target and not self.external_sender_incident_processing:
             query += 'JOIN `message` ON `message`.`incident_id` = `incident`.`id`'
 
         connection = db.engine.raw_connection()
         where = gen_where_filter_clause(connection, incident_filters, incident_filter_types, req.params)
         sql_values = []
-        if target:
+        claimed_filter = req.get_param_as_bool('claimed')
+        if claimed_filter is not None:
+            if claimed_filter:
+                where.append('''`incident`.`owner_id` IS NOT NULL''')
+            else:
+                where.append('''`incident`.`owner_id` IS NULL''')
+
+        if target and not self.external_sender_incident_processing:
             where.append('''`message`.`target_id` IN
                 (SELECT `id`
                 FROM `target`
                 WHERE `target`.`name` IN %s
             )''')
             sql_values.append(tuple(target))
+        if self.external_sender_incident_processing and target:
+            message_query_string = 'messages?limit=500'
+            if req.params.get('created__ge'):
+                message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
+            if req.params.get('created__le'):
+                message_query_string += '&sent__le=' + str(req.params.get('created__le'))
+            for t in target:
+                message_query_string = message_query_string + '&target=' + str(t)
+            # get messages for incident
+            try:
+                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                r = external_sender_client.get(message_query_string, verify=self.verify)
+                if r.ok:
+                    incident_IDs = []
+                    messages = r.json()
+                    if len(messages) > 0:
+                        for message in messages:
+                            incident_IDs.append(message.get('incident_id'))
+                        where.append('''`incident`.`id` IN %s''')
+                        sql_values.append(tuple(incident_IDs))
+                    elif target:
+                        # if target field is specified and there are no matching messages that means there are no incidents that match the query
+                        resp.status = HTTP_200
+                        resp.body = ujson.dumps([])
+                        return
+                else:
+                    logger.error('failed retrieving messages from external sender %s', r.text)
+            except Exception as e:
+                logger.exception('failed to establish connection with iris message processor')
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
         if where:
@@ -1645,7 +1707,8 @@ class Incidents(object):
                         ('This application %s does not allow creating incidents as '
                          'other applications') % req.context['app']['name'])
 
-                app = cache.applications.get(incident_params['application'])
+                with cache.api_cache_lock:
+                    app = cache.applications.get(incident_params['application'])
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
@@ -1701,12 +1764,13 @@ class Incidents(object):
                         'context': context_json_str,
                         'current_step': 0,
                         'active': True,
+                        'bucket_id': utils.generate_bucket_id()
                     }
 
                     incident_id = session.execute(
                         '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                                   `current_step`, `active`, `application_id`)
-                           VALUES (:plan_id, :created, :context, 0, :active, :application_id)''',
+                                                   `current_step`, `active`, `application_id`, `bucket_id`)
+                           VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                         data).lastrowid
 
                     for idx, target in enumerate(dynamic_targets):
@@ -1790,6 +1854,15 @@ class Incident(object):
     allow_read_no_auth = True
 
     def __init__(self, config):
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def on_get(self, req, resp, incident_id):
@@ -1844,8 +1917,21 @@ class Incident(object):
         incident = cursor.fetchone()
 
         if incident:
-            cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
-            incident['steps'] = cursor.fetchall()
+            # if external sender fetch message and audit logs from it instead
+            if self.external_sender_incident_processing:
+                # get messages for incident
+                try:
+                    external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                    r = external_sender_client.get('messages?incident_id=' + str(incident['id']), verify=self.verify)
+                    if r.ok:
+                        incident['steps'] = r.json()
+                    else:
+                        logger.error("failed retrieving messages from external sender: %s", r.text)
+                except Exception as e:
+                    logger.exception('failed to establish connection with iris message processor')
+            else:
+                cursor.execute(single_incident_query_steps, (auditlog.MODE_CHANGE, auditlog.TARGET_CHANGE, incident['id']))
+                incident['steps'] = cursor.fetchall()
 
             cursor.execute(single_incident_query_comments, incident['id'])
             incident['comments'] = cursor.fetchall()
@@ -2054,6 +2140,18 @@ class ClaimIncidents(object):
 class Message(object):
     allow_read_no_auth = True
 
+    def __init__(self, config):
+
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+
     def on_get(self, req, resp, message_id):
         '''
         Get information for an iris message by id
@@ -2089,6 +2187,42 @@ class Message(object):
               "subject": "message subject"
            }
         '''
+
+        # if external sender is enabled send message api requests there
+        if self.external_sender_incident_processing:
+            message_data = {}
+            # get message
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.get('messages?id=' + message_id, verify=self.verify)
+            if r.ok:
+                message_resp = r.json()
+                if len(message_resp) == 0:
+                    resp.status = HTTP_200
+                    resp.body = ujson.loads({})
+                    return
+                message_data = message_resp[0]
+            else:
+                resp.status = str(r.status_code)
+                resp.body = r.text
+                return
+            # get message status
+            r = external_sender_client.get('message_status?id=' + message_id, verify=self.verify)
+            if r.ok:
+                status_resp = r.json()
+                message_data["generic_message_sent_status"] = status_resp.get("status")
+                message_data["last_updated"] = status_resp.get("last_updated")
+                message_data["active"] = 0
+                if status_resp.get("vendor_id"):
+                    message_data["twilio_delivery_status"] = status_resp.get("status")
+                    message_data["vendor_id"] = status_resp.get("vendor_id")
+            else:
+                resp.status = str(r.status_code)
+                resp.body = r.text
+                return
+            resp.status = HTTP_200
+            resp.body = ujson.dumps(message_data)
+            return
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(single_message_query, int(message_id))
@@ -2103,6 +2237,18 @@ class Message(object):
 
 class MessageAuditLog(object):
     allow_read_no_auth = True
+
+    def __init__(self, config):
+
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_get(self, req, resp, message_id):
         '''
@@ -2132,6 +2278,21 @@ class MessageAuditLog(object):
              },
            ]
         '''
+
+        # if external sender is enabled send message api requests there
+        if self.external_sender_incident_processing:
+            # get message changelogs
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.get('message_changelogs?id=' + message_id, verify=self.verify)
+            if r.ok:
+                resp.status = HTTP_200
+                resp.body = ujson.dumps(r.json())
+                return
+            else:
+                resp.status = str(r.status_code)
+                resp.body = r.text
+                return
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(message_audit_log_query, int(message_id))
@@ -2142,7 +2303,35 @@ class MessageAuditLog(object):
 class Messages(object):
     allow_read_no_auth = True
 
+    def __init__(self, config):
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+
     def on_get(self, req, resp):
+
+        # if external sender is enabled send message api requests there
+        if self.external_sender_incident_processing:
+            if len(req.query_string) == 0:
+                raise HTTPBadRequest('Message query too broad, add a filter')
+            # get messages
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.get('messages?' + req.query_string, verify=self.verify)
+            if r.ok:
+                resp.status = HTTP_200
+                resp.body = ujson.dumps(r.json())
+                return
+            else:
+                resp.status = str(r.status_code)
+                resp.body = r.text
+                return
+
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
         fields = [f for f in fields if f in message_columns] if fields else None
@@ -2177,9 +2366,9 @@ class Notifications(object):
     allow_read_no_auth = False
     required_attrs = frozenset(['target', 'role', 'subject'])
 
-    def __init__(self, zk_hosts, default_sender_addr, timeout):
+    def __init__(self, zk_hosts, default_sender_addr, config):
         self.default_sender_addr = default_sender_addr
-        self.timeout = timeout
+        self.timeout = config.get('zookeeper_timeout', 1)
         if zk_hosts:
             from iris.coordinator.kazoo import Coordinator
             self.coordinator = Coordinator(zk_hosts=zk_hosts,
@@ -2189,6 +2378,18 @@ class Notifications(object):
         else:
             logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
             self.coordinator = None
+
+        # if external sender is enabled forward notifications to that sender instead
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_notification_processing = external_sender_configs.get('external_sender_notification_processing', False)
+        # percentage of notifications that will be sent to external sender for processing
+        self.external_notification_processing_ramp_percentage = external_sender_configs.get('external_notification_processing_ramp_percentage', 100)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_post(self, req, resp):
         '''
@@ -2318,7 +2519,8 @@ class Notifications(object):
         if 'target_list' in message:
             message['multi-recipient'] = True
             if 'mode' in message:
-                mode_id = cache.modes.get(message['mode'])
+                with cache.api_cache_lock:
+                    mode_id = cache.modes.get(message['mode'])
                 if not mode_id or message['mode'] != 'email':
                     raise HTTPBadRequest('Invalid mode', message['mode'])
                 message['mode_id'] = mode_id
@@ -2327,12 +2529,14 @@ class Notifications(object):
         else:
             # If both priority and mode are passed in, priority overrides mode
             if 'priority' in message:
-                priority = cache.priorities.get(message['priority'])
+                with cache.api_cache_lock:
+                    priority = cache.priorities.get(message['priority'])
                 if not priority:
                     raise HTTPBadRequest('Invalid priority', message['priority'])
                 message['priority_id'] = priority['id']
             elif 'mode' in message:
-                mode_id = cache.modes.get(message['mode'])
+                with cache.api_cache_lock:
+                    mode_id = cache.modes.get(message['mode'])
                 if not mode_id:
                     raise HTTPBadRequest('Invalid mode', message['mode'])
                 message['mode_id'] = mode_id
@@ -2401,6 +2605,31 @@ class Notifications(object):
         utils.sanitize_unicode_dict(message)
 
         message['application'] = req.context['app']['name']
+
+        # if external sender is enabled send notification requests there
+        if self.external_sender_notification_processing:
+            # when ramped at 100% range is [1,1] when 50% range is [1,2] at 10% range is [1,10] and so on
+            num_range = int(100 / self.external_notification_processing_ramp_percentage)
+            if random.randint(1, num_range) == 1:
+                retries = 0
+                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+                while retries < 3:
+                    retries += 1
+                    try:
+                        r = external_sender_client.post('notification', json=message, verify=self.verify)
+                        if r.ok:
+                            resp.status = HTTP_200
+                            return
+                    except Exception as e:
+                        logger.exception('failed to send notification to external sender')
+                        if retries >= 3:
+                            raise HTTPInternalServerError(str(e))
+                    else:
+                        # don't bother retrying a bad query
+                        if r.status_code == 400:
+                            break
+                logger.error("failed posting notification via external sender: %s", r.text)
+                raise HTTPBadRequest(r.text)
 
         # If we're using ZK, try that to get leader
         if self.coordinator:
@@ -2856,11 +3085,13 @@ class Target(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
-        if target_type not in cache.target_types:
+        with cache.api_cache_lock:
+            type_id = cache.target_types.get(target_type)
+        if not type_id:
             raise HTTPBadRequest('Target type %s not found' % target_type)
 
         filters_sql = []
-        req.params['type_id'] = cache.target_types[target_type]
+        req.params['type_id'] = type_id
         filters_sql.append('`type_id` = :type_id')
 
         if 'startswith' in req.params:
@@ -4175,10 +4406,10 @@ class ResponseMixin(object):
             return result
 
     def create_email_message(self, application, dest, subject, body):
-        if application not in cache.applications:
+        with cache.api_cache_lock:
+            app = cache.applications.get(application)
+        if not app:
             return False, 'Application "%s" not found in %s.' % (application, list(cache.applications.keys()))
-
-        app = cache.applications[application]
 
         with db.guarded_session() as session:
             sql = '''SELECT `target`.`id` FROM `target`
@@ -4316,93 +4547,95 @@ class ResponseMixin(object):
             return app, resp
 
 
+def process_email_response(req):
+    gmail_params = ujson.loads(req.context['body'])
+    email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
+    subject = email_headers.get('Subject')
+    source = email_headers.get('From')
+    if not source:
+        return (None, None, None, 'no source found')
+    to = email_headers.get('To', [])
+    # 'To' will either be string of single recipient or list of several
+    if isinstance(to, str):
+        to = [to]
+    # source is in the format of "First Last <user@email.com>",
+    # but we only want the email part
+    source = source.split(' ')[-1].strip('<>')
+    content = gmail_params['body'].strip()
+
+    # Some people want to use emails to create iris incidents. Facilitate this.
+    if to:
+        to = [t.split(' ')[-1].strip('<>') for t in to]
+        with db.guarded_session() as session:
+            email_check_result = session.execute(
+                '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                    FROM `incident_emails`
+                    JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
+                    WHERE `email` IN :email
+                    AND `email` NOT IN (
+                        SELECT `destination`
+                        FROM `target_contact`
+                        WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                    )''',
+                {'email': to}).fetchone()
+            # Only create incident for first email match
+            if email_check_result:
+                if 'In-Reply-To' in email_headers:
+                    logger.warning(('Not creating incident for email %s as this '
+                                    'is an email reply, rather than a fresh email.'),
+                                   to)
+                    return (None, None, None, 'Not created (email reply not fresh email)')
+
+                app_template_count = session.execute('''
+                    SELECT EXISTS (
+                        SELECT 1 FROM
+                        `plan_notification`
+                        JOIN `template` ON `template`.`name` = `plan_notification`.`template`
+                        JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
+                        WHERE `plan_notification`.`plan_id` = :plan_id
+                        AND `template_content`.`application_id` = :app_id
+                    )
+                ''', {'app_id': email_check_result['application_id'],
+                      'plan_id': email_check_result['plan_id']}).scalar()
+
+                if not app_template_count:
+                    session.close()
+                    logger.warning(('Not creating incident for email %s as no template '
+                                    'actions for this app.'),
+                                   to)
+                    return (None, None, None, 'Not created (no template actions for this app)')
+
+                incident_info = {
+                    'application_id': email_check_result['application_id'],
+                    'created': datetime.datetime.utcnow(),
+                    'plan_id': email_check_result['plan_id'],
+                    'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source}),
+                    'bucket_id': utils.generate_bucket_id()
+                }
+                incident_id = session.execute(
+                    '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                            `current_step`, `active`, `application_id`, `bucket_id`)
+                    VALUES (:plan_id, :created, :context, 0, TRUE, :application_id, :bucket_id) ''',
+                    incident_info).lastrowid
+                session.commit()
+                session.close()
+                return (None, None, None, str(incident_id))
+
+            session.close()
+
+    # only parse first line of email content for now
+    first_line = content.split('\n', 1)[0].strip()
+    return (first_line, subject, source, 'no incident created')
+
+
 class ResponseEmail(ResponseMixin):
     def on_post(self, req, resp):
-        gmail_params = ujson.loads(req.context['body'])
-        email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
-        subject = email_headers.get('Subject')
-        source = email_headers.get('From')
-        if not source:
-            msg = 'No source found in headers: %s' % gmail_params['headers']
-            raise HTTPBadRequest('Missing source', msg)
-        to = email_headers.get('To', [])
-        # 'To' will either be string of single recipient or list of several
-        if isinstance(to, str):
-            to = [to]
-        # source is in the format of "First Last <user@email.com>",
-        # but we only want the email part
-        source = source.split(' ')[-1].strip('<>')
-        content = gmail_params['body'].strip()
 
-        # Some people want to use emails to create iris incidents. Facilitate this.
-        if to:
-            to = [t.split(' ')[-1].strip('<>') for t in to]
-            with db.guarded_session() as session:
-                email_check_result = session.execute(
-                    '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
-                       FROM `incident_emails`
-                       JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
-                       WHERE `email` IN :email
-                       AND `email` NOT IN (
-                           SELECT `destination`
-                           FROM `target_contact`
-                           WHERE `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                       )''',
-                    {'email': to}).fetchone()
-                # Only create incident for first email match
-                if email_check_result:
-                    if 'In-Reply-To' in email_headers:
-                        logger.warning(('Not creating incident for email %s as this '
-                                        'is an email reply, rather than a fresh email.'),
-                                       to)
-                        resp.status = HTTP_204
-                        resp.set_header('X-IRIS-INCIDENT', 'Not created (email reply not fresh email)')
-                        return
-
-                    app_template_count = session.execute('''
-                        SELECT EXISTS (
-                            SELECT 1 FROM
-                            `plan_notification`
-                            JOIN `template` ON `template`.`name` = `plan_notification`.`template`
-                            JOIN `template_content` ON `template_content`.`template_id` = `template`.`id`
-                            WHERE `plan_notification`.`plan_id` = :plan_id
-                            AND `template_content`.`application_id` = :app_id
-                        )
-                    ''', {'app_id': email_check_result['application_id'],
-                          'plan_id': email_check_result['plan_id']}).scalar()
-
-                    if not app_template_count:
-                        session.close()
-                        logger.warning(('Not creating incident for email %s as no template '
-                                        'actions for this app.'),
-                                       to)
-                        resp.status = HTTP_204
-                        resp.set_header('X-IRIS-INCIDENT',
-                                        'Not created (no template actions for this app)')
-                        return
-
-                    incident_info = {
-                        'application_id': email_check_result['application_id'],
-                        'created': datetime.datetime.utcnow(),
-                        'plan_id': email_check_result['plan_id'],
-                        'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source})
-                    }
-                    incident_id = session.execute(
-                        '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                                `current_step`, `active`, `application_id`)
-                        VALUES (:plan_id, :created, :context, 0, TRUE, :application_id) ''',
-                        incident_info).lastrowid
-                    session.commit()
-                    session.close()
-                    resp.status = HTTP_204
-                    # Pass the new incident id back through a header so we can test this
-                    resp.set_header('X-IRIS-INCIDENT', str(incident_id))
-                    return
-
-                session.close()
-
-        # only parse first line of email content for now
-        first_line = content.split('\n', 1)[0].strip()
+        first_line, subject, source, header = process_email_response(req)
+        resp.set_header('X-IRIS-INCIDENT', header)
+        if source is None:
+            resp.status = HTTP_204
+            return
         try:
             msg_id, cmd = utils.parse_email_response(first_line, subject, source)
         except (ValueError, IndexError):
@@ -4531,8 +4764,195 @@ class ResponseSlack(ResponseMixin):
             resp.body = ujson.dumps({'app_response': response})
 
 
+def handle_response_external(self, response, mode, source):
+
+    target_name = utils.lookup_username_from_contact(mode, source)
+    if not target_name:
+        logger.error('Failed resolving %s:%s to target name', mode, source)
+        return ('Failed resolving %s:%s to target name', mode, source)
+    external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+    claim_all = False
+    claim_last = False
+    if response.lower().startswith('f'):
+        return 'Sincerest apologies'
+    # One-letter shortcuts for claim all/last
+    elif response.lower() == 'a':
+        claim_all = True
+    elif response.lower() == 'l':
+        claim_last = True
+
+    incident_id = ""
+    # Skip message splitting for single-letter responses
+    if not (claim_all or claim_last):
+        halves = response.split(' ', 1)
+        if len(halves) != 2:
+            return 'could not resolve action'
+        if halves[0].lower() == 'claim' and halves[1].isdigit():
+            incident_id = halves[1]
+        elif halves[1].lower() == 'claim' and halves[0].isdigit():
+            incident_id = halves[0]
+
+        # get incident id from external sender and claim it
+        if incident_id != "":
+            utils.claim_incident(incident_id, target_name)
+            return 'claimed: %s' % incident_id
+
+    if claim_last or response.lower() == 'claim all':
+        r = external_sender_client.get('messages?active=1&limit=1&target=%s' % target_name, verify=self.verify)
+        if r.ok:
+            messages = r.json()
+            incident_ids = []
+            for message in messages:
+                incident_ids.append(message.get('incident_id', ''))
+            utils.claim_bulk_incidents(incident_ids, target_name)
+            return 'claimed: %s' % incident_ids
+        else:
+            logger.error("failed retrieving messages from external sender: %s", r.text)
+            return 'could not resolve action'
+
+    elif claim_all or response.lower() == 'claim all':
+        last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+        date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
+        r = external_sender_client.get('messages?active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
+        if r.ok:
+            messages = r.json()
+            incident_ids = []
+            for message in messages:
+                incident_ids.append(message.get('incident_id', ''))
+            utils.claim_bulk_incidents(incident_ids, target_name)
+            return 'claimed: %s' % incident_ids
+        else:
+            logger.error("failed retrieving messages from external sender: %s", r.text)
+            return 'could not resolve action'
+
+    return 'could not resolve action'
+
+
+class ResponseTwilioMessageExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        post_dict = parse_qs(req.context['body'])
+        if b'Body' not in post_dict:
+            raise HTTPBadRequest('SMS body not found', 'Missing Body argument in post body')
+
+        if b'From' not in post_dict:
+            raise HTTPBadRequest('From argument not found', 'Missing From in post body')
+        source = post_dict[b'From'][0].decode('utf-8')
+        body = post_dict[b'Body'][0].decode('utf-8')
+
+        response = handle_response_external(self, body.strip(), self.mode, source)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseTwilioCallExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+
+        incident_id = req.get_param('incident_id', required=True)
+        target = req.get_param('target', required=True)
+        if incident_id is None or target is None:
+            raise HTTPBadRequest('Missing incident_id or target')
+        utils.claim_incident(incident_id, target)
+        response = 'claimed %s' % incident_id
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseSlackExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        slack_params = ujson.loads(req.context['body'])
+        try:
+            incident_id = int(slack_params['callback_id'])
+            source = slack_params['source']
+            content = slack_params['content']
+        except KeyError:
+            raise HTTPBadRequest('Post body missing required key')
+
+        if content == 'claim all':
+            response = handle_response_external(self, content, self.mode, source)
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({'app_response': response})
+            return
+        target = utils.lookup_username_from_contact(self.mode, source)
+        if not target:
+            logger.error('Failed resolving %s:%s to target name', self.mode, source)
+            return ('Failed resolving %s:%s to target name', self.mode, source)
+        if incident_id is None or target is None:
+            raise HTTPBadRequest('Missing incident_id or target')
+        utils.claim_incident(incident_id, target)
+        response = 'claimed %s' % incident_id
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
+class ResponseEmailExternal(object):
+    allow_read_no_auth = False
+
+    def __init__(self, config, mode):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
+        self.mode = mode
+
+    def on_post(self, req, resp):
+        first_line, subject, source, header = process_email_response(req)
+        resp.set_header('X-IRIS-INCIDENT', header)
+        if source is None:
+            resp.status = HTTP_204
+            return
+        response = handle_response_external(self, first_line, self.mode, source)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({'app_response': response})
+
+
 class TwilioDeliveryUpdate(object):
     allow_read_no_auth = False
+
+    def __init__(self, config):
+        # if external sender is enabled forward message query through external sender api
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        self.external_sender_address = external_sender_configs.get('external_sender_address')
+        self.external_sender_app = external_sender_configs.get('external_sender_app')
+        self.external_sender_key = external_sender_configs.get('external_sender_key')
+        self.external_sender_version = external_sender_configs.get('external_sender_version')
+        # if disable_auth is True, set verify to False
+        self.verify = external_sender_configs.get('ca_bundle_path', False)
 
     def on_post(self, req, resp):
         post_dict = falcon.uri.parse_query_string(req.context['body'].decode('utf-8'))
@@ -4545,6 +4965,21 @@ class TwilioDeliveryUpdate(object):
             raise HTTPBadRequest('Invalid keys in payload')
 
         affected = False
+        # if external sender is enabled send an api to update it there instead
+        if self.external_sender_incident_processing:
+            payload = {
+                'status': status,
+                'vendor_identifier': sid
+            }
+            external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
+            r = external_sender_client.post('message_status', json=payload, verify=self.verify)
+            if r.ok:
+                resp.status = HTTP_200
+                return
+            logger.error("failed updating message status via external sender: %s", r.text)
+            resp.status = str(r.status_code)
+            return
+
         connection = db.engine.raw_connection()
         cursor = connection.cursor()
         try:
@@ -5345,7 +5780,8 @@ class CategoryOverrides(object):
                     del_categories.append(categories[category])
                 # Otherwise, add info to query params
                 else:
-                    query_params += [user_id, categories[category], cache.modes[mode]]
+                    with cache.api_cache_lock:
+                        query_params += [user_id, categories[category], cache.modes[mode]]
                     insert_count += 1
 
             # Insert all the new settings, then delete the ones that need to go
@@ -5401,9 +5837,642 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
+class InternalRenderJinja():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self):
+        # Autoescape needs to be False to avoid html-encoding ampersands in emails.
+        # in emails, html is allowed and ampersands are escaped with markdown's renderer.
+        self.env = SandboxedEnvironment(autoescape=False)
+
+    def on_get(self, req, resp):
+        req_body = ujson.loads(req.context['body'])
+        if 'template_str' not in req_body or 'context' not in req_body:
+            raise HTTPBadRequest('Missing required attributes, must have template_str and context')
+        template_str = req_body.get('template_str')
+        context = req_body.get('context')
+
+        try:
+            render_env = self.env.from_string(template_str)
+        except Exception as e:
+            raise HTTPBadRequest('Failed to render jinja with err: %s' % str(e))
+        else:
+            try:
+                rendered_body = render_env.render(**context)
+            except Exception as e:
+                raise HTTPBadRequest('Failed to render jinja with err: %s' % str(e))
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({"rendered_body": rendered_body})
+
+
+class InternalBuildMessages():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.cfg = config
+
+    def on_get(self, req, resp):
+        notification = ujson.loads(req.context['body'])
+        if 'application' not in notification:
+            logger.warning('Failed to build due to missing application key')
+            raise HTTPBadRequest('INVALID application')
+
+        if notification.get('role') == 'literal_target':
+            notification['unexpanded'] = True
+
+        if "incident_id" in notification and "dynamic_index" in notification:
+            # check if plan is dynamic and retrieve role & target for incident
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+
+            # resolve dynamic role and target
+            cursor.execute('''
+                SELECT `target_role`.`name` as role, `target`.`name` as target FROM `dynamic_plan_map`
+                JOIN `target` ON `target`.`id` = `dynamic_plan_map`.`target_id`
+                JOIN `target_role` ON `dynamic_plan_map`.`role_id` = `target_role`.`id`
+                WHERE `dynamic_plan_map`.`incident_id` = %s AND `dynamic_plan_map`.`dynamic_index` = %s
+                ''', (notification["incident_id"], notification["dynamic_index"]))
+            result = cursor.fetchone()
+            if result is not None:
+                dynamic_role, dynamic_target = result
+                notification['target'] = dynamic_target
+                notification['role'] = dynamic_role
+            cursor.close()
+            conn.close()
+
+        target_list = notification.get('target_list')
+        role = notification.get('role')
+        if not role and not target_list:
+            logger.warning('Failed to build message with invalid role "%s" from app %s', role, notification['application'])
+            raise HTTPBadRequest('INVALID role')
+
+        target = notification.get('target')
+        if not (target or target_list):
+            logger.warning('Failed to build message with invalid target "%s" from app %s', target, notification['application'])
+            raise HTTPBadRequest('INVALID target')
+        expanded_targets = None
+        # if role is literal_target skip unrolling
+        if not notification.get('unexpanded'):
+            # For multi-recipient notifications, pre-populate destination with literal targets,
+            # then expand the remaining
+            has_literal_target = False
+            if target_list:
+                expanded_targets = []
+                notification['destination'] = []
+                notification['bcc_destination'] = []
+                for t in target_list:
+                    role = t['role']
+                    target = t['target']
+                    bcc = t.get('bcc')
+                    try:
+                        if role == 'literal_target':
+                            if bcc:
+                                notification['bcc_destination'].append(target)
+                            else:
+                                notification['destination'].append(target)
+                            has_literal_target = True
+                        else:
+                            names = direct_lookup(self.cfg, role, target)
+                            expanded_targets += [{'target': e, 'bcc': bcc} for e in names]
+                    except IrisRoleLookupException:
+                        # Maintain best-effort delivery for remaining targets if one fails to resolve
+                        continue
+            else:
+                try:
+                    expanded_targets = direct_lookup(self.cfg, role, target)
+                except IrisRoleLookupException:
+                    expanded_targets = None
+            if not expanded_targets and not has_literal_target:
+                logger.warning('Failed to build with invalid role:target "%s:%s" from app %s', role, target, notification['application'])
+                raise HTTPBadRequest('INVALID role:target')
+
+        sanitize_unicode_dict(notification)
+
+        # If we're rendering this using templates+context instead of body, fill in the
+        # needed iris key.
+        if 'template' in notification:
+            if 'context' not in notification:
+                logger.warning('Failed to build due to missing context from app %s', notification['application'])
+                raise HTTPBadRequest('INVALID context')
+            elif 'iris' not in notification['context']:
+                # fill in dummy iris meta data for OOB notifications messages
+                notification['context']['iris'] = {}
+        elif 'email_html' in notification:
+            if not isinstance(notification['email_html'], str):
+                logger.warning('Failed to build with invalid email_html from app %s: %s', notification['application'], notification['email_html'])
+                raise HTTPBadRequest('INVALID email_html')
+
+        notifications = []
+        if notification.get('unexpanded'):
+            notification['destination'] = notification['target']
+            notifications.append(notification)
+        elif notification.get('multi-recipient'):
+            notification['target'] = expanded_targets
+            notifications.append(notification)
+        else:
+            for _target in expanded_targets:
+                temp_notification = notification.copy()
+                temp_notification['target'] = _target
+                notifications.append(temp_notification)
+
+        messages = []
+        for notification in notifications:
+            success = False
+            try:
+                success, message = set_target_contact(notification)
+            except (ValueError, TypeError):
+                success = False
+            if not success:
+                logger.warning('Failed to build, could not resolve target contacts %s' % ujson.dumps(notification))
+                continue
+            try:
+                message = render(message)
+                messages.append(message)
+            except Exception as e:
+                logger.warning('Failed to render message %s with error: %s' % (ujson.dumps(notification), str(e)))
+        if len(messages) == 0:
+            raise HTTPBadRequest('Failed to build, could not resolve any messages from notification')
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        # Find custom sender address for application, currently only emails are supported
+        cursor.execute('''
+            SELECT `sender_address` FROM `application_custom_sender_address`
+            JOIN `application` on `application_custom_sender_address`.`application_id` = `application`.`id`
+            JOIN `mode` on `application_custom_sender_address`.`mode_id` = `mode`.`id`
+            WHERE `application`.`name` = %s AND `mode`.`name` = %s
+            ''', (notification['application'], 'email'))
+        sender_address = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if sender_address is not None:
+            for idx, message in enumerate(messages):
+                # add sender address as message attribute to emails
+                if message['mode'] == 'email':
+                    message['sender_address'] = sender_address[0]
+                    messages[idx] = message
+
+        if notification.get('multi-recipient'):
+            # if multirecipient separate into multiple messages
+            # TODO: rewrite target expansion to preserve proper multirecipient target->destination relationship, for now format messages like literal_target role
+            split_msgs = []
+            multi_msg = messages[0]
+            for dest in multi_msg["destination"]:
+                # copy message and format as a single message
+                individual_msg = multi_msg.copy()
+                del individual_msg["destination"]
+                del individual_msg["bcc_destination"]
+                del individual_msg["target_list"]
+                individual_msg["destination"] = dest
+                individual_msg["target"] = dest
+                split_msgs.append(individual_msg)
+            for bcc_dest in multi_msg["bcc_destination"]:
+                # copy message and format as a single message
+                individual_msg = multi_msg.copy()
+                del individual_msg["destination"]
+                del individual_msg["bcc_destination"]
+                del individual_msg["target_list"]
+                individual_msg["bcc_destination"] = bcc_dest
+                individual_msg["target"] = bcc_dest
+                split_msgs.append(individual_msg)
+            # replace the multi-message formatted list with the individual formatted messages list
+            messages = split_msgs
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(messages)
+
+
+class InternalApplicationsAuth():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('''SELECT `name`, `key` FROM `application` WHERE `auth_only` is False''')
+        apps = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        payload = apps
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
+class InternalIncident():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_post(self, req, resp, incident_id):
+
+        body = ujson.loads(req.context['body'])
+
+        if 'current_step' not in body or 'active' not in body:
+            raise HTTPBadRequest('Missing required fields "current_step" or "active" in body')
+
+        if not isinstance(body['current_step'], int):
+            raise HTTPBadRequest('"step" field must be an integer"')
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        cursor.execute(''' SELECT EXISTS (SELECT `id` from `incident` where `id` = %s) as valid''', incident_id)
+        if not cursor.fetchone().get('valid'):
+            cursor.close()
+            connection.close()
+            raise HTTPBadRequest('Invalid incident id')
+
+        if body['active']:
+            active = 1
+        else:
+            active = 0
+
+        cursor.execute('''UPDATE `incident` SET `current_step` = %s, `active` = %s WHERE `id` = %s''', (body['current_step'], active, incident_id))
+        connection.commit()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+
+
+class InternalTarget():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.cfg = config
+
+    def on_get(self, req, resp):
+
+        role = req.get_param('role', required=True)
+        target = req.get_param('target', required=True)
+
+        payload = {"error": None, "users": {}}
+        names = direct_lookup(self.cfg, role, target)
+
+        for username in names:
+            user_data = get_user_details(username)
+            payload['users'][username] = user_data
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
+def direct_lookup(config, role, target):
+    targets = None
+    for role_lookup in get_role_lookups(config):
+        targets = role_lookup.get(role, target)
+        if targets is not None:
+            break
+        else:
+            targets = []
+    return targets
+
+
+class SenderPeerCount():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def on_get(self, req, resp):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute("SELECT count(`node_id`) as peer_count FROM `IMP_cluster_members`")
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(result)
+
+
+class SenderHeartbeat():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        cfg = config.get("iris-message-processor", {})
+        self.zk_hosts = cfg.get("zk_hosts", "127.0.0.1:2181")
+        self.lock_path = cfg.get("lock_path", "/iris_message_processor/db_locks/bucket_lock")
+        self.number_of_buckets = cfg.get("number_of_buckets", 100)
+        self.sender_ttl = config.get("sender_ttl", 60)
+        self.zk_debug = config.get("zk_debug", True)
+
+    def on_get(self, req, resp, node_id):
+        payload = {}
+
+        # configure sql client
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        if self.zk_debug:
+            # use exitstack to replace zookeeper lock context manager for testing
+            lock = ExitStack()
+        else:
+            # configure zookeeper client
+            zk = KazooClient(self.zk_hosts)
+            zk.start()
+            node_uuid = node_id + "-" + str(uuid.uuid4())
+            lock = zk.Lock(self.lock_path, node_uuid)
+        # wait until we are able to acquire the global lock before proceeding
+        with lock:
+
+            # check if node is already a member of the cluster and if new member assign it some buckets
+            cursor.execute("SELECT * FROM IMP_cluster_members where node_id = %s", node_id)
+            if not cursor.fetchone():
+
+                cursor.execute("select * from IMP_cluster_members")
+                cluster_members = cursor.fetchall()
+
+                # node was not previously a member of this cluster so figure out what nodes to assign to itself
+                cursor.execute(
+                    "INSERT INTO IMP_cluster_members VALUES(%s, %s, NOW())", (node_id, req.remote_addr))
+
+                # node is the first node in the cluster, directly assign all buckets to it
+                if len(cluster_members) == 0:
+                    insert_sql = "INSERT INTO IMP_bucket_assignments VALUES"
+                    insert_values = []
+                    # build bulk insert sql query
+                    insert_sql += ("(%s, %s)," * self.number_of_buckets)[:-1]
+                    for i in range(self.number_of_buckets):
+                        insert_values.append(node_id)
+                        insert_values.append(i)
+                    cursor.execute(insert_sql, tuple(insert_values))
+                    connection.commit()
+
+                # node is not first find buckets to reallocate to itself from other nodes
+                else:
+
+                    node_to_assigned_buckets = {}
+                    node_to_change_buckets = {}
+                    for row in cluster_members:
+                        node_to_assigned_buckets[row.get("node_id")] = []
+                        node_to_change_buckets[row.get("node_id")] = []
+
+                    # fetch data from bucket changes table
+                    cursor.execute("SELECT * FROM IMP_bucket_changes")
+                    bucket_changes_results = cursor.fetchall()
+                    for row in bucket_changes_results:
+                        node_to_change_buckets.get(
+                            row["node_id"], []).append(row.get("bucket_id"))
+
+                    # fetch data from bucket assignments table for buckets that do not have any pending changes
+                    cursor.execute(
+                        "SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.bucket_id NOT IN (SELECT IMP_bucket_changes.bucket_id from IMP_bucket_changes)")
+                    assigned_buckets = cursor.fetchall()
+                    for row in assigned_buckets:
+                        node_to_assigned_buckets.get(
+                            row["node_id"], []).append(row["bucket_id"])
+
+                    # how many total buckets does the new node need
+                    required_buckets = math.floor(self.number_of_buckets / (len(cluster_members) + 1))
+
+                    # go node by node through existing nodes to determine what buckets we are going to take from each
+                    for row in cluster_members:
+                        # keep track af how many buckets we have reassigned for each node
+                        buckets_reassigned = 0
+                        donor_node_id = row.get("node_id")
+                        donor_buckets_total = len(node_to_change_buckets.get(
+                            donor_node_id, [])) + len(node_to_assigned_buckets.get(donor_node_id, []))
+                        buckets_to_take = donor_buckets_total - required_buckets
+
+                        if buckets_to_take > 0:
+                            # prioritize reassigning buckets in IMP_bucket_changes to minimize bucket shuffling
+                            for bucket in node_to_change_buckets.get(donor_node_id):
+                                cursor.execute(
+                                    "UPDATE IMP_bucket_changes SET node_id = %s WHERE bucket_id = %s", (node_id, bucket))
+                                buckets_reassigned += 1
+                                if buckets_reassigned >= buckets_to_take:
+                                    break
+                            # we still need more buckets from this donor node so take buckets from IMP_bucket_assignments
+                            if buckets_reassigned < buckets_to_take:
+                                for bucket in node_to_assigned_buckets.get(donor_node_id):
+                                    cursor.execute(
+                                        "INSERT INTO IMP_bucket_changes VALUES(%s,%s)", (node_id, bucket))
+                                    buckets_reassigned += 1
+                                    if buckets_reassigned >= buckets_to_take:
+                                        break
+
+                    connection.commit()
+            else:
+                # update last modified time to renew our TTL
+                cursor.execute(
+                    "UPDATE IMP_cluster_members SET last_modified = NOW() WHERE node_id = %s", node_id)
+
+            # check if there are any buckets that belong to this node that we have to give up
+
+            cursor.execute(
+                "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", node_id)
+            bucket_changes_results = cursor.fetchall()
+            for row in bucket_changes_results:
+                # release buckets to the node that requested them
+                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
+                               (row["node_id"], row["bucket_id"]))
+                # delete IMP_bucket_changes request for teh bucket we just reassigned
+                cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s",
+                               (row["node_id"], row["bucket_id"]))
+            connection.commit()
+
+            # check if there are are nodes who's cluster membership TTL has expired and redistribute their buckets
+
+            # if a node has gone more than TTL seconds without checking in kick it out of the cluster
+            cursor.execute(
+                "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s", self.sender_ttl)
+            dead_nodes = cursor.fetchall()
+
+            if len(dead_nodes) > 0:
+                cursor.execute(
+                    "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s", self.sender_ttl)
+                alive_nodes = cursor.fetchall()
+
+                # apply any changes that were already pending for the dead nodes
+                for dead_node in dead_nodes:
+                    cursor.execute(
+                        "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", dead_node["node_id"])
+                    bucket_changes_results = cursor.fetchall()
+                    for row in bucket_changes_results:
+                        # release buckets to the node that requested them
+                        cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (
+                            row["node_id"], row["bucket_id"]))
+                        # delete IMP_bucket_changes request for teh bucket we just reassigned
+                        cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s", (
+                            row["node_id"], row["bucket_id"]))
+
+                # give away the rest of the dead nodes' buckets in round robin fashion
+                cursor.execute("SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id IN (SELECT IMP_cluster_members.node_id FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s)", self.sender_ttl)
+                dead_node_buckets = cursor.fetchall()
+
+                i = 0
+                for bucket in dead_node_buckets:
+                    if i >= len(alive_nodes):
+                        i = 0
+                    cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
+                                   (alive_nodes[i]["node_id"], bucket["bucket_id"]))
+                    i += 1
+                connection.commit()
+                #  delete dead nodes from cluster membership
+                dead_node_ids = [node["node_id"] for node in dead_nodes]
+                with db.guarded_session() as session:
+                    session.execute("DELETE FROM IMP_cluster_members WHERE node_id IN :dead_node_ids", {"dead_node_ids": tuple(dead_node_ids)})
+                    session.commit()
+
+            if self.zk_debug:
+                cursor.execute("SELECT * FROM IMP_bucket_assignments")
+                bucket_assignments = cursor.fetchall()
+                payload = bucket_assignments
+
+        cursor.close()
+        connection.close()
+
+        if not self.zk_debug:
+            zk.stop()
+            zk.close()
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+    def on_delete(self, req, resp, node_id):
+        # gracefully remove node from the cluster
+
+        # configure sql client
+        payload = {}
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        if self.zk_debug:
+            # use exitstack to replace zookeeper lock context manager for testing
+            lock = ExitStack()
+        else:
+            # configure zookeeper client
+            zk = KazooClient(self.zk_hosts)
+            zk.start()
+            node_uuid = node_id + "-" + str(uuid.uuid4())
+            lock = zk.Lock(self.lock_path, node_uuid)
+        # wait until we are able to acquire the global lock before proceeding
+        with lock:
+
+            # fetch list of healthy nodes
+            cursor.execute(
+                "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s AND node_id != %s", (self.sender_ttl, node_id))
+            alive_nodes = cursor.fetchall()
+
+            # take care of any pending bucket changes for this node
+            cursor.execute(
+                "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", node_id)
+            bucket_changes_results = cursor.fetchall()
+            for row in bucket_changes_results:
+                # release buckets to the node that requested them
+                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (
+                    row["node_id"], row["bucket_id"]))
+                # delete IMP_bucket_changes request for the bucket we just reassigned
+                cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s", (
+                    row["node_id"], row["bucket_id"]))
+
+            # give away the rest of the node's buckets in round robin fashion
+            cursor.execute("SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id = %s", node_id)
+            dead_node_buckets = cursor.fetchall()
+
+            i = 0
+            for bucket in dead_node_buckets:
+                if i >= len(alive_nodes):
+                    i = 0
+                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (alive_nodes[i]["node_id"], bucket["bucket_id"]))
+                i += 1
+
+            #  delete node from cluster membership
+            cursor.execute(
+                "DELETE FROM IMP_cluster_members WHERE node_id = %s", node_id)
+            connection.commit()
+
+        if self.zk_debug:
+            cursor.execute("SELECT * FROM IMP_bucket_assignments")
+            bucket_assignments = cursor.fetchall()
+            payload = bucket_assignments
+        else:
+            zk.stop()
+            zk.close()
+
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+
+
+class InternalIncidents():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        external_sender_configs = config.get('external_sender', {})
+        self.external_sender_incident_processing = external_sender_configs.get('external_sender_incident_processing', False)
+        # allow external sender to process incidents into messages if it is in dryrun and will not send them
+        self.external_sender_incident_dryrun = external_sender_configs.get('external_sender_incident_dryrun', False)
+
+    def on_get(self, req, resp, node_id):
+
+        if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
+            # do not return any incidents
+            resp.status = HTTP_200
+            resp.body = ujson.dumps([])
+            return
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('''SELECT `id` FROM `incident` WHERE `active` = 1 AND `bucket_id` IN (SELECT `bucket_id` FROM `IMP_bucket_assignments` WHERE `node_id` = %s)''', node_id)
+        result = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        incident_ids = [row["id"] for row in result]
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(incident_ids)
+
+    def on_post(self, req, resp, node_id):
+
+        body = ujson.loads(req.context['body'])
+
+        if 'incident_ids' not in body:
+            raise HTTPBadRequest('Missing incident ids in POST body')
+
+        if not isinstance(body['incident_ids'], list):
+            raise HTTPBadRequest('incident_ids must be a list')
+
+        if len(body['incident_ids']) < 1:
+            raise HTTPBadRequest('incident_ids list cannot be empty')
+
+        query = incident_query % ', '.join(incident_columns[f] for f in incident_columns)
+        query += ' WHERE `incident`.`active` = 1 AND `incident`.`id` IN %s'
+        sql_values = [tuple(body['incident_ids'])]
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.ss_dict_cursor)
+        cursor.execute(query, sql_values)
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(stream_incidents_with_context(cursor, False))
+        cursor.close()
+        connection.close()
+
+
+class PlanAggregationSettings():
+    allow_read_no_auth = True
+    internal_allowlist_only = False
+
+    def on_get(self, req, resp):
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+        cursor.execute('SELECT `plan`.`id`, `plan`.`name`, `plan`.`threshold_window`, `plan`.`threshold_count`, `plan`.`aggregation_window`, `plan`.`aggregation_reset` FROM `plan` INNER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`')
+        result = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(result)
+
+
 def update_cache_worker():
     while True:
-        logger.debug('Reinitializing cache')
+        logger.info('Reinitializing cache')
         cache.init()
         sleep(60)
 
@@ -5423,6 +6492,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         HeaderMiddleware(),
         cors.middleware
     ])
+    external_sender_incident_processing = config.get('external_sender', {}).get('external_sender_incident_processing', False)
 
     api.set_error_serializer(json_error_serializer)
 
@@ -5435,11 +6505,11 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/incidents/{incident_id}/resolve', Resolved(config))
     api.add_route('/v0/incidents/{incident_id}/comments', Comments())
 
-    api.add_route('/v0/messages/{message_id}', Message())
-    api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog())
-    api.add_route('/v0/messages', Messages())
+    api.add_route('/v0/messages/{message_id}', Message(config))
+    api.add_route('/v0/messages/{message_id}/auditlog', MessageAuditLog(config))
+    api.add_route('/v0/messages', Messages(config))
 
-    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config.get('zookeeper_timeout', 1)))
+    api.add_route('/v0/notifications', Notifications(zk_hosts, default_sender_addr, config))
 
     api.add_route('/v0/targets/{target_type}', Target())
     api.add_route('/v0/targets', Targets())
@@ -5474,19 +6544,35 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
 
     api.add_route('/v0/priorities', Priorities())
 
-    api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
-    api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
-    api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
-    api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
-    api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
-    api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
-    api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate())
+    if external_sender_incident_processing:
+        api.add_route('/v0/response/email', ResponseEmailExternal(config, 'email'))
+        api.add_route('/v0/response/twilio/calls', ResponseTwilioCallExternal(config, 'call'))
+        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessageExternal(config, 'sms'))
+        api.add_route('/v0/response/slack', ResponseSlackExternal(config, 'slack'))
+    else:
+        api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
+        api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
+        api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
+        api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
+        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
+        api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
+    api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate(config))
 
     api.add_route('/v0/categories', NotificationCategories())
     api.add_route('/v0/categories/{application}', NotificationCategories())
     api.add_route('/v0/users/{username}/categories', CategoryOverrides())
     api.add_route('/v0/users/{username}/slackid', UserToSlackID(config))
     api.add_route('/v0/users/{username}/categories/{application}', CategoryOverrides())
+
+    api.add_route('/v0/internal/auth/applications', InternalApplicationsAuth())
+    api.add_route('/v0/internal/incident/{incident_id}', InternalIncident())
+    api.add_route('/v0/internal/target', InternalTarget(config))
+    api.add_route('/v0/internal/plan_aggregation_settings', PlanAggregationSettings())
+    api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
+    api.add_route('/v0/internal/render_jinja', InternalRenderJinja())
+    api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
+    api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))
+    api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
@@ -5513,6 +6599,7 @@ def init_webhooks(config, api):
 
 def get_api(config):
     db.init(config)
+    cache.init()
     spawn(update_cache_worker)
     init_plugins(config.get('plugins', {}))
     init_validators(config.get('validators', []))
