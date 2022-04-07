@@ -42,7 +42,7 @@ from .config import load_config
 from iris.vendors.iris_slack import iris_slack
 from iris.role_lookup import IrisRoleLookupException
 from iris.sender import auditlog
-from iris.bin.sender import set_target_contact, render
+from iris.bin import sender
 from iris.utils import sanitize_unicode_dict
 from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
                                required_quota_keys, quota_int_keys)
