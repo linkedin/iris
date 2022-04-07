@@ -6,6 +6,7 @@ import re
 from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
 
 from iris import db
+from iris import utils
 
 logger = logging.getLogger(__name__)
 
@@ -106,3 +107,5 @@ class freshping(object):
             session.close()
 
         resp.status = HTTP_201
+        resp.set_header('Location', '/incidents/%s' % incident_id)
+        resp.body = ujson.dumps(incident_id)
