@@ -5836,6 +5836,36 @@ class CategoryOverrides(object):
         resp.status = HTTP_204
 
 
+class InternalRenderJinja():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self):
+        # Autoescape needs to be False to avoid html-encoding ampersands in emails.
+        # in emails, html is allowed and ampersands are escaped with markdown's renderer.
+        self.env = SandboxedEnvironment(autoescape=False)
+
+    def on_get(self, req, resp):
+        req_body = ujson.loads(req.context['body'])
+        if 'template_str' not in req_body or 'context' not in req_body:
+            raise HTTPBadRequest('Missing required attributes, must have template_str and context')
+        template_str = req_body.get('template_str')
+        context = req_body.get('context')
+
+        try:
+            render_env = self.env.from_string(template_str)
+        except Exception as e:
+            raise HTTPBadRequest('Failed to render jinja with err: %s' % str(e))
+        else:
+            try:
+                rendered_body = render_env.render(**context)
+            except Exception as e:
+                raise HTTPBadRequest('Failed to render jinja with err: %s' % str(e))
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps({"rendered_body": rendered_body})
+
+
 class InternalBuildMessages():
     allow_read_no_auth = False
     internal_allowlist_only = True
@@ -5872,7 +5902,6 @@ class InternalBuildMessages():
             cursor.close()
             conn.close()
 
-        notification['subject'] = '[%s] %s' % (notification['application'], notification.get('subject', ''))
         target_list = notification.get('target_list')
         role = notification.get('role')
         if not role and not target_list:
@@ -5927,8 +5956,8 @@ class InternalBuildMessages():
             if 'context' not in notification:
                 logger.warning('Failed to build due to missing context from app %s', notification['application'])
                 raise HTTPBadRequest('INVALID context')
-            else:
-                # fill in dummy iris meta data
+            elif 'iris' not in notification['context']:
+                # fill in dummy iris meta data for OOB notifications messages
                 notification['context']['iris'] = {}
         elif 'email_html' in notification:
             if not isinstance(notification['email_html'], str):
@@ -6539,6 +6568,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/target', InternalTarget(config))
     api.add_route('/v0/internal/plan_aggregation_settings', PlanAggregationSettings())
     api.add_route('/v0/internal/build_message', InternalBuildMessages(config))
+    api.add_route('/v0/internal/render_jinja', InternalRenderJinja())
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))
     api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
