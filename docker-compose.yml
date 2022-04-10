@@ -7,10 +7,13 @@ services:
       - "16649:16649"
     environment:
       - DOCKER_DB_BOOTSTRAP=1
+      - IRIS_CFG_DB_HOST=mysql
+      - IRIS_CFG_DB_PASSWORD=1234
     volumes:
       - ./configs/config.dev.yaml:/home/iris/config/config.yaml
 
   iris-mysql:
     image: mysql:5.5
+    hostname: mysql
     environment:
       - MYSQL_ROOT_PASSWORD=1234
