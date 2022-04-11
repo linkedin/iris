@@ -5982,14 +5982,14 @@ class InternalBuildMessages():
         for notification in notifications:
             success = False
             try:
-                success, message = set_target_contact(notification)
+                success, message = sender.set_target_contact(notification)
             except (ValueError, TypeError):
                 success = False
             if not success:
                 logger.warning('Failed to build, could not resolve target contacts %s' % ujson.dumps(notification))
                 continue
             try:
-                message = render(message)
+                message = sender.render(message)
                 messages.append(message)
             except Exception as e:
                 logger.warning('Failed to render message %s with error: %s' % (ujson.dumps(notification), str(e)))
