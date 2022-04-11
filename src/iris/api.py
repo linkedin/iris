@@ -1,6 +1,7 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
-from gevent import spawn, sleep, socket, Timeout
+from gevent import spawn, sleep, socket, Timeout, monkey
+monkey.patch_all() # NOQA
 
 import msgpack
 import time
