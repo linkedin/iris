@@ -1,5 +1,5 @@
 prod:
-    plugins: python,logfile,gevent_python
+    plugins: python3,logfile,gevent_python3
     chdir: /home/iris/source/src
     socket: /home/iris/var/run/uwsgi.sock
     chmod-socket: 666
