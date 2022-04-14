@@ -4813,7 +4813,7 @@ def handle_response_external(self, response, mode, source):
     if claim_last:
         last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
         date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
-        r = external_sender_client.get('messages?active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
+        r = external_sender_client.get('messages?incident_id__ne=0&active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
         if r.ok:
             messages = r.json()
             incident_ids = []
@@ -4833,7 +4833,7 @@ def handle_response_external(self, response, mode, source):
     elif claim_all:
         last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
         date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
-        r = external_sender_client.get('messages?active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
+        r = external_sender_client.get('messages?incident_id__ne=0&active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
         if r.ok:
             messages = r.json()
             incident_ids = []
