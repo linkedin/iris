@@ -4786,9 +4786,9 @@ def handle_response_external(self, response, mode, source):
     if response.lower().startswith('f'):
         return 'Sincerest apologies'
     # One-letter shortcuts for claim all/last
-    elif response.lower() == 'a':
+    elif response.lower() == 'a' or 'all' in response.lower():
         claim_all = True
-    elif response.lower() == 'l':
+    elif response.lower() == 'l' or 'last' in response.lower():
         claim_last = True
 
     incident_id = ""
@@ -4802,35 +4802,50 @@ def handle_response_external(self, response, mode, source):
         elif halves[1].lower() == 'claim' and halves[0].isdigit():
             incident_id = halves[0]
 
+        active_incidents = utils.get__active_incidents_from_incident_id_list([incident_id])
+        if len(active_incidents) == 0:
+            return 'Incident with ID: %s is not currently an active incident' % incident_id
         # get incident id from external sender and claim it
         if incident_id != "":
             utils.claim_incident(incident_id, target_name)
             return 'claimed: %s' % incident_id
 
-    if claim_last or response.lower() == 'claim all':
-        r = external_sender_client.get('messages?active=1&limit=1&target=%s' % target_name, verify=self.verify)
+    if claim_last:
+        last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+        date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
+        r = external_sender_client.get('messages?incident_id__ne=0&active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
         if r.ok:
             messages = r.json()
             incident_ids = []
             for message in messages:
                 incident_ids.append(message.get('incident_id', ''))
-            utils.claim_bulk_incidents(incident_ids, target_name)
-            return 'claimed: %s' % incident_ids
+            if len(incident_ids) == 0:
+                return 'found no active incidents to claim at this time'
+            active_incidents = utils.get__active_incidents_from_incident_id_list(incident_ids)
+            if len(active_incidents) == 0:
+                return 'found no active incidents to claim at this time'
+            utils.claim_incident(max(active_incidents), target_name)
+            return 'claimed: %s' % max(active_incidents)
         else:
             logger.error("failed retrieving messages from external sender: %s", r.text)
             return 'could not resolve action'
 
-    elif claim_all or response.lower() == 'claim all':
+    elif claim_all:
         last_day_date_time = datetime.datetime.now() - datetime.timedelta(hours=24)
         date_timestamp = int((time.mktime(last_day_date_time.timetuple())))
-        r = external_sender_client.get('messages?active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
+        r = external_sender_client.get('messages?incident_id__ne=0&active=1&target=%s&created__ge=%d' % (target_name, date_timestamp), verify=self.verify)
         if r.ok:
             messages = r.json()
             incident_ids = []
             for message in messages:
                 incident_ids.append(message.get('incident_id', ''))
-            utils.claim_bulk_incidents(incident_ids, target_name)
-            return 'claimed: %s' % incident_ids
+            if len(incident_ids) == 0:
+                return 'found no active incidents to claim at this time'
+            active_incidents = utils.get__active_incidents_from_incident_id_list(incident_ids)
+            if len(active_incidents) == 0:
+                return 'found no active incidents to claim at this time'
+            utils.claim_bulk_incidents(active_incidents, target_name)
+            return 'claimed: %s' % active_incidents
         else:
             logger.error("failed retrieving messages from external sender: %s", r.text)
             return 'could not resolve action'

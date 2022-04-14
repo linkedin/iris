@@ -145,6 +145,17 @@ def get_incident_ids_from_message_ids(msg_ids):
     return ret
 
 
+def get__active_incidents_from_incident_id_list(incident_ids):
+    sql = 'SELECT `incident`.`id` FROM `incident` WHERE `incident`.`active` = 1 AND `incident`.`id` IN %s'
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor()
+    cursor.execute(sql, (tuple(incident_ids), ))
+    ret = [row[0] for row in cursor]
+    cursor.close()
+    connection.close()
+    return ret
+
+
 def get_incident_context_from_message_id(msg_id):
     sql = '''SELECT `incident`.`context`
              FROM `message`
