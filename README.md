@@ -5,6 +5,9 @@ Iris core, API, UI and sender service. For third-party integration support, see 
 
 <p align="center"><img src="https://github.com/linkedin/iris/raw/master/docs/source/_static/demo.png" width="600"></p>
 
+Quick Start with Gitpod
+--------------
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/linkedin/iris)
 
 Setup database
 --------------

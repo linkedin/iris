@@ -1,0 +1,51 @@
+tasks:
+  - name: Dependencies
+    init: |
+      python3 -m venv venv
+      source venv/bin/activate
+      pip install --upgrade pip wheel setuptools
+      pip install -e '.[dev,kazoo]'
+      gp sync-done installation
+  - name: Database
+    before: |
+      # make sure to stop and remove mysql container before starting it again
+      docker stop iris-db || true
+      docker rm iris-db || true
+      docker run --name iris-db -p 127.0.0.1:3306:3306/tcp -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7 --sql_mode="STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+      # wait for databse to be ready
+      gp await-port 3306
+      # Initialize Database
+      echo "create database iris;" | mysql -h 127.0.0.1 -u root
+      cat db/schema_0.sql | mysql -h 127.0.0.1 -u root iris
+      cat db/dummy_data.sql | mysql -h 127.0.0.1 -u root iris
+
+  - name: Iris API
+    init: |
+      gp sync-await installation
+    command: |
+      source venv/bin/activate
+      IRIS_CFG_DB_PASSWORD=root make
+  - name: Iris Sender
+    init: |
+      gp sync-await installation
+    command: |
+      source venv/bin/activate
+      IRIS_CFG_DB_PASSWORD=root make sender
+
+ports:
+  # Iris Sender
+  - port: 2321
+    onOpen: ignore
+    visibility: private
+  # Iris API
+  - port: 16649
+    onOpen: open-browser
+    visibility: private
+  # MySQL
+  - port: 3306
+    onOpen: ignore
+    visibility: private
+
+image:
+  file: .gitpod.Dockerfile
+
