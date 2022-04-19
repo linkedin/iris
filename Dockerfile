@@ -22,7 +22,6 @@ RUN chown -R iris:iris /home/iris/source /var/log/nginx /var/lib/nginx \
     && sudo -Hu iris python3 -m venv /home/iris/env \
     && sudo -Hu iris /bin/bash -c 'source /home/iris/env/bin/activate && python3 -m pip install -U pip wheel && cd /home/iris/source && pip install .'
 
-COPY . /home/iris
 COPY ops/config/systemd /etc/systemd/system
 COPY ops/daemons /home/iris/daemons
 COPY ops/daemons/uwsgi-docker.yaml /home/iris/daemons/uwsgi.yaml
