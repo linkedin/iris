@@ -9,6 +9,8 @@ services:
       - DOCKER_DB_BOOTSTRAP=1
       - IRIS_CFG_DB_HOST=iris-mysql
       - IRIS_CFG_DB_PASSWORD=1234
+    depends_on:
+      - iris-mysql
     volumes:
       - ./configs/config.dev.yaml:/home/iris/config/config.yaml
 
