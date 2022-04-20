@@ -6008,10 +6008,10 @@ class InternalBuildMessages():
             success = False
             try:
                 success, message = set_target_contact(notification)
-            except (ValueError, TypeError):
+            except Exception as e:
                 success = False
             if not success:
-                logger.warning('Failed to build, could not resolve target contacts %s' % ujson.dumps(notification))
+                logger.warning('Failed to build, could not resolve target contacts %s with error: %s' % (ujson.dumps(notification), str(e)))
                 continue
             try:
                 message = render(message)
