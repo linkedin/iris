@@ -1371,6 +1371,16 @@ class Plans(object):
         if not acl_allowed(req, plan_params['creator']):
             raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
 
+        # check aggregation settings
+        if plan_params.get('threshold_count') > 500:
+            raise HTTPBadRequest('Invalid plan', 'Aggregation trigger threshold count must be less than 500')
+        if plan_params.get('threshold_window') > 3600:
+            raise HTTPBadRequest('Invalid plan', 'Aggregation trigger window must be less than 60 minutes')
+        if plan_params.get('aggregation_window') > 3600:
+            raise HTTPBadRequest('Invalid plan', 'Aggregation duration must be less than 60 minutes')
+        if plan_params.get('aggregation_reset') > 3600:
+            raise HTTPBadRequest('Invalid plan', 'Aggregation reset time must be less than 60 minutes')
+
         tracking_key = plan_params.get('tracking_key')
         tracking_type = plan_params.get('tracking_type')
         tracking_template = plan_params.get('tracking_template')
@@ -1404,6 +1414,12 @@ class Plans(object):
         for steps in plan_params['steps']:
             longest_step = 0
             for step in steps:
+                # check step wait and repeat
+                if step['wait'] > 43200:
+                    raise HTTPBadRequest('Invalid plan', 'Notification wait time must be < 12 hours')
+                if step['repeat'] > 20:
+                    raise HTTPBadRequest('Invalid plan', 'Notification cannot repeat more than 20 times')
+
                 if 'dynamic_index' in step:
                     dynamic_indices.add(step['dynamic_index'])
                 if (step.get('wait', 0) * step.get('count', 0)) > longest_step:
@@ -1423,14 +1439,14 @@ class Plans(object):
 
             for index, steps in enumerate(plan_params['steps'], start=1):
 
-                # A plan must have at least one non-optonal notification per step, if it doesn't reject the plan
+                # A plan must have at least one non-optional notification per step, if it doesn't reject the plan
                 only_optional_flag = True
 
                 for step in steps:
                     dynamic = step.get('dynamic_index') is not None
                     step['plan_id'] = plan_id
                     step['step'] = index
-                    # for backwards copatibility check if optional is not defined and set it to 0 if it isn't
+                    # for backwards compatibility check if optional is not defined and set it to 0 if it isn't
                     step.setdefault('optional', 0)
                     if step['optional'] == 0:
                         only_optional_flag = False
