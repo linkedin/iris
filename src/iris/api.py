@@ -1371,7 +1371,7 @@ class Plans(object):
         if not acl_allowed(req, plan_params['creator']):
             raise HTTPUnauthorized('Invalid plan creator for authenticated app/user')
 
-        # check aggregation settings
+        # check aggregation settings (3600 in 60 minutes in seconds)
         if plan_params.get('threshold_count') > 500:
             raise HTTPBadRequest('Invalid plan', 'Aggregation trigger threshold count must be less than 500')
         if plan_params.get('threshold_window') > 3600:
@@ -1414,7 +1414,7 @@ class Plans(object):
         for steps in plan_params['steps']:
             longest_step = 0
             for step in steps:
-                # check step wait and repeat
+                # check step wait and repeat (43200 is 12 hours in seconds)
                 if step['wait'] > 43200:
                     raise HTTPBadRequest('Invalid plan', 'Notification wait time must be less than 12 hours')
                 if step['repeat'] > 20:
@@ -1430,6 +1430,7 @@ class Plans(object):
             raise HTTPBadRequest('Invalid plan',
                                  'Dynamic target numbers must span 0..n without gaps')
 
+        # check total plan length (86400 is 24 h in seconds)
         if plan_length > 86400:
             raise HTTPBadRequest('Invalid plan',
                                  'Plan length exceeds the 24 hour maximum')
