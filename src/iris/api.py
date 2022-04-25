@@ -1416,7 +1416,7 @@ class Plans(object):
             for step in steps:
                 # check step wait and repeat
                 if step['wait'] > 43200:
-                    raise HTTPBadRequest('Invalid plan', 'Notification wait time must be < 12 hours')
+                    raise HTTPBadRequest('Invalid plan', 'Notification wait time must be less than 12 hours')
                 if step['repeat'] > 20:
                     raise HTTPBadRequest('Invalid plan', 'Notification cannot repeat more than 20 times')
 
