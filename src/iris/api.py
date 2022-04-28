@@ -5016,7 +5016,7 @@ class TwilioDeliveryUpdate(object):
             external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
             r = external_sender_client.post('message_status', json=payload, verify=self.verify)
             if r.ok:
-                resp.status = HTTP_200
+                resp.status = HTTP_204
                 return
             logger.error("failed updating message status via external sender: %s", r.text)
             resp.status = str(r.status_code)
