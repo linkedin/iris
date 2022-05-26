@@ -1,61 +1,54 @@
 # Copyright (c) LinkedIn Corporation. All rights reserved. Licensed under the BSD-2 Clause license.
 # See LICENSE in the project root for license information.
-from gevent import spawn, sleep, socket, Timeout
-
-import msgpack
-import time
-import hmac
-import hashlib
 import base64
-import re
+import datetime
+import hashlib
+import hmac
+import logging
+import math
 import os
 import random
-import datetime
-import logging
-import jinja2
+import re
+import time
 import uuid
-import math
-from jinja2.sandbox import SandboxedEnvironment
-from contextlib import ExitStack
-from kazoo.client import KazooClient
-from urllib.parse import parse_qs
-import ujson
-from falcon import (HTTP_200, HTTP_201, HTTP_204, HTTP_503, HTTPBadRequest,
-                    HTTPNotFound, HTTPUnauthorized, HTTPForbidden, HTTPFound,
-                    HTTPInternalServerError, API)
-from falcon_cors import CORS
-from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
-import falcon.uri
-import falcon
-
 from collections import defaultdict
+from contextlib import ExitStack
+from urllib.parse import parse_qs
+
+import falcon
+import falcon.uri
+import jinja2
+import msgpack
+import ujson
+from falcon import (API, HTTP_200, HTTP_201, HTTP_204, HTTP_503,
+                    HTTPBadRequest, HTTPForbidden, HTTPFound,
+                    HTTPInternalServerError, HTTPNotFound, HTTPUnauthorized)
+from falcon_cors import CORS
+from gevent import Timeout, sleep, socket, spawn
+from jinja2.sandbox import SandboxedEnvironment
+from kazoo.client import KazooClient
+from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
 from streql import equals
 
-from . import db
-from . import utils
-from . import cache
-from . import ui
-from . import app_stats
-from . import client
-from .role_lookup import get_role_lookups
-from .config import load_config
-from iris.vendors.iris_slack import iris_slack
-from iris.role_lookup import IrisRoleLookupException
-from iris.sender import auditlog
-from iris.bin.sender import set_target_contact, render
-from iris.utils import sanitize_unicode_dict
-from iris.sender.quota import (get_application_quotas_query, insert_application_quota_query,
-                               required_quota_keys, quota_int_keys)
-
+from iris.bin.sender import render, set_target_contact
 from iris.custom_import import import_custom_module
 from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
+from iris.role_lookup import IrisRoleLookupException
+from iris.sender import auditlog
+from iris.sender.quota import (get_application_quotas_query,
+                               insert_application_quota_query, quota_int_keys,
+                               required_quota_keys)
+from iris.utils import sanitize_unicode_dict
+from iris.vendors.iris_slack import iris_slack
 
-from .constants import (
-    XFRAME, XCONTENTTYPEOPTIONS, XXSSPROTECTION, PRIORITY_PRECEDENCE_MAP
-)
-
-from .plugins import init_plugins, find_plugin
-from .validators import init_validators, run_validation, IrisValidationException
+from . import app_stats, cache, client, db, ui, utils
+from .config import load_config
+from .constants import (PRIORITY_PRECEDENCE_MAP, XCONTENTTYPEOPTIONS, XFRAME,
+                        XXSSPROTECTION)
+from .plugins import find_plugin, init_plugins
+from .role_lookup import get_role_lookups
+from .validators import (IrisValidationException, init_validators,
+                         run_validation)
 
 logger = logging.getLogger(__name__)
 
@@ -1605,7 +1598,7 @@ class Incidents(object):
             )''')
             sql_values.append(tuple(target))
         if self.external_sender_incident_processing and target:
-            message_query_string = 'messages?limit=500'
+            message_query_string = 'messages?limit=1000&incident_id__gt=0'
             if req.params.get('created__ge'):
                 message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
             if req.params.get('created__le'):
