@@ -39,7 +39,7 @@ setuptools.setup(
         'gevent==1.5.0',
         'falcon==1.4.1',
         'falcon-cors',
-        'ujson==1.35',
+        'ujson==5.2.0',
         'requests',
         'PyMySQL==0.9.3',
         'SQLAlchemy==1.3.0',
