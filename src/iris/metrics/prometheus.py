@@ -33,6 +33,13 @@ class prometheus(object):
             return
         for metric, value in metrics.items():
             if metric not in self.gauges:
-                self.gauges[metric] = Gauge(self.appname + '_' + metric, '')
+                metricname = metric
+                # create a valid prometheus metric name
+                # replace spaces and hyphens with underscores to make the metric more readable
+                # afterwards remove any other character
+                metricname = metricname.replace('-', "_")
+                metricname = metricname.replace(' ', "_")
+                metricname = re.sub('[^a-zA-Z0-9_]+', '', metricname)
+                self.gauges[metric] = Gauge(self.appname + '_' + metricname, '')
             self.gauges[metric].set_to_current_time()
             self.gauges[metric].set(value)
