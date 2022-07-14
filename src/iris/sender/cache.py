@@ -392,7 +392,7 @@ class TargetReprioritization(object):
         original_mode = message.get('mode')
 
         if not original_mode:
-            return
+            return message
 
         if seen is None:
             seen = set([original_mode])
@@ -400,7 +400,7 @@ class TargetReprioritization(object):
             if original_mode in seen:
                 logger.info('target reprioritization loop detected for %s, %s: %r',
                             message['target'], original_mode, seen)
-                return
+                return message
             else:
                 seen.add(original_mode)
         try:
@@ -425,6 +425,7 @@ class TargetReprioritization(object):
             # target has no reprioritization rules defined
             # leave existing mode
             return message
+        return message
 
 
 class RoleTargets():
