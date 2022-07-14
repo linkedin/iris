@@ -1010,13 +1010,13 @@ def render(message):
             # format define a generic template that will work for all contexts
             # - even those that are invalid as a final final format maybe repr or pprint
             logger.error(error, message)
-            message['subject'] = '%(message_id)s Iris failed to render your message' % message
+            message['subject'] = 'Iris failed to render your message'
             message['body'] = 'Failed rendering message.\n\nContext: %s\n\nError: %s' % (repr(message), error % message)
             message['template_id'] = None
         else:
             if config.get('enable_gmail_oneclick') and message['mode'] == 'email' and 'incident_id' in message:
                 oneclick_url = generate_oneclick_url(config, {
-                    'msg_id': message['message_id'],
+                    'msg_id': message.get('message_id'),
                     'email_address': message['destination'],
                     'cmd': 'claim'
                 })
