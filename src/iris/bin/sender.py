@@ -1010,7 +1010,7 @@ def render(message):
             # format define a generic template that will work for all contexts
             # - even those that are invalid as a final final format maybe repr or pprint
             logger.error(error, message)
-            message['subject'] = 'Iris failed to render your message' % message
+            message['subject'] = 'Iris failed to render your message'
             message['body'] = 'Failed rendering message.\n\nContext: %s\n\nError: %s' % (repr(message), error % message)
             message['template_id'] = None
         else:
