@@ -6028,7 +6028,7 @@ class InternalBuildMessages():
                 message = render(message)
             except Exception as e:
                 logger.warning('Failed to render message %s with error: %s' % (ujson.dumps(notification), str(e)))
-            # send unrendered message even if we fail to render 
+            # send unrendered message even if we fail to render
             messages.append(message)
         if len(messages) == 0:
             raise HTTPBadRequest('Failed to build, could not resolve any messages from notification')
