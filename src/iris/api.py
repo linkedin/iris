@@ -6079,8 +6079,19 @@ class InternalBuildMessages():
             # replace the multi-message formatted list with the individual formatted messages list
             messages = split_msgs
 
+        # deduplicate messages with same destination
+        unique_messages = []
+        unique_destinations = set()
+        for message in messages:
+            if message.get("destination") and message.get("destination") not in unique_destinations:
+                unique_destinations.add(message["destination"])
+                unique_messages.append(message)
+            elif message.get("bcc_destination") and message.get("bcc_destination") not in unique_destinations:
+                unique_destinations.add(message["bcc_destination"])
+                unique_messages.append(message)
+
         resp.status = HTTP_200
-        resp.body = ujson.dumps(messages)
+        resp.body = ujson.dumps(unique_messages)
 
 
 class InternalApplicationsAuth():
