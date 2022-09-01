@@ -6081,19 +6081,13 @@ class InternalBuildMessages():
 
         # deduplicate messages with same destination
         unique_messages = []
-        unique_destinations = {}
+        unique_destinations = defaultdict(set)
         for message in messages:
-            if message.get("destination") and message.get("mode") not in unique_destinations.get(message["destination"], []):
-                if message["destination"] not in unique_destinations:
-                    unique_destinations[message["destination"]] = [message["mode"]]
-                else:
-                    unique_destinations[message["destination"]] = unique_destinations[message["destination"]].append(message["mode"])
+            if message.get("destination") and message.get("mode") not in unique_destinations[message["destination"]]:
+                unique_destinations[message["destination"]].add(message["mode"])
                 unique_messages.append(message)
-            elif message.get("bcc_destination") and message.get("mode") not in unique_destinations.get(message["bcc_destination"], []):
-                if message["bcc_destination"] not in unique_destinations:
-                    unique_destinations[message["bcc_destination"]] = [message["mode"]]
-                else:
-                    unique_destinations[message["bcc_destination"]] = unique_destinations[message["bcc_destination"]].append(message["mode"])
+            if message.get("bcc_destination") and message.get("mode") not in unique_destinations[message["bcc_destination"]]:
+                unique_destinations[message["bcc_destination"]].add(message["mode"])
                 unique_messages.append(message)
 
         resp.status = HTTP_200
