@@ -6643,7 +6643,7 @@ def init_webhooks(config, api):
     webhooks = config.get('webhooks', [])
     for webhook in webhooks:
         webhook_class = import_custom_module('iris.webhooks', webhook)
-        api.add_route('/v0/webhooks/' + webhook, webhook_class())
+        api.add_route('/v0/webhooks/' + webhook, webhook_class(config))
 
 
 def get_api(config):

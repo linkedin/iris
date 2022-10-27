@@ -9,8 +9,8 @@ from iris.webhooks.webhook import webhook
 class alertmanager(webhook):
 
     def validate_post(self, body):
-        if not all(k in body for k in("version", "status", "alerts")):
-            raise HTTPBadRequest('missing version, status and/or alert attributes')
+        if 'groupLabels' not in body:
+            raise HTTPBadRequest('missing groupLabels')
 
         if 'iris_plan' not in body["groupLabels"]:
             raise HTTPBadRequest('missing iris_plan in group labels')
@@ -32,5 +32,6 @@ class alertmanager(webhook):
         is attached to an alert.
         '''
         alert_params = ujson.loads(req.context['body'])
+        self.validate_post(alert_params)
         plan = alert_params['groupLabels']['iris_plan']
         super().on_post(req, resp, plan)

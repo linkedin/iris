@@ -1,10 +1,14 @@
 import datetime
+import time
 import logging
 import ujson
 from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
 
 from iris import db
 from iris import utils
+from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
+from iris.constants import (PRIORITY_PRECEDENCE_MAP)
+from .webhook_constants import (SINGLE_PLAN_QUERY_STEPS, SINGLE_PLAN_QUERY)
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +16,11 @@ logger = logging.getLogger(__name__)
 class grafana(object):
     allow_read_no_auth = False
 
+    def __init__(self, config):
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
+
     def validate_post(self, body):
-        if not all(k in body for k in("ruleName", "state")):
+        if not all(k in body for k in ("ruleName", "state")):
             logger.warning('missing ruleName and/or state attributes')
             raise HTTPBadRequest('missing ruleName and/of state attributes')
 
@@ -77,7 +84,7 @@ class grafana(object):
                 'bucket_id': utils.generate_bucket_id()
             }
 
-            session.execute(
+            incident_id = session.execute(
                 '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
                                            `current_step`, `active`, `application_id`, `bucket_id`)
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
@@ -87,3 +94,50 @@ class grafana(object):
             session.close()
 
         resp.status = HTTP_201
+        resp.set_header('Location', '/incidents/%s' % incident_id)
+        resp.body = ujson.dumps(incident_id)
+
+        # optional incident handler to do additional tasks after the incident has been created
+        if self.custom_incident_handler_dispatcher.handlers:
+            incident_data = {
+                'id': incident_id,
+                'plan': plan,
+                'created': int(time.time()),
+                'application': app,
+                'context': alert_params
+            }
+            connection = db.engine.raw_connection()
+            cursor = connection.cursor(db.dict_cursor)
+
+            # get plan info
+            query = SINGLE_PLAN_QUERY + 'WHERE `plan`.`id` = %s'
+            cursor.execute(query, plan_id)
+            plan_details = cursor.fetchone()
+
+            # get plan steps info
+            step = 0
+            steps = []
+            cursor.execute(SINGLE_PLAN_QUERY_STEPS, plan_id)
+            highest_seen_priority_rank = -1
+            incident_data['priority'] = ''
+            for notification in cursor:
+                s = notification['step']
+                if s != step:
+                    l = [notification]
+                    steps.append(l)
+                    step = s
+                else:
+                    l.append(notification)
+
+                # calculate priority for this incident based on the most severe priority
+                # across all notifications within the plan
+                priority_name = notification['priority']
+                priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
+                if priority_rank is not None and priority_rank > highest_seen_priority_rank:
+                    highest_seen_priority_rank = priority_rank
+                    incident_data['priority'] = priority_name
+
+            plan_details['steps'] = steps
+            connection.close()
+            incident_data["plan_details"] = plan_details
+            self.custom_incident_handler_dispatcher.process_create(incident_data)
