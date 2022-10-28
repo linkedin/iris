@@ -9,7 +9,7 @@ from falcon import HTTP_201, HTTPBadRequest, HTTPNotFound
 from iris import db
 from iris import utils
 from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
-from iris.constants import (PRIORITY_PRECEDENCE_MAP)
+from iris.constants import PRIORITY_PRECEDENCE_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -90,18 +90,20 @@ class webhook(object):
         resp.body = ujson.dumps(incident_id)
 
         # optional incident handler to do additional tasks after the incident has been created
-        if self.custom_incident_handler_dispatcher.handlers:
-            incident_data = {
-                'id': incident_id,
-                'plan': plan,
-                'plan_id': plan_id,
-                'created': int(time.time()),
-                'application': app,
-                'context': alert_params
-            }
-            self.custom_incident_handler(incident_data)
+        incident_data = {
+            'id': incident_id,
+            'plan': plan,
+            'plan_id': plan_id,
+            'created': int(time.time()),
+            'application': app,
+            'context': alert_params
+        }
+        self.custom_incident_handler(incident_data)
 
     def custom_incident_handler(self, incident_data):
+
+        if not self.custom_incident_handler_dispatcher.handlers:
+            return
 
         single_plan_query = '''SELECT `plan`.`id` as `id`, `plan`.`name` as `name`,
             `plan`.`threshold_window` as `threshold_window`, `plan`.`threshold_count` as `threshold_count`,
