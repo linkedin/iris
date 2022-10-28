@@ -3,16 +3,22 @@ from __future__ import absolute_import
 import datetime
 import logging
 import ujson
+import time
 from falcon import HTTP_201, HTTPBadRequest, HTTPNotFound
 
 from iris import db
 from iris import utils
+from iris.custom_incident_handler import CustomIncidentHandlerDispatcher
+from iris.constants import PRIORITY_PRECEDENCE_MAP
 
 logger = logging.getLogger(__name__)
 
 
 class webhook(object):
     allow_read_no_auth = False
+
+    def __init__(self, config):
+        self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
 
     def validate_post(self, body):
         pass
@@ -82,3 +88,81 @@ class webhook(object):
         resp.status = HTTP_201
         resp.set_header('Location', '/incidents/%s' % incident_id)
         resp.body = ujson.dumps(incident_id)
+
+        # optional incident handler to do additional tasks after the incident has been created
+        incident_data = {
+            'id': incident_id,
+            'plan': plan,
+            'plan_id': plan_id,
+            'created': int(time.time()),
+            'application': app,
+            'context': alert_params
+        }
+        self.custom_incident_handler(incident_data)
+
+    def custom_incident_handler(self, incident_data):
+
+        if not self.custom_incident_handler_dispatcher.handlers:
+            return
+
+        single_plan_query = '''SELECT `plan`.`id` as `id`, `plan`.`name` as `name`,
+            `plan`.`threshold_window` as `threshold_window`, `plan`.`threshold_count` as `threshold_count`,
+            `plan`.`aggregation_window` as `aggregation_window`, `plan`.`aggregation_reset` as `aggregation_reset`,
+            `plan`.`description` as `description`, UNIX_TIMESTAMP(`plan`.`created`) as `created`,
+            `target`.`name` as `creator`, IF(`plan_active`.`plan_id` IS NULL, FALSE, TRUE) as `active`,
+            `plan`.`tracking_type` as `tracking_type`, `plan`.`tracking_key` as `tracking_key`,
+            `plan`.`tracking_template` as `tracking_template`
+        FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
+        LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`'''
+
+        single_plan_query_steps = '''SELECT `plan_notification`.`id` as `id`,
+            `plan_notification`.`step` as `step`,
+            `plan_notification`.`repeat` as `repeat`,
+            `plan_notification`.`wait` as `wait`,
+            `plan_notification`.`optional` as `optional`,
+            `target_role`.`name` as `role`,
+            `target`.`name` as `target`,
+            `plan_notification`.`template` as `template`,
+            `priority`.`name` as `priority`,
+            `plan_notification`.`dynamic_index` AS `dynamic_index`
+        FROM `plan_notification`
+        LEFT OUTER JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`
+        LEFT OUTER JOIN `target_role` ON `plan_notification`.`role_id` = `target_role`.`id`
+        JOIN `priority` ON `plan_notification`.`priority_id` = `priority`.`id`
+        WHERE `plan_notification`.`plan_id` = %s
+        ORDER BY `plan_notification`.`step`'''
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        # get plan info
+        query = single_plan_query + 'WHERE `plan`.`id` = %s'
+        cursor.execute(query, incident_data.get("plan_id"))
+        plan_details = cursor.fetchone()
+
+        # get plan steps info
+        step = 0
+        steps = []
+        cursor.execute(single_plan_query_steps, incident_data.get("plan_id"))
+        highest_seen_priority_rank = -1
+        incident_data['priority'] = ''
+        for notification in cursor:
+            s = notification['step']
+            if s != step:
+                l = [notification]
+                steps.append(l)
+                step = s
+            else:
+                l.append(notification)
+
+            # calculate priority for this incident based on the most severe priority
+            # across all notifications within the plan
+            priority_name = notification['priority']
+            priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
+            if priority_rank is not None and priority_rank > highest_seen_priority_rank:
+                highest_seen_priority_rank = priority_rank
+                incident_data['priority'] = priority_name
+
+        plan_details['steps'] = steps
+        connection.close()
+        incident_data["plan_details"] = plan_details
+        self.custom_incident_handler_dispatcher.process_create(incident_data)

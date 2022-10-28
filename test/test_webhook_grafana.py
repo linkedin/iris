@@ -7,7 +7,7 @@ from falcon import HTTPBadRequest
 
 def test_parse_valid_body():
     from iris.webhooks.grafana import grafana
-    grafana_webhook = grafana()
+    grafana_webhook = grafana({})
 
     fake_post = {
         "evalMatches": [{
@@ -32,7 +32,7 @@ def test_parse_valid_body():
 
 def test_parse_invalid_body():
     from iris.webhooks.grafana import grafana
-    grafana_webhook = grafana()
+    grafana_webhook = grafana({})
 
     fake_post = {
         "evalMatches": [{

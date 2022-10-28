@@ -1,19 +1,21 @@
 import datetime
+import time
 import logging
 import ujson
 from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
 
 from iris import db
 from iris import utils
+from iris.webhooks.webhook import webhook
 
 logger = logging.getLogger(__name__)
 
 
-class grafana(object):
+class grafana(webhook):
     allow_read_no_auth = False
 
     def validate_post(self, body):
-        if not all(k in body for k in("ruleName", "state")):
+        if not all(k in body for k in ("ruleName", "state")):
             logger.warning('missing ruleName and/or state attributes')
             raise HTTPBadRequest('missing ruleName and/of state attributes')
 
@@ -77,7 +79,7 @@ class grafana(object):
                 'bucket_id': utils.generate_bucket_id()
             }
 
-            session.execute(
+            incident_id = session.execute(
                 '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
                                            `current_step`, `active`, `application_id`, `bucket_id`)
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
@@ -87,3 +89,16 @@ class grafana(object):
             session.close()
 
         resp.status = HTTP_201
+        resp.set_header('Location', '/incidents/%s' % incident_id)
+        resp.body = ujson.dumps(incident_id)
+
+        # optional incident handler to do additional tasks after the incident has been created
+        incident_data = {
+            'id': incident_id,
+            'plan': plan,
+            'plan_id': plan_id,
+            'created': int(time.time()),
+            'application': app,
+            'context': alert_params
+        }
+        self.custom_incident_handler(incident_data)

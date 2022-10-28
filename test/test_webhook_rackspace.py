@@ -4,7 +4,7 @@
 
 def test_parse_valid_body():
     from iris.webhooks.rackspace import rackspace
-    rs_webhook = rackspace()
+    rs_webhook = rackspace({})
 
     fake_post = {
         "event_id": "test_check",

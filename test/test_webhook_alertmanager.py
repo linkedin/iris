@@ -6,7 +6,7 @@ from falcon import HTTPBadRequest
 
 def test_parse_valid_body():
     from iris.webhooks.alertmanager import alertmanager
-    am_webhook = alertmanager()
+    am_webhook = alertmanager({})
 
     fake_post = {
         "receiver": "iris-test",
@@ -54,7 +54,7 @@ def test_parse_valid_body():
 
 def test_parse_invalid_body():
     from iris.webhooks.alertmanager import alertmanager
-    am_webhook = alertmanager()
+    am_webhook = alertmanager({})
 
     fake_post = {
         "receiver": "iris-test",
