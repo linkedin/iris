@@ -98,7 +98,7 @@ class grafana(webhook):
             'plan': plan,
             'plan_id': plan_id,
             'created': int(time.time()),
-            'application': app,
+            'application': app.get("name"),
             'context': alert_params
         }
         self.custom_incident_handler(incident_data)
