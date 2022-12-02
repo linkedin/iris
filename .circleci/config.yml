@@ -5,7 +5,7 @@ jobs:
       - docker
     docker:
       - image: cimg/python:3.10.8-browsers
-      - image: mysql/mysql-server:5.7.33
+      - image: cimg/mysql:8.0.27
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=1
           - MYSQL_ROOT_HOST=%
