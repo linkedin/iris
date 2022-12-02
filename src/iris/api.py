@@ -762,12 +762,12 @@ class ReqBodyMiddleware(object):
     problem, we read the post body into the request context and access it from
     there.
 
-    IMPORTANT NOTE: Because we use stream.read() here, all other uses of this
+    IMPORTANT NOTE: Because we use bounded_stream.read() here, all other uses of this
     method will return '', not the post body.
     '''
 
     def process_request(self, req, resp):
-        req.context['body'] = req.stream.read()
+        req.context['body'] = req.bounded_stream.read()
 
 
 class AuthMiddleware(object):
