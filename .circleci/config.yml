@@ -4,11 +4,11 @@ jobs:
     services:
       - docker
     docker:
+      - image: cimg/python:3.10.8-browsers
       - image: mysql/mysql-server:8.0
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=1
           - MYSQL_ROOT_HOST=%
-      - image: cimg/python:3.10.8-browsers
 
     steps:
       - checkout
