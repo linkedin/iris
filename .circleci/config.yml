@@ -4,7 +4,7 @@ jobs:
     services:
       - docker
     docker:
-      - image: circleci/python:3.7-stretch-browsers
+      - image: cimg/python:3.10.8-browsers
       - image: mysql/mysql-server:5.7.33
         environment:
           - MYSQL_ALLOW_EMPTY_PASSWORD=1
