@@ -43,6 +43,6 @@ def test_guage(metrics):
         'value1': 100
     })
     data = requests.get('http://localhost:%d/' % listen_port).text
-    m = re.search('^test_value1 (\S+)$', data, re.MULTILINE)
+    m = re.search(r'^test_value1 (\S+)$', data, re.MULTILINE)
     assert m is not None
     assert m.group(1) == '100.0'
