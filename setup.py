@@ -27,7 +27,6 @@ setuptools.setup(
     packages=setuptools.find_packages('src'),
     include_package_data=True,
     install_requires=[
-        'streql==3.0.2',
         'dnspython',
         'phonenumbers==7.4.1',
         'twilio==6.25.0',
@@ -49,7 +48,7 @@ setuptools.setup(
         'msgpack==1.0.0',
         'cssmin',
         'beaker',
-        'cryptography==2.3',
+        'cryptography==38.0.4',
         'webassets',
         'python-ldap==3.1.0',
         'exchangelib==2.2.0',

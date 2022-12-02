@@ -28,7 +28,6 @@ from gevent import Timeout, sleep, socket, spawn
 from jinja2.sandbox import SandboxedEnvironment
 from kazoo.client import KazooClient
 from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
-from streql import equals
 
 from iris.bin.sender import render, set_target_contact
 from iris.custom_import import import_custom_module
@@ -841,7 +840,7 @@ class AuthMiddleware(object):
 
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
-            if not equals(api_key, str(app['key'])) or equals(api_key, str(app['secondary_key'])):
+            if not hmac.compare_digest(api_key, str(app['key'])) or hmac.compare_digest(api_key, str(app['secondary_key'])):
                 logger.warning('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
@@ -896,7 +895,7 @@ class AuthMiddleware(object):
                             text = '%s %s %s %s' % (window, method, path, body)
                         HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                         digest = base64.urlsafe_b64encode(HMAC.digest())
-                        if equals(client_digest.encode('utf-8'), digest):
+                        if hmac.compare_digest(client_digest.encode('utf-8'), digest):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
@@ -980,7 +979,7 @@ class ACLMiddleware(object):
 
         if enforce_user and not req.context['is_admin']:
             path_username = params.get('username')
-            if not equals(path_username, req.context['username']):
+            if not path_username == req.context['username']:
                 raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
 
     def load_user_settings(self, req):
