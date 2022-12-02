@@ -480,7 +480,7 @@ def init(config, app):
     app.add_route('/validate/jinja', JinjaValidate())
     app.add_route('/unsubscribe/{application}', Unsubscribe())
 
-    if(qr_base_url and qr_login_url):
+    if (qr_base_url and qr_login_url):
         create_qr_code(qr_base_url, qr_login_url)
         app.add_route('/qr', Qr(qr_base_url, qr_login_url))
 

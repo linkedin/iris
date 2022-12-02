@@ -628,7 +628,7 @@ get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, 
                                   WHERE `application_custom_sender_address`.`application_id` = %s'''
 
 
-uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
+uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
 
 def stream_incidents_with_context(cursor, title=False):
