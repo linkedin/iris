@@ -850,7 +850,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
 
 def test_plan_routing():
     re = requests.get(base_url + 'plans/TESTDOOOOT')
-    assert re.content == "404 Not Found"
+    assert re.content == b'{"title": "404 Not Found"}'
     assert re.status_code == 404
 
 
