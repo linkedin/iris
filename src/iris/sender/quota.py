@@ -122,8 +122,8 @@ class ApplicationQuota(object):
             for key in old_keys - new_keys:
                 logger.info('Pruning old application quota for %s', key)
                 try:
-                    del(self.rates[key])
-                    del(self.last_incidents[key])
+                    del (self.rates[key])
+                    del (self.last_incidents[key])
                 except KeyError:
                     pass
 

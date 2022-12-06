@@ -79,7 +79,7 @@ def login_url(req):
     if req.path and req.path != '/login' and req.path != '/logout' and req.path != '/':
         return '/login/?next=%s' % uri.encode_value(req.path)
     else:
-        return '/login/'
+        return '/login'
 
 
 def flash_message(req, message, message_type):
@@ -138,7 +138,7 @@ class StaticResource(object):
         filepath = os.path.join(ui_root, self.path, secure_filename(filename))
         try:
             resp.stream = open(filepath, 'rb')
-            resp.stream_len = os.path.getsize(filepath)
+            resp.content_length = os.path.getsize(filepath)
         except IOError:
             raise HTTPNotFound()
 
@@ -464,23 +464,23 @@ def init(config, app):
     app.add_route('/stats', Stats())
     app.add_route('/stats/{application}', AppStats())
     app.add_route('/singlestats/{stat_name}', SingleStats())
-    app.add_route('/plans/', Plans())
+    app.add_route('/plans', Plans())
     app.add_route('/plans/{plan}', Plan())
-    app.add_route('/incidents/', Incidents())
+    app.add_route('/incidents', Incidents())
     app.add_route('/incidents/{incident}', Incident())
-    app.add_route('/messages/', Messages())
+    app.add_route('/messages', Messages())
     app.add_route('/messages/{message}', Message())
-    app.add_route('/templates/', Templates())
+    app.add_route('/templates', Templates())
     app.add_route('/templates/{template}', Template())
-    app.add_route('/applications/', Applications())
+    app.add_route('/applications', Applications())
     app.add_route('/applications/{application}', Application())
-    app.add_route('/login/', Login(auth_manager, debug))
-    app.add_route('/logout/', Logout())
-    app.add_route('/user/', User())
+    app.add_route('/login', Login(auth_manager, debug))
+    app.add_route('/logout', Logout())
+    app.add_route('/user', User())
     app.add_route('/validate/jinja', JinjaValidate())
     app.add_route('/unsubscribe/{application}', Unsubscribe())
 
-    if(qr_base_url and qr_login_url):
+    if (qr_base_url and qr_login_url):
         create_qr_code(qr_base_url, qr_login_url)
         app.add_route('/qr', Qr(qr_base_url, qr_login_url))
 

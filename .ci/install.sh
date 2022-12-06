@@ -8,7 +8,7 @@ bash ${CI_DIR}/run_mysql_docker.sh
 
 echo "[*] installing app dependencies..."
 sudo apt-get update
-sudo apt-get install libsasl2-dev python-dev libldap2-dev libssl-dev  # for ldap
+sudo apt-get install libsasl2-dev python3-dev libldap2-dev libssl-dev  # for ldap
 pip install -e '.[dev,kazoo]'
 
 bash ${CI_DIR}/setup_mysql.sh

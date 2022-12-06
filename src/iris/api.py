@@ -28,7 +28,6 @@ from gevent import Timeout, sleep, socket, spawn
 from jinja2.sandbox import SandboxedEnvironment
 from kazoo.client import KazooClient
 from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
-from streql import equals
 
 from iris.bin.sender import render, set_target_contact
 from iris.custom_import import import_custom_module
@@ -628,7 +627,7 @@ get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, 
                                   WHERE `application_custom_sender_address`.`application_id` = %s'''
 
 
-uuid4hex = re.compile('[0-9a-f]{32}\Z', re.I)
+uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
 
 def stream_incidents_with_context(cursor, title=False):
@@ -762,12 +761,12 @@ class ReqBodyMiddleware(object):
     problem, we read the post body into the request context and access it from
     there.
 
-    IMPORTANT NOTE: Because we use stream.read() here, all other uses of this
+    IMPORTANT NOTE: Because we use bounded_stream.read() here, all other uses of this
     method will return '', not the post body.
     '''
 
     def process_request(self, req, resp):
-        req.context['body'] = req.stream.read()
+        req.context['body'] = req.bounded_stream.read()
 
 
 class AuthMiddleware(object):
@@ -841,7 +840,7 @@ class AuthMiddleware(object):
 
             # determine if we're correctly using an application key
             api_key = req.get_param('key', required=True)
-            if not equals(api_key, str(app['key'])) or equals(api_key, str(app['secondary_key'])):
+            if not hmac.compare_digest(api_key, str(app['key'])) or hmac.compare_digest(api_key, str(app['secondary_key'])):
                 logger.warning('Application key invalid')
                 raise HTTPUnauthorized('Authentication failure', '', [])
             return
@@ -896,7 +895,7 @@ class AuthMiddleware(object):
                             text = '%s %s %s %s' % (window, method, path, body)
                         HMAC = hmac.new(api_key.encode('utf-8'), text.encode('utf-8'), hashlib.sha512)
                         digest = base64.urlsafe_b64encode(HMAC.digest())
-                        if equals(client_digest.encode('utf-8'), digest):
+                        if hmac.compare_digest(client_digest.encode('utf-8'), digest):
                             req.context['app'] = app
                             if username_header:
                                 req.context['username'] = username_header
@@ -980,7 +979,7 @@ class ACLMiddleware(object):
 
         if enforce_user and not req.context['is_admin']:
             path_username = params.get('username')
-            if not equals(path_username, req.context['username']):
+            if not path_username == req.context['username']:
                 raise HTTPUnauthorized('This user is not allowed to access this resource', '', [])
 
     def load_user_settings(self, req):
@@ -6544,6 +6543,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     external_sender_incident_processing = config.get('external_sender', {}).get('external_sender_incident_processing', False)
 
     api.set_error_serializer(json_error_serializer)
+    api.req_options.strip_url_path_trailing_slash = True
 
     api.add_route('/v0/plans/{plan_id}', Plan())
     api.add_route('/v0/plans', Plans())

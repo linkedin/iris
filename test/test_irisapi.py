@@ -32,7 +32,7 @@ class TestCommand(falcon.testing.TestCase):
 class TestHealthcheck(falcon.testing.TestCase):
     def test_healthcheck(self):
         with patch('iris.api.open', mock_open(read_data='GOOD')) as m:
-            self.api.add_route('/healthcheck', Healthcheck('healthcheck_path'))
+            self.app.add_route('/healthcheck', Healthcheck('healthcheck_path'))
             result = self.simulate_get(path='/healthcheck')
             m.assert_called_once_with('healthcheck_path')
         self.assertEqual(result.status_code, 503)
@@ -53,7 +53,8 @@ class TestAuth(falcon.testing.TestCase):
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)
-        self.api = api
+        api.req_options.strip_url_path_trailing_slash = True
+        self.app = api
 
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar', '')
@@ -123,7 +124,8 @@ class TestAuth(falcon.testing.TestCase):
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)
-        self.api = api
+        api.req_options.strip_url_path_trailing_slash = True
+        self.app = api
 
         window = int(time.time()) // 5
         text = '%s %s %s %s' % (window, 'GET', '/foo/bar', '')

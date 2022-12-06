@@ -1,7 +1,7 @@
 FROM ubuntu:16.04
 
 RUN apt-get update && apt-get -y dist-upgrade \
-    && apt-get -y install python-pip uwsgi virtualenv sudo python-dev libyaml-dev \
+    && apt-get -y install python-pip uwsgi virtualenv sudo python3-dev libyaml-dev \
        libsasl2-dev libldap2-dev nginx uwsgi-plugin-python mysql-client \
     && rm -rf /var/cache/apt/archives/*
 

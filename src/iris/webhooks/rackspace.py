@@ -7,7 +7,7 @@ from iris.webhooks.webhook import webhook
 
 class rackspace(webhook):
     def validate_post(self, body):
-        if not all(k in body for k in("event_id", "details")):
+        if not all(k in body for k in ("event_id", "details")):
             raise HTTPBadRequest('missing event_id and/or details attributes')
 
     def on_post(self, req, resp):

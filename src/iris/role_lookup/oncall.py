@@ -58,7 +58,7 @@ class oncall(object):
             return data
         except ValueError:
             if 'oncall_error' in stats:
-                    stats['oncall_error'] += 1
+                stats['oncall_error'] += 1
             msg = 'Failed decoding json from oncall-api. URL: "%s" Code: %s' % (url, r.status_code)
             logger.exception(msg)
             raise IrisRoleLookupException(msg)
