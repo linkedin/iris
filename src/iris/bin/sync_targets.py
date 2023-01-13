@@ -236,7 +236,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     oncall_add_sql = 'INSERT INTO `oncall_team` (`target_id`, `oncall_team_id`) VALUES (%s, %s)'
     user_add_sql = 'INSERT IGNORE INTO `user` (`target_id`) VALUES (%s)'
     target_contact_add_sql = '''INSERT INTO `target_contact` (`target_id`, `mode_id`, `destination`)
-                                VALUES (%s, %s, %s)
+                                VALUES ((SELECT `id` FROM `target` WHERE `name`=%s AND `type_id`=%s LIMIT 1), %s, %s)
                                 ON DUPLICATE KEY UPDATE `destination` = %s'''
 
     # insert users that need to be
@@ -257,7 +257,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             if value and key in modes:
                 logger.info('%s: %s -> %s', username, key, value)
                 try:
-                    engine.execute(target_contact_add_sql, (target_id, modes[key], value, value))
+                    engine.execute(target_contact_add_sql, (username, target_types['user'], modes[key], value, value))
                 except SQLAlchemyError as e:
                     logger.exception('Error adding contact for target id: %s', target_id)
                     metrics.incr('sql_errors')
