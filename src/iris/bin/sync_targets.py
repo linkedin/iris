@@ -351,9 +351,9 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                     logger.info('Renaming team %s to %s', current_name, new_name)
                     engine.execute('''UPDATE `target` SET `name` = %s, `active` = TRUE WHERE `id` = %s''', (oncall_case_sensitive_dict[new_name], target_id_to_rename))
                 else:
-                    squatter_target_id = iris_target_name_id_dict.get(new_name)
-                    ids = [id for oncall_team_id in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team` WHERE `target_id`=%s LIMIT 1''', squatter_target_id)]
-                    squatter_oncall_id = ids[0]
+                    squatter_target_id = iris_target_name_id_dict[new_name]
+                    oncall_ids = [oncall_id for oncall_team_id in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team` WHERE `target_id`=%s LIMIT 1''', squatter_target_id)]
+                    squatter_oncall_id = oncall_ids[0]
 
                     # check if team that is squatting on new_name needs to be purged or swap names
                     if oncall_response_dict_id_key.get(squatter_oncall_id):
