@@ -6518,6 +6518,40 @@ class PlanAggregationSettings():
         resp.body = ujson.dumps(result)
 
 
+class PriorityModeMap():
+    allow_read_no_auth = True
+    internal_allowlist_only = False
+
+    def on_get(self, req, resp):
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor(db.dict_cursor)
+
+        cursor.execute('SELECT `priority`.`name`, `priority`.`id`, `priority`.`mode_id`, `mode`.`name` AS mode_name  FROM `priority` JOIN `mode` ON `priority`.`mode_id` = `mode`.`id`')
+        priority_result = cursor.fetchall()
+
+        cursor.execute('SELECT `id`, `name` FROM `mode`')
+        mode_result = cursor.fetchall()
+        cursor.close()
+        connection.close()
+
+        priority_map = {}
+        mode_id_map = {}
+        default_priority_map = {}
+        for m in mode_result:
+            mode_id_map[m['name']] = m['id']
+        for p in priority_result:
+            priority_map[p['name']] = p['id']
+            default_priority_map[p['name']] = p['mode_name']
+
+        result = {
+            'priority_map': priority_map,
+            'mode_id_map': mode_id_map,
+            'default_priority_map': default_priority_map
+        }
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(result)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -6624,6 +6658,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/sender_heartbeat/{node_id}', SenderHeartbeat(config))
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))
     api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
+    api.add_route('/v0/internal/priority_mode_map', PriorityModeMap())
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):
