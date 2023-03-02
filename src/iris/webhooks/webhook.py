@@ -19,6 +19,9 @@ class webhook(object):
 
     def __init__(self, config):
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
+        # if True, we enable metavariables in the context everywhere, if False they will be enabled only for plans in allow list
+        self.enable_default_metavariables_in_context = config.get('enable_default_metavariables_in_context', False)
+        self.triage_allow_list = config.get('triage_allow_list', [])
 
     def validate_post(self, body):
         pass
@@ -81,6 +84,13 @@ class webhook(object):
                                            `current_step`, `active`, `application_id`, `bucket_id`)
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                 data).lastrowid
+            # adding additional context
+            if self.enable_default_metavariables_in_context or plan in self.triage_allow_list:
+                iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
+                data['iris'] = iris_metacontext
+
+                context_json_str = self.create_context(data)
+                session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
 
             session.commit()
             session.close()
