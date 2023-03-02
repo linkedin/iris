@@ -1791,6 +1791,13 @@ class Incidents(object):
                                                    `current_step`, `active`, `application_id`, `bucket_id`)
                            VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                         data).lastrowid
+                    # adding additional context
+                    if self.enable_triage_context or plan_id in self.triage_allow_list:
+                        context['incident_id'] = incident_id
+                        context['created'] = data['created']
+                        context_json_str = ujson.dumps({variable: context.get(variable)
+                                            for variable in app['variables']})
+                        session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''',{'context_json_str': context_json_str, 'incident_id': incident_id})
 
                     for idx, target in enumerate(dynamic_targets):
                         data = {
