@@ -194,6 +194,10 @@ oncall-key: abc # API key for oncall auth
 applications:
  - dummy_app
 
+enable_triage_context: False
+triage_allow_list:
+# triage_allow_list_item_1
+
 ## Vendors provides a way to add support for new notification mechanisms
 vendors: []
 #- type: iris_smtp
