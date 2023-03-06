@@ -85,7 +85,7 @@ class grafana(webhook):
                    VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                 data).lastrowid
             # adding additional context
-            if self.enable_default_metavariables_in_context or plan in self.triage_allow_list:
+            if self.enable_default_metavariables_in_context or plan in self.metavariables_in_context_allow_list:
                 iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
                 alert_params['iris'] = iris_metacontext
                 context_json_str = self.create_context(alert_params)

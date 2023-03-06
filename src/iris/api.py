@@ -1512,7 +1512,7 @@ class Incidents(object):
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
         # if True, we enable metavariables in the context everywhere, if False they will be enabled only for plans in allow list
         self.enable_default_metavariables_in_context = config.get('enable_default_metavariables_in_context', False)
-        self.triage_allow_list = config.get('triage_allow_list', [])
+        self.metavariables_in_context_allow_list = config.get('metavariables_in_context_allow_list', [])
 
     def on_get(self, req, resp):
         '''
@@ -1795,7 +1795,7 @@ class Incidents(object):
                            VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                         data).lastrowid
                     # adding additional context
-                    if self.enable_default_metavariables_in_context or incident_params.get('plan') in self.triage_allow_list:
+                    if self.enable_default_metavariables_in_context or incident_params.get('plan') in self.metavariables_in_context_allow_list:
                         iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
                         context['iris'] = iris_metacontext
                         context_json_str = ujson.dumps(context)
@@ -4649,7 +4649,7 @@ def process_email_response(req, config=None):
                     incident_info).lastrowid
                 # adding additional context
                 if config:
-                    if config.get('enable_default_metavariables_in_context') or email_check_result['plan_name'] in config.get('triage_allow_list'):
+                    if config.get('enable_default_metavariables_in_context') or email_check_result['plan_name'] in config.get('metavariables_in_context_allow_list'):
                         iris_metacontext = {'incident_id': incident_id, 'created': incident_info.get('created')}
                         context['iris'] = iris_metacontext
                         context_json_str = ujson.dumps(context)
