@@ -1510,6 +1510,9 @@ class Incidents(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
+        # if True, we enable metavariables in the context everywhere, if False they will be enabled only for plans in allow list
+        self.enable_default_metavariables_in_context = config.get('enable_default_metavariables_in_context', False)
+        self.metavariables_in_context_allow_list = config.get('metavariables_in_context_allow_list', [])
 
     def on_get(self, req, resp):
         '''
@@ -1791,6 +1794,12 @@ class Incidents(object):
                                                    `current_step`, `active`, `application_id`, `bucket_id`)
                            VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                         data).lastrowid
+                    # adding additional context
+                    if self.enable_default_metavariables_in_context or incident_params.get('plan') in self.metavariables_in_context_allow_list:
+                        iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
+                        context['iris'] = iris_metacontext
+                        context_json_str = ujson.dumps(context)
+                        session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
 
                     for idx, target in enumerate(dynamic_targets):
                         data = {
@@ -4404,8 +4413,9 @@ class SupportedTimezones(object):
 class ResponseMixin(object):
     allow_read_no_auth = False
 
-    def __init__(self, iris_sender_app):
+    def __init__(self, iris_sender_app, config):
         self.iris_sender_app = iris_sender_app
+        self.config = config
 
     def create_response(self, msg_id, source, content):
         """
@@ -4566,7 +4576,7 @@ class ResponseMixin(object):
             return app, resp
 
 
-def process_email_response(req):
+def process_email_response(req, config=None):
     gmail_params = ujson.loads(req.context['body'])
     email_headers = {header['name']: header['value'] for header in gmail_params['headers']}
     subject = email_headers.get('Subject')
@@ -4587,7 +4597,7 @@ def process_email_response(req):
         to = [t.split(' ')[-1].strip('<>') for t in to]
         with db.guarded_session() as session:
             email_check_result = session.execute(
-                '''SELECT `incident_emails`.`application_id`, `plan_active`.`plan_id`
+                '''SELECT `incident_emails`.`application_id`, `incident_emails`.`plan_name`, `plan_active`.`plan_id`
                     FROM `incident_emails`
                     JOIN `plan_active` ON `plan_active`.`name` = `incident_emails`.`plan_name`
                     WHERE `email` IN :email
@@ -4624,11 +4634,12 @@ def process_email_response(req):
                                    to)
                     return (None, None, None, 'Not created (no template actions for this app)')
 
+                context = {'body': content, 'email': to, 'subject': subject, 'sender': source}
                 incident_info = {
                     'application_id': email_check_result['application_id'],
                     'created': datetime.datetime.utcnow(),
                     'plan_id': email_check_result['plan_id'],
-                    'context': ujson.dumps({'body': content, 'email': to, 'subject': subject, 'sender': source}),
+                    'context': ujson.dumps(context),
                     'bucket_id': utils.generate_bucket_id()
                 }
                 incident_id = session.execute(
@@ -4636,6 +4647,13 @@ def process_email_response(req):
                                             `current_step`, `active`, `application_id`, `bucket_id`)
                     VALUES (:plan_id, :created, :context, 0, TRUE, :application_id, :bucket_id) ''',
                     incident_info).lastrowid
+                # adding additional context
+                if config:
+                    if config.get('enable_default_metavariables_in_context') or email_check_result['plan_name'] in config.get('metavariables_in_context_allow_list'):
+                        iris_metacontext = {'incident_id': incident_id, 'created': incident_info.get('created')}
+                        context['iris'] = iris_metacontext
+                        context_json_str = ujson.dumps(context)
+                        session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
                 session.commit()
                 session.close()
                 return (None, None, None, str(incident_id))
@@ -4650,7 +4668,7 @@ def process_email_response(req):
 class ResponseEmail(ResponseMixin):
     def on_post(self, req, resp):
 
-        first_line, subject, source, header = process_email_response(req)
+        first_line, subject, source, header = process_email_response(req, self.config)
         resp.set_header('X-IRIS-INCIDENT', header)
         if source is None:
             resp.status = HTTP_204
@@ -6635,12 +6653,12 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         api.add_route('/v0/response/twilio/messages', ResponseTwilioMessageExternal(config, 'sms'))
         api.add_route('/v0/response/slack', ResponseSlackExternal(config, 'slack'))
     else:
-        api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app))
-        api.add_route('/v0/response/email', ResponseEmail(iris_sender_app))
-        api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app))
-        api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app))
-        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app))
-        api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app))
+        api.add_route('/v0/response/gmail', ResponseEmail(iris_sender_app, config))
+        api.add_route('/v0/response/email', ResponseEmail(iris_sender_app, config))
+        api.add_route('/v0/response/gmail-oneclick', ResponseGmailOneClick(iris_sender_app, config))
+        api.add_route('/v0/response/twilio/calls', ResponseTwilioCalls(iris_sender_app, config))
+        api.add_route('/v0/response/twilio/messages', ResponseTwilioMessages(iris_sender_app, config))
+        api.add_route('/v0/response/slack', ResponseSlack(iris_sender_app, config))
     api.add_route('/v0/twilio/deliveryupdate', TwilioDeliveryUpdate(config))
 
     api.add_route('/v0/categories', NotificationCategories())
