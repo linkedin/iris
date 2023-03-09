@@ -1796,7 +1796,7 @@ class Incidents(object):
                         data).lastrowid
                     # adding additional context
                     if self.enable_default_metavariables_in_context or incident_params.get('plan') in self.metavariables_in_context_allow_list:
-                        iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
+                        iris_metacontext = {'incident_id': incident_id, 'created': int(data.get('created').timestamp())}
                         context['iris'] = iris_metacontext
                         context_json_str = ujson.dumps(context)
                         session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
@@ -4650,7 +4650,7 @@ def process_email_response(req, config=None):
                 # adding additional context
                 if config:
                     if config.get('enable_default_metavariables_in_context') or email_check_result['plan_name'] in config.get('metavariables_in_context_allow_list'):
-                        iris_metacontext = {'incident_id': incident_id, 'created': incident_info.get('created')}
+                        iris_metacontext = {'incident_id': incident_id, 'created': int(incident_info.get('created').timestamp())}
                         context['iris'] = iris_metacontext
                         context_json_str = ujson.dumps(context)
                         session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
