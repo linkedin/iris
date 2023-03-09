@@ -86,7 +86,7 @@ class webhook(object):
                 data).lastrowid
             # adding additional context
             if self.enable_default_metavariables_in_context or plan in self.metavariables_in_context_allow_list:
-                iris_metacontext = {'incident_id': incident_id, 'created': data.get('created')}
+                iris_metacontext = {'incident_id': incident_id, 'created': int(data.get('created').timestamp())}
                 data['iris'] = iris_metacontext
 
                 context_json_str = self.create_context(data)
