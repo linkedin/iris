@@ -2,7 +2,6 @@
 # See LICENSE in the project root for license information.
 
 import pytest
-import ujson
 from falcon import HTTPBadRequest
 
 
