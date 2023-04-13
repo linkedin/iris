@@ -14,11 +14,6 @@ logger = logging.getLogger(__name__)
 class grafana(webhook):
     allow_read_no_auth = False
 
-    def validate_post(self, body):
-        if not all(k in body for k in ("ruleName", "state")):
-            logger.warning('missing ruleName and/or state attributes')
-            raise HTTPBadRequest('missing ruleName and/of state attributes')
-
     def create_context(self, body):
         context_json_str = ujson.dumps(body)
         if len(context_json_str) > 65535:
@@ -37,7 +32,6 @@ class grafana(webhook):
         Url: http://iris:16649/v0/webhooks/grafana?application=test-app&key=sdffdssdf&plan=team1
         '''
         alert_params = ujson.loads(req.context['body'])
-        self.validate_post(alert_params)
 
         with db.guarded_session() as session:
             plan = req.get_param('plan', True)
