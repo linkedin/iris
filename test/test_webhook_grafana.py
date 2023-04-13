@@ -28,8 +28,7 @@ def test_parse_valid_body():
         "state": "alerting",
         "title": "[Alerting] Test notification"
     }
-    alert_params = ujson.loads(fake_post)
-    grafana_webhook.create_context(alert_params)
+    grafana_webhook.create_context(fake_post)
 
 
 def test_parse_invalid_body():
@@ -56,5 +55,4 @@ def test_parse_invalid_body():
     }
 
     with pytest.raises(HTTPBadRequest):
-        alert_params = ujson.loads(fake_post)
-        grafana_webhook.create_context(alert_params)
+        grafana_webhook.create_context(fake_post)
