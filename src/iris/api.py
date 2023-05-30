@@ -6227,16 +6227,17 @@ class SenderHeartbeat():
         self.number_of_buckets = cfg.get("number_of_buckets", 100)
         self.sender_ttl = cfg.get("sender_ttl", 60)
         self.zk_debug = cfg.get("zk_debug", True)
-        self.zk_client = KazooClient(
-            hosts=cfg.get("zookeeper_cluster"),
-            use_ssl=cfg.get('zk_use_ssl', False),
-            certfile=cfg.get('ssl_cert_path'),
-            keyfile=cfg.get('ssl_cert_key_path'),
-            ca=cfg.get('ca_bundle_path'),
-            handler=SequentialGeventHandler()
-        )
-        zk_conn = self.zk_client.start_async()
-        zk_conn.wait(timeout=5)
+        if not self.zk_debug:
+            self.zk_client = KazooClient(
+                hosts=cfg.get("zookeeper_cluster"),
+                use_ssl=cfg.get('zk_use_ssl', False),
+                certfile=cfg.get('ssl_cert_path'),
+                keyfile=cfg.get('ssl_cert_key_path'),
+                ca=cfg.get('ca_bundle_path'),
+                handler=SequentialGeventHandler()
+            )
+            zk_conn = self.zk_client.start_async()
+            zk_conn.wait(timeout=5)
 
     def on_get(self, req, resp, node_id):
         payload = {}
