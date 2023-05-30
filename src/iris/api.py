@@ -6227,11 +6227,6 @@ class SenderHeartbeat():
         self.number_of_buckets = cfg.get("number_of_buckets", 100)
         self.sender_ttl = cfg.get("sender_ttl", 60)
         self.zk_debug = cfg.get("zk_debug", True)
-        self.zk_cluster=cfg.get("zookeeper_cluster"),
-        self.zk_use_ssl=cfg.get('zk_use_ssl'),
-        self.certfile=cfg.get('ssl_certificate'),
-        self.keyfile=cfg.get('ssl_certificate_key'),
-        self.ca_path=cfg.get('ca_bundle_path')
         self.zk_client = KazooClient(
             hosts=cfg.get("zookeeper_cluster"),
             use_ssl=cfg.get('zk_use_ssl', False),
