@@ -2415,9 +2415,9 @@ class Notifications(object):
             if zk_hosts:
                 from iris.coordinator.kazoo import Coordinator
                 self.coordinator = Coordinator(zk_hosts=zk_hosts,
-                                            hostname=None,
-                                            port=None,
-                                            join_cluster=False)
+                                               hostname=None,
+                                               port=None,
+                                               join_cluster=False)
             else:
                 logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
                 self.coordinator = None
