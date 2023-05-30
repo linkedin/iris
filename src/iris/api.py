@@ -2411,16 +2411,15 @@ class Notifications(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
 
-        if self.external_notification_processing_ramp_percentage < 100:
-            if zk_hosts:
-                from iris.coordinator.kazoo import Coordinator
-                self.coordinator = Coordinator(zk_hosts=zk_hosts,
-                                               hostname=None,
-                                               port=None,
-                                               join_cluster=False)
-            else:
-                logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
-                self.coordinator = None
+        if self.external_notification_processing_ramp_percentage < 100 or not zk_hosts:
+            from iris.coordinator.kazoo import Coordinator
+            self.coordinator = Coordinator(zk_hosts=zk_hosts,
+                                           hostname=None,
+                                           port=None,
+                                           join_cluster=False)
+        else:
+            logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
+            self.coordinator = None
 
     def on_post(self, req, resp):
         '''
