@@ -2411,15 +2411,16 @@ class Notifications(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
 
-        if self.external_notification_processing_ramp_percentage < 100 and zk_hosts:
-            from iris.coordinator.kazoo import Coordinator
-            self.coordinator = Coordinator(zk_hosts=zk_hosts,
-                                           hostname=None,
-                                           port=None,
-                                           join_cluster=False)
-        else:
-            logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
-            self.coordinator = None
+        if self.external_notification_processing_ramp_percentage < 100:
+            if zk_hosts:
+                from iris.coordinator.kazoo import Coordinator
+                self.coordinator = Coordinator(zk_hosts=zk_hosts,
+                                            hostname=None,
+                                            port=None,
+                                            join_cluster=False)
+            else:
+                logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
+                self.coordinator = None
 
     def on_post(self, req, resp):
         '''
@@ -6226,17 +6227,21 @@ class SenderHeartbeat():
         self.number_of_buckets = cfg.get("number_of_buckets", 100)
         self.sender_ttl = cfg.get("sender_ttl", 60)
         self.zk_debug = cfg.get("zk_debug", True)
-        if not self.zk_debug:
-            self.zk_client = KazooClient(
-                hosts=cfg.get("zookeeper_cluster"),
-                use_ssl=cfg.get('zk_use_ssl', False),
-                certfile=cfg.get('ssl_cert_path'),
-                keyfile=cfg.get('ssl_cert_key_path'),
-                ca=cfg.get('ca_bundle_path'),
-                handler=SequentialGeventHandler()
-            )
-            zk_conn = self.zk_client.start_async()
-            zk_conn.wait(timeout=5)
+        self.zk_cluster=cfg.get("zookeeper_cluster"),
+        self.zk_use_ssl=cfg.get('zk_use_ssl'),
+        self.certfile=cfg.get('ssl_certificate'),
+        self.keyfile=cfg.get('ssl_certificate_key'),
+        self.ca_path=cfg.get('ca_bundle_path')
+        self.zk_client = KazooClient(
+            hosts=cfg.get("zookeeper_cluster"),
+            use_ssl=cfg.get('zk_use_ssl', False),
+            certfile=cfg.get('ssl_cert_path'),
+            keyfile=cfg.get('ssl_cert_key_path'),
+            ca=cfg.get('ca_bundle_path'),
+            handler=SequentialGeventHandler()
+        )
+        zk_conn = self.zk_client.start_async()
+        zk_conn.wait(timeout=5)
 
     def on_get(self, req, resp, node_id):
         payload = {}
