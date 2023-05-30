@@ -2411,7 +2411,7 @@ class Notifications(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
 
-        if self.external_notification_processing_ramp_percentage < 100 or not zk_hosts:
+        if self.external_notification_processing_ramp_percentage < 100 and zk_hosts:
             from iris.coordinator.kazoo import Coordinator
             self.coordinator = Coordinator(zk_hosts=zk_hosts,
                                            hostname=None,
