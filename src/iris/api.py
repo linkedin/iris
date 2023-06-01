@@ -27,6 +27,7 @@ from falcon_cors import CORS
 from gevent import Timeout, sleep, socket, spawn
 from jinja2.sandbox import SandboxedEnvironment
 from kazoo.client import KazooClient
+from kazoo.handlers.gevent import SequentialGeventHandler
 from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
 
 from iris.bin.sender import render, set_target_contact
@@ -2397,15 +2398,6 @@ class Notifications(object):
     def __init__(self, zk_hosts, default_sender_addr, config):
         self.default_sender_addr = default_sender_addr
         self.timeout = config.get('zookeeper_timeout', 1)
-        if zk_hosts:
-            from iris.coordinator.kazoo import Coordinator
-            self.coordinator = Coordinator(zk_hosts=zk_hosts,
-                                           hostname=None,
-                                           port=None,
-                                           join_cluster=False)
-        else:
-            logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
-            self.coordinator = None
 
         # if external sender is enabled forward notifications to that sender instead
         external_sender_configs = config.get('external_sender', {})
@@ -2418,6 +2410,16 @@ class Notifications(object):
         self.external_sender_version = external_sender_configs.get('external_sender_version')
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
+
+        if self.external_notification_processing_ramp_percentage < 100 and zk_hosts:
+            from iris.coordinator.kazoo import Coordinator
+            self.coordinator = Coordinator(zk_hosts=zk_hosts,
+                                           hostname=None,
+                                           port=None,
+                                           join_cluster=False)
+        else:
+            logger.info('Not using ZK to get senders. Using host %s for leader instead.', default_sender_addr)
+            self.coordinator = None
 
     def on_post(self, req, resp):
         '''
@@ -6219,12 +6221,22 @@ class SenderHeartbeat():
     internal_allowlist_only = True
 
     def __init__(self, config):
-        cfg = config.get("iris-message-processor", {})
-        self.zk_hosts = cfg.get("zk_hosts", "127.0.0.1:2181")
+        cfg = config.get("external_sender", {})
         self.lock_path = cfg.get("lock_path", "/iris_message_processor/db_locks/bucket_lock")
         self.number_of_buckets = cfg.get("number_of_buckets", 100)
-        self.sender_ttl = config.get("sender_ttl", 60)
-        self.zk_debug = config.get("zk_debug", True)
+        self.sender_ttl = cfg.get("sender_ttl", 60)
+        self.zk_debug = cfg.get("zk_debug", True)
+        if not self.zk_debug:
+            self.zk_client = KazooClient(
+                hosts=cfg.get("zookeeper_cluster"),
+                use_ssl=cfg.get('zk_use_ssl', False),
+                certfile=cfg.get('ssl_cert_path'),
+                keyfile=cfg.get('ssl_cert_key_path'),
+                ca=cfg.get('ca_bundle_path'),
+                handler=SequentialGeventHandler()
+            )
+            zk_conn = self.zk_client.start_async()
+            zk_conn.wait(timeout=5)
 
     def on_get(self, req, resp, node_id):
         payload = {}
@@ -6238,11 +6250,8 @@ class SenderHeartbeat():
             # use exitstack to replace zookeeper lock context manager for testing
             lock = ExitStack()
         else:
-            # configure zookeeper client
-            zk = KazooClient(self.zk_hosts)
-            zk.start()
             node_uuid = node_id + "-" + str(uuid.uuid4())
-            lock = zk.Lock(self.lock_path, node_uuid)
+            lock = self.zk_client.Lock(self.lock_path, node_uuid)
         # wait until we are able to acquire the global lock before proceeding
         with lock:
 
@@ -6393,10 +6402,6 @@ class SenderHeartbeat():
         cursor.close()
         connection.close()
 
-        if not self.zk_debug:
-            zk.stop()
-            zk.close()
-
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
 
@@ -6412,11 +6417,8 @@ class SenderHeartbeat():
             # use exitstack to replace zookeeper lock context manager for testing
             lock = ExitStack()
         else:
-            # configure zookeeper client
-            zk = KazooClient(self.zk_hosts)
-            zk.start()
             node_uuid = node_id + "-" + str(uuid.uuid4())
-            lock = zk.Lock(self.lock_path, node_uuid)
+            lock = self.zk_client.Lock(self.lock_path, node_uuid)
         # wait until we are able to acquire the global lock before proceeding
         with lock:
 
@@ -6457,9 +6459,6 @@ class SenderHeartbeat():
             cursor.execute("SELECT * FROM IMP_bucket_assignments")
             bucket_assignments = cursor.fetchall()
             payload = bucket_assignments
-        else:
-            zk.stop()
-            zk.close()
 
         cursor.close()
         connection.close()
