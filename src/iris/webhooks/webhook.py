@@ -19,9 +19,6 @@ class webhook(object):
 
     def __init__(self, config):
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
-        # if True, we enable metavariables in the context everywhere, if False they will be enabled only for plans in allow list
-        self.enable_default_metavariables_in_context = config.get('enable_default_metavariables_in_context', False)
-        self.metavariables_in_context_allow_list = config.get('metavariables_in_context_allow_list', [])
 
     def validate_post(self, body):
         pass
