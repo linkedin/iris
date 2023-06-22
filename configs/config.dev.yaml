@@ -114,6 +114,7 @@ webhooks:
 #   external_sender_app: 'iris'
 #   external_sender_key: '1234'
 #   external_sender_version: 0
+#   zookeeper_cluster: localhost:2181
 
 #####################
 ### Iris-sender

@@ -27,7 +27,7 @@ def test_parse_valid_body():
         "state": "alerting",
         "title": "[Alerting] Test notification"
     }
-    grafana_webhook.validate_post(fake_post)
+    grafana_webhook.create_context(fake_post)
 
 
 def test_parse_invalid_body():
@@ -47,10 +47,11 @@ def test_parse_invalid_body():
         "imageUrl": "http://grafana.org/assets/img/blog/mixed_styles.png",
         "message": "Someone is testing the alert notification within grafana.",
         "ruleId": 0,
+        "longTextVal": 7000 * "very very long text",
         "ruleName": "Test notification",
         "ruleUrl": "https://grafana.org/",
         "title": "[Alerting] Test notification"
     }
 
     with pytest.raises(HTTPBadRequest):
-        grafana_webhook.validate_post(fake_post)
+        grafana_webhook.create_context(fake_post)
