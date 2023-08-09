@@ -755,9 +755,9 @@ def set_target_fallback_mode(message):
         message['destination'] = destination
         message['mode'] = mode
         message['mode_id'] = mode_id
-        update_message_mode(message)
         message_id = message.get('message_id')
         if message_id:
+            update_message_mode(message)
             auditlog.message_change(
                 message_id, auditlog.MODE_CHANGE, old_mode, message['mode'],
                 'Changing mode due to original mode failure')

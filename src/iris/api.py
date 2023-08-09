@@ -1842,41 +1842,44 @@ class Incidents(object):
 
         # optional incident handler to do additional tasks after the incident has been created
         if self.custom_incident_handler_dispatcher.handlers:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
+            try:
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor(db.dict_cursor)
 
-            # get plan info
-            query = single_plan_query + 'WHERE `plan`.`id` = %s'
-            cursor.execute(query, plan_id)
-            plan_details = cursor.fetchone()
+                # get plan info
+                query = single_plan_query + 'WHERE `plan`.`id` = %s'
+                cursor.execute(query, plan_id)
+                plan_details = cursor.fetchone()
 
-            # get plan steps info
-            step = 0
-            steps = []
-            cursor.execute(single_plan_query_steps, plan_id)
-            highest_seen_priority_rank = -1
-            incident_data['priority'] = ''
-            for notification in cursor:
-                s = notification['step']
-                if s != step:
-                    l = [notification]
-                    steps.append(l)
-                    step = s
-                else:
-                    l.append(notification)
+                # get plan steps info
+                step = 0
+                steps = []
+                cursor.execute(single_plan_query_steps, plan_id)
+                highest_seen_priority_rank = -1
+                incident_data['priority'] = ''
+                for notification in cursor:
+                    s = notification['step']
+                    if s != step:
+                        l = [notification]
+                        steps.append(l)
+                        step = s
+                    else:
+                        l.append(notification)
 
-                # calculate priority for this incident based on the most severe priority
-                # across all notifications within the plan
-                priority_name = notification['priority']
-                priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
-                if priority_rank is not None and priority_rank > highest_seen_priority_rank:
-                    highest_seen_priority_rank = priority_rank
-                    incident_data['priority'] = priority_name
+                    # calculate priority for this incident based on the most severe priority
+                    # across all notifications within the plan
+                    priority_name = notification['priority']
+                    priority_rank = PRIORITY_PRECEDENCE_MAP.get(priority_name)
+                    if priority_rank is not None and priority_rank > highest_seen_priority_rank:
+                        highest_seen_priority_rank = priority_rank
+                        incident_data['priority'] = priority_name
 
-            plan_details['steps'] = steps
-            connection.close()
-            incident_data["plan_details"] = plan_details
-            self.custom_incident_handler_dispatcher.process_create(incident_data)
+                plan_details['steps'] = steps
+                connection.close()
+                incident_data["plan_details"] = plan_details
+                self.custom_incident_handler_dispatcher.process_create(incident_data)
+            except Exception:
+                logger.exception('Encountered exception during custom_incident_handler_dispatcher incident creation task: %s', incident_data)
 
 
 class Incident(object):
@@ -2048,19 +2051,22 @@ class Incident(object):
 
         # optional incident handler to do additional tasks after the incident has been claimed
         if self.custom_incident_handler_dispatcher.handlers:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
+            try:
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor(db.dict_cursor)
 
-            cursor.execute(single_incident_query, int(incident_id))
-            incident_data = cursor.fetchone()
+                cursor.execute(single_incident_query, int(incident_id))
+                incident_data = cursor.fetchone()
 
-            cursor.execute(single_incident_query_comments, incident_id)
-            incident_data['comments'] = cursor.fetchall()
+                cursor.execute(single_incident_query_comments, incident_id)
+                incident_data['comments'] = cursor.fetchall()
 
-            incident_data['context'] = ujson.loads(incident_data['context'])
-            cursor.close()
-            connection.close()
-            self.custom_incident_handler_dispatcher.process_claim(incident_data)
+                incident_data['context'] = ujson.loads(incident_data['context'])
+                cursor.close()
+                connection.close()
+                self.custom_incident_handler_dispatcher.process_claim(incident_data)
+            except Exception:
+                logger.exception('Encountered exception during custom_incident_handler_dispatcher incident claim task: %s', incident_data)
 
 
 class Resolved(object):
@@ -2094,19 +2100,22 @@ class Resolved(object):
 
         # optional incident handler to do additional tasks after the incident has been resolved
         if self.custom_incident_handler_dispatcher.handlers:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
+            try:
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor(db.dict_cursor)
 
-            cursor.execute(single_incident_query, int(incident_id))
-            incident_data = cursor.fetchone()
+                cursor.execute(single_incident_query, int(incident_id))
+                incident_data = cursor.fetchone()
 
-            cursor.execute(single_incident_query_comments, incident_id)
-            incident_data['comments'] = cursor.fetchall()
-            incident_data['context'] = ujson.loads(incident_data['context'])
+                cursor.execute(single_incident_query_comments, incident_id)
+                incident_data['comments'] = cursor.fetchall()
+                incident_data['context'] = ujson.loads(incident_data['context'])
 
-            cursor.close()
-            connection.close()
-            self.custom_incident_handler_dispatcher.process_resolve(incident_data)
+                cursor.close()
+                connection.close()
+                self.custom_incident_handler_dispatcher.process_resolve(incident_data)
+            except Exception:
+                logger.exception('Encountered exception during custom_incident_handler_dispatcher incident resolve task: %s', incident_data)
 
 
 class ClaimIncidents(object):
@@ -2151,19 +2160,22 @@ class ClaimIncidents(object):
 
         # optional incident handler to do additional tasks after the incidents have been claimed
         if self.custom_incident_handler_dispatcher.handlers:
-            connection = db.engine.raw_connection()
-            cursor = connection.cursor(db.dict_cursor)
-            for incident_id in incident_ids:
+            try:
+                connection = db.engine.raw_connection()
+                cursor = connection.cursor(db.dict_cursor)
+                for incident_id in incident_ids:
 
-                cursor.execute(single_incident_query, int(incident_id))
-                incident_data = cursor.fetchone()
+                    cursor.execute(single_incident_query, int(incident_id))
+                    incident_data = cursor.fetchone()
 
-                cursor.execute(single_incident_query_comments, incident_id)
-                incident_data['comments'] = cursor.fetchall()
-                incident_data['context'] = ujson.loads(incident_data['context'])
-                self.custom_incident_handler_dispatcher.process_claim(incident_data)
-            cursor.close()
-            connection.close()
+                    cursor.execute(single_incident_query_comments, incident_id)
+                    incident_data['comments'] = cursor.fetchall()
+                    incident_data['context'] = ujson.loads(incident_data['context'])
+                    self.custom_incident_handler_dispatcher.process_claim(incident_data)
+                cursor.close()
+                connection.close()
+            except Exception:
+                logger.exception('Encountered exception during custom_incident_handler_dispatcher incident claim task: %s', incident_data)
 
 
 class Message(object):
