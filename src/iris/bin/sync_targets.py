@@ -204,7 +204,6 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     for row in engine.execute('''SELECT `target`.`name` as `name`, `mode`.`name` as `mode`,
                                         `target_contact`.`destination`
                                  FROM `target`
-                                 JOIN `user` on `target`.`id` = `user`.`target_id`
                                  LEFT OUTER JOIN `target_contact` ON `target`.`id` = `target_contact`.`target_id`
                                  LEFT OUTER JOIN `mode` ON `target_contact`.`mode_id` = `mode`.`id`
                                  WHERE `target`.`active` = TRUE
@@ -274,6 +273,21 @@ def sync_from_oncall(config, engine, purge_old_users=True):
         try:
             db_contacts = iris_users[username]
             oncall_contacts = oncall_users[username]
+            # ensure that all users have a corresponding entry in user otherwise create it
+            target_id = session.execute('''SELECT `target`.`id`
+                FROM `target`
+                LEFT JOIN `user` ON `target`.`id` = `user`.`target_id`
+                WHERE `target`.`name` = :name
+                    AND `user`.`target_id` IS NULL
+                    AND `target`.`type_id` IN (
+                        SELECT `target_type`.`id`
+                        FROM `target_type`
+                        WHERE `name` = "user"
+                    );
+                ''', {'name': username}).scalar()
+            if target_id:
+                logger.info('Backfilling user entry for %s', username)
+                engine.execute(user_add_sql, (target_id, ))
             for mode in modes:
                 if mode in oncall_contacts and oncall_contacts[mode]:
                     if mode in db_contacts:
@@ -291,7 +305,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                     engine.execute(contact_delete_sql, (username, target_types['user'], modes[mode]))
                 else:
                     logger.debug('%s: missing %s', username, mode)
-        except SQLAlchemyError as e:
+        except Exception as e:
             metrics.incr('users_failed_to_update')
             metrics.incr('sql_errors')
             logger.exception('Failed to update user %s', username)
@@ -353,7 +367,7 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                 else:
                     squatter_target_id = iris_target_name_id_dict[new_name]
                     oncall_ids = [oncall_team_id for oncall_team_id in engine.execute('''SELECT `oncall_team_id` FROM `oncall_team` WHERE `target_id`=%s LIMIT 1''', squatter_target_id)]
-                    squatter_oncall_id = oncall_ids[0]
+                    squatter_oncall_id = oncall_ids[0][0]
 
                     # check if team that is squatting on new_name needs to be purged or swap names
                     if oncall_response_dict_id_key.get(squatter_oncall_id):
