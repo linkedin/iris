@@ -1511,9 +1511,6 @@ class Incidents(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
-        # if True, we enable metavariables in the context everywhere, if False they will be enabled only for plans in allow list
-        self.enable_default_metavariables_in_context = config.get('enable_default_metavariables_in_context', False)
-        self.metavariables_in_context_allow_list = config.get('metavariables_in_context_allow_list', [])
 
     def on_get(self, req, resp):
         '''
@@ -1795,12 +1792,6 @@ class Incidents(object):
                                                    `current_step`, `active`, `application_id`, `bucket_id`)
                            VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
                         data).lastrowid
-                    # adding additional context
-                    if self.enable_default_metavariables_in_context or incident_params.get('plan') in self.metavariables_in_context_allow_list:
-                        iris_metacontext = {'incident_id': incident_id, 'created': int(data.get('created').timestamp())}
-                        context['iris'] = iris_metacontext
-                        context_json_str = ujson.dumps(context)
-                        session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
 
                     for idx, target in enumerate(dynamic_targets):
                         data = {
@@ -4649,13 +4640,6 @@ def process_email_response(req, config=None):
                                             `current_step`, `active`, `application_id`, `bucket_id`)
                     VALUES (:plan_id, :created, :context, 0, TRUE, :application_id, :bucket_id) ''',
                     incident_info).lastrowid
-                # adding additional context
-                if config:
-                    if config.get('enable_default_metavariables_in_context') or email_check_result['plan_name'] in config.get('metavariables_in_context_allow_list'):
-                        iris_metacontext = {'incident_id': incident_id, 'created': int(incident_info.get('created').timestamp())}
-                        context['iris'] = iris_metacontext
-                        context_json_str = ujson.dumps(context)
-                        session.execute('''UPDATE `incident` SET `context` = :context_json_str where `id` = :incident_id ''', {'context_json_str': context_json_str, 'incident_id': incident_id})
                 session.commit()
                 session.close()
                 return (None, None, None, str(incident_id))
