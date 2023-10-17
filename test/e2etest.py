@@ -1879,6 +1879,7 @@ def test_create_template(sample_user, sample_application_name):
     assert len(data) == 1
     assert data[0] == 'test_template'
 
+
 def test_get_targets(sample_user, sample_user2, sample_team, sample_team2):
     re = requests.get(base_url + 'targets')
     assert re.status_code == 200
