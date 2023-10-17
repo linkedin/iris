@@ -552,6 +552,26 @@ get_applications_query = '''SELECT
 FROM `application`
 WHERE `auth_only` is False'''
 
+application_columns = {
+    'id': '`application`.`id` as `id`',
+    'name': '`application`.`name` as `name`',
+    'context_template': '`application`.`context_template` as `context_template`',
+    'sample_context': '`application`.`sample_context` as `sample_context`',
+    'summary_template': '`application`.`summary_template` as `summary_template`',
+    'mobile_template': '`application`.`mobile_template` as `mobile_template`'
+}
+
+application_filters = {
+    'id': '`application`.`id`',
+    'name': '`application`.`name`'
+}
+
+application_filter_types = {
+    'id': int
+}
+
+application_query = '''SELECT %s FROM `application`'''
+
 get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
 get_allowed_roles_query = '''SELECT `target_role`.`id`
@@ -4036,36 +4056,57 @@ class Applications(object):
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
+        query_limit = req.get_param_as_int('limit')
+        req.params.pop('limit', None)
+        requested_fields = req.get_param_as_list('fields')
+        fields = [f for f in requested_fields if f in application_columns] if requested_fields else None
+        if not fields:
+            fields = application_columns
+        req.params.pop('fields', None)
+
+        query = application_query % ', '.join(application_columns[f] for f in fields)
+
+        where = ['`auth_only` is False']
+        where += gen_where_filter_clause(connection, application_filters, application_filter_types, req.params)
+
+        if where:
+            query = query + ' WHERE ' + ' AND '.join(where)
+        query += ' ORDER BY `application`.`name` ASC'
+        if query_limit is not None:
+            query += ' LIMIT %s' % query_limit
+
+        cursor.execute(query)
         apps = cursor.fetchall()
-        for app in apps:
-            app['title_variable'] = None
-            cursor.execute(get_vars_query, app['id'])
-            app['variables'] = []
-            app['required_variables'] = []
-            for row in cursor:
-                app['variables'].append(row['name'])
-                if row['required']:
-                    app['required_variables'].append(row['name'])
-                if row['title_variable'] == 1:
-                    app['title_variable'] = row['name']
+        if requested_fields is None:
+            # TODO: make these values individually selectable via fields
+            for app in apps:
+                app['title_variable'] = None
+                cursor.execute(get_vars_query, app['id'])
+                app['variables'] = []
+                app['required_variables'] = []
+                for row in cursor:
+                    app['variables'].append(row['name'])
+                    if row['required']:
+                        app['required_variables'].append(row['name'])
+                    if row['title_variable'] == 1:
+                        app['title_variable'] = row['name']
 
-            cursor.execute(get_default_application_modes_query, app['name'])
-            app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+                cursor.execute(get_default_application_modes_query, app['name'])
+                app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
 
-            cursor.execute(get_supported_application_modes_query, app['id'])
-            app['supported_modes'] = [row['name'] for row in cursor]
+                cursor.execute(get_supported_application_modes_query, app['id'])
+                app['supported_modes'] = [row['name'] for row in cursor]
 
-            cursor.execute(get_application_owners_query, app['id'])
-            app['owners'] = [row['name'] for row in cursor]
+                cursor.execute(get_application_owners_query, app['id'])
+                app['owners'] = [row['name'] for row in cursor]
 
-            cursor.execute(get_application_custom_sender_addresses, app['id'])
-            app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+                cursor.execute(get_application_custom_sender_addresses, app['id'])
+                app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
 
-            cursor.execute(get_application_categories, app['id'])
-            app['categories'] = [row for row in cursor]
+                cursor.execute(get_application_categories, app['id'])
+                app['categories'] = [row for row in cursor]
 
-            del app['id']
+                del app['id']
         payload = apps
         cursor.close()
         connection.close()

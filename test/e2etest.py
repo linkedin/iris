@@ -2032,6 +2032,14 @@ def test_get_applications(sample_application_name):
     for app in apps:
         assert set(app.keys()) == app_keys
 
+    re = requests.get(base_url + 'applications?name=iris&fields=name&limit=1')
+    assert re.status_code == 200
+    apps = re.json()
+    assert isinstance(apps, list)
+    assert len(apps) == 1
+    assert set(apps[0].keys()) == set(['name'])
+    apps[0]['name'] == 'iris'
+
 
 def test_update_reprioritization_settings(sample_user):
     session = requests.Session()
