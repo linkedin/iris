@@ -1231,6 +1231,16 @@ class Plans(object):
 
         cursor.execute(query)
 
+        if req.get_param_as_bool('name_only', default=False):
+            flat_name_list = []
+            for plan in cursor:
+                flat_name_list.append(plan.get('name'))
+            connection.close()
+            payload = ujson.dumps(flat_name_list)
+            resp.status = HTTP_200
+            resp.body = payload
+            return
+
         payload = ujson.dumps(cursor)
         connection.close()
         resp.status = HTTP_200
@@ -2818,6 +2828,16 @@ class Templates(object):
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
 
+        if req.get_param_as_bool('name_only', default=False):
+            flat_name_list = []
+            for template in cursor:
+                flat_name_list.append(template.get('name'))
+            connection.close()
+            payload = ujson.dumps(flat_name_list)
+            resp.status = HTTP_200
+            resp.body = payload
+            return
+
         payload = ujson.dumps(cursor)
         connection.close()
         resp.status = HTTP_200
@@ -4047,6 +4067,17 @@ class Applications(object):
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
         apps = cursor.fetchall()
+
+        if req.get_param_as_bool('name_only', default=False):
+            connection.close()
+            flat_name_list = []
+            for app in apps:
+                flat_name_list.append(app.get('name'))
+            payload = ujson.dumps(flat_name_list)
+            resp.status = HTTP_200
+            resp.body = payload
+            return
+
         for app in apps:
             app['title_variable'] = None
             cursor.execute(get_vars_query, app['id'])

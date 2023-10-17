@@ -972,6 +972,13 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.status_code == 200
     assert len(re.json()) == 1
 
+    # Test name_only clause
+    re = requests.get(base_url + 'plans?active=1&limit=1&name_only=1')
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert isinstance(response[0], str)
+
     # Test errors
     bad_step = {"role": "foo",
                 "target": sample_team,
@@ -1865,6 +1872,12 @@ def test_create_template(sample_user, sample_application_name):
     data = re.json()
     assert len(data) == 1
 
+    # get templates name_only
+    re = requests.get(base_url + 'templates?name=test_template&creator=%s&active=1&name_only=1' % sample_user)
+    assert re.status_code == 200
+    data = re.json()
+    assert len(data) == 1
+    assert data[0] == 'test_template'
 
 def test_get_targets(sample_user, sample_user2, sample_team, sample_team2):
     re = requests.get(base_url + 'targets')
@@ -2031,6 +2044,15 @@ def test_get_applications(sample_application_name):
     assert len(apps) > 0
     for app in apps:
         assert set(app.keys()) == app_keys
+
+    # get applications name_only
+    re = requests.get(base_url + 'applications?name_only=1')
+    assert re.status_code == 200
+    apps = re.json()
+    assert isinstance(apps, list)
+    assert len(apps) > 0
+    for app in apps:
+        assert isinstance(app, str)
 
 
 def test_update_reprioritization_settings(sample_user):
