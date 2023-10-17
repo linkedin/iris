@@ -195,12 +195,6 @@ oncall-key: abc # API key for oncall auth
 applications:
  - dummy_app
 
-## Enable addition of metavariables to the incident context by default.
-## If disabled, the metavariables will only be added in the incident context for plans in the allow list.
-enable_default_metavariables_in_context: False
-metavariables_in_context_allow_list:
-- dummy_item_1
-
 ## Vendors provides a way to add support for new notification mechanisms
 vendors: []
 #- type: iris_smtp
