@@ -482,21 +482,6 @@ JOIN `application` on `application`.`id` = `target_application_mode`.`applicatio
 WHERE `target_application_mode`.`target_id` = %s
 '''
 
-get_default_application_modes_query = '''
-SELECT `priority`.`name` as priority, `mode`.`name` as mode
-FROM `default_application_mode`
-JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
-JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
-JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
-WHERE `application`.`name` = %s'''
-
-get_supported_application_modes_query = '''
-SELECT `mode`.`name`
-FROM `mode`
-JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
-WHERE `application_mode`.`application_id` = %s
-'''
-
 insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
 VALUES (
@@ -642,18 +627,6 @@ check_application_ownership_query = '''SELECT 1
                                        WHERE `target`.`name` = :username
                                        AND `application_owner`.`application_id` = :application_id'''
 
-get_application_owners_query = '''SELECT `target`.`name`
-                                  FROM `application_owner`
-                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                                  WHERE `application_owner`.`application_id` = %s'''
-
-get_application_categories = '''
-    SELECT `notification_category`.`id`, `notification_category`.`name`,
-        `notification_category`.`description`, `mode`.`name` AS mode
-    FROM `notification_category`
-    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
-    WHERE `application_id` = %s'''
-
 category_query = '''
     SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
         `notification_category`.`description`, `mode`.`name` as mode
@@ -675,12 +648,6 @@ category_filter_types = {
     'application': str,
     'mode': str
 }
-
-get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
-                                  FROM `application_custom_sender_address`
-                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
-                                  WHERE `application_custom_sender_address`.`application_id` = %s'''
-
 
 uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
@@ -3235,20 +3202,20 @@ class Application(object):
             if row['title_variable']:
                 app['title_variable'] = row['name']
 
-        cursor.execute(get_default_application_modes_query, app_name)
+        cursor.execute(get_all_default_application_modes_query + ' WHERE `application`.`name` = %s', app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
 
-        cursor.execute(get_supported_application_modes_query, app['id'])
+        cursor.execute(get_all_supported_application_modes_query + ' WHERE `application_mode`.`application_id` = %s', app['id'])
         app['supported_modes'] = [row['name'] for row in cursor]
 
-        cursor.execute(get_application_owners_query, app['id'])
+        cursor.execute(get_all_application_owners_query + ' WHERE `application_owner`.`application_id` = %s', app['id'])
         app['owners'] = [row['name'] for row in cursor]
 
-        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        cursor.execute(get_all_application_custom_sender_addresses + ' WHERE `application_custom_sender_address`.`application_id` = %s', app['id'])
         app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
 
-        cursor.execute(get_application_categories, app['id'])
-        app['categories'] = [row for row in cursor]
+        cursor.execute(get_all_application_categories + ' WHERE `application_id` = %s', app['id'])
+        app['categories'] = [{'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']} for row in cursor]
 
         cursor.close()
         connection.close()
@@ -4169,7 +4136,7 @@ class Applications(object):
                     apps[idx]['owners'] = []
                 for row in cursor:
                     app_idx = app_id_idx_map[row['app_id']]
-                    apps[app_idx]['owners'].append([row['name']])
+                    apps[app_idx]['owners'].append(row['name'])
 
             if requested_fields is None or 'custom_sender_addresses' in requested_fields:
                 query = get_all_application_custom_sender_addresses
