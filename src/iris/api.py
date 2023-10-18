@@ -572,6 +572,40 @@ application_filter_types = {
 
 application_query = '''SELECT %s FROM `application`'''
 
+get_all_vars_query = 'SELECT `application`.`id` as app_id, `template_variable`.`name` as name, `template_variable`.`required` as required, `template_variable`.`title_variable` as title_variable FROM `template_variable` JOIN `application` on `template_variable`.`application_id` = `application`.`id`'
+
+get_all_default_application_modes_query = '''
+SELECT `application`.`id` as app_id, `priority`.`name` as priority, `mode`.`name` as mode
+FROM `default_application_mode`
+JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
+JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
+JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`'''
+
+get_all_supported_application_modes_query = '''
+SELECT `application`.`id` as app_id, `mode`.`name`
+FROM `mode`
+JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+JOIN `application` on  `application_mode`.`application_id` = `application`.`id`
+'''
+
+get_all_application_owners_query = '''SELECT `application`.`id` as app_id, `target`.`name`
+                                  FROM `application_owner`
+                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                  JOIN `application` on `application`.`id` = `application_owner`.`application_id`'''
+
+get_all_application_custom_sender_addresses = '''SELECT `application`.`id` as app_id, `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                                  FROM `application_custom_sender_address`
+                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                                  JOIN `application` on `application`.`id` = `application_custom_sender_address`.`application_id`'''
+
+get_all_application_categories = '''
+    SELECT `application`.`id` as app_id, `notification_category`.`id` as id, `notification_category`.`name` as name,
+        `notification_category`.`description`, `mode`.`name` AS mode
+    FROM `notification_category`
+    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+    JOIN `application` on `application`.`id` = `notification_category`.`application_id`'''
+
+
 get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
 get_allowed_roles_query = '''SELECT `target_role`.`id`
@@ -4059,9 +4093,11 @@ class Applications(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         requested_fields = req.get_param_as_list('fields')
-        fields = [f for f in requested_fields if f in application_columns] if requested_fields else None
-        if not fields:
+        fields = [f for f in requested_fields if f in application_columns] if requested_fields else []
+        if requested_fields is None:
             fields = application_columns
+        if 'id' not in fields:
+            fields.append('id')
         req.params.pop('fields', None)
 
         query = application_query % ', '.join(application_columns[f] for f in fields)
@@ -4077,35 +4113,88 @@ class Applications(object):
 
         cursor.execute(query)
         apps = cursor.fetchall()
-        if requested_fields is None:
-            # TODO: make these values individually selectable via fields
-            for app in apps:
-                app['title_variable'] = None
-                cursor.execute(get_vars_query, app['id'])
-                app['variables'] = []
-                app['required_variables'] = []
+        addional_fields = {'variables', 'default_modes', 'supported_modes', 'owners', 'custom_sender_addresses', 'categories'}
+        if requested_fields is None or any(field in addional_fields for field in requested_fields):
+
+            # keep a map of application id to apps index so we can apply the selected rows to the correct app
+            app_id_idx_map = {}
+            for idx, app in enumerate(apps):
+                app_id_idx_map[app['id']] = idx
+
+            if requested_fields is None or 'variables' in requested_fields:
+                query = get_all_vars_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for app in apps:
+                    app['title_variable'] = None
+                    app['variables'] = []
+                    app['required_variables'] = []
                 for row in cursor:
-                    app['variables'].append(row['name'])
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['variables'].append(row['name'])
                     if row['required']:
-                        app['required_variables'].append(row['name'])
+                        apps[app_idx]['required_variables'].append(row['name'])
                     if row['title_variable'] == 1:
-                        app['title_variable'] = row['name']
+                        apps[app_idx]['title_variable'] = row['name']
 
-                cursor.execute(get_default_application_modes_query, app['name'])
-                app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
+            if requested_fields is None or 'default_modes' in requested_fields:
+                query = get_all_default_application_modes_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['default_modes'] = {}
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['default_modes'][row['priority']] = row['mode']
 
-                cursor.execute(get_supported_application_modes_query, app['id'])
-                app['supported_modes'] = [row['name'] for row in cursor]
+            if requested_fields is None or 'supported_modes' in requested_fields:
+                query = get_all_supported_application_modes_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['supported_modes'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['supported_modes'].append(row['name'])
 
-                cursor.execute(get_application_owners_query, app['id'])
-                app['owners'] = [row['name'] for row in cursor]
+            if requested_fields is None or 'owners' in requested_fields:
+                query = get_all_application_owners_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['owners'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['owners'].append([row['name']])
 
-                cursor.execute(get_application_custom_sender_addresses, app['id'])
-                app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
+            if requested_fields is None or 'custom_sender_addresses' in requested_fields:
+                query = get_all_application_custom_sender_addresses
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['custom_sender_addresses'] = {}
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['custom_sender_addresses'][row['mode_name']] = row['address']
 
-                cursor.execute(get_application_categories, app['id'])
-                app['categories'] = [row for row in cursor]
+            if requested_fields is None or 'categories' in requested_fields:
+                query = get_all_application_categories
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['categories'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['categories'].append({'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']})
 
+        for app in apps:
+            if requested_fields is None or 'id' not in requested_fields:
                 del app['id']
         payload = apps
         cursor.close()
