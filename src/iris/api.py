@@ -482,21 +482,6 @@ JOIN `application` on `application`.`id` = `target_application_mode`.`applicatio
 WHERE `target_application_mode`.`target_id` = %s
 '''
 
-get_default_application_modes_query = '''
-SELECT `priority`.`name` as priority, `mode`.`name` as mode
-FROM `default_application_mode`
-JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
-JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
-JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
-WHERE `application`.`name` = %s'''
-
-get_supported_application_modes_query = '''
-SELECT `mode`.`name`
-FROM `mode`
-JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
-WHERE `application_mode`.`application_id` = %s
-'''
-
 insert_user_modes_query = '''INSERT
 INTO `target_mode` (`priority_id`, `target_id`, `mode_id`)
 VALUES (
@@ -552,6 +537,60 @@ get_applications_query = '''SELECT
 FROM `application`
 WHERE `auth_only` is False'''
 
+application_columns = {
+    'id': '`application`.`id` as `id`',
+    'name': '`application`.`name` as `name`',
+    'context_template': '`application`.`context_template` as `context_template`',
+    'sample_context': '`application`.`sample_context` as `sample_context`',
+    'summary_template': '`application`.`summary_template` as `summary_template`',
+    'mobile_template': '`application`.`mobile_template` as `mobile_template`'
+}
+
+application_filters = {
+    'id': '`application`.`id`',
+    'name': '`application`.`name`'
+}
+
+application_filter_types = {
+    'id': int
+}
+
+application_query = '''SELECT %s FROM `application`'''
+
+get_all_vars_query = 'SELECT `application`.`id` as app_id, `template_variable`.`name` as name, `template_variable`.`required` as required, `template_variable`.`title_variable` as title_variable FROM `template_variable` JOIN `application` on `template_variable`.`application_id` = `application`.`id`'
+
+get_all_default_application_modes_query = '''
+SELECT `application`.`id` as app_id, `priority`.`name` as priority, `mode`.`name` as mode
+FROM `default_application_mode`
+JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
+JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
+JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`'''
+
+get_all_supported_application_modes_query = '''
+SELECT `application`.`id` as app_id, `mode`.`name`
+FROM `mode`
+JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
+JOIN `application` on  `application_mode`.`application_id` = `application`.`id`
+'''
+
+get_all_application_owners_query = '''SELECT `application`.`id` as app_id, `target`.`name`
+                                  FROM `application_owner`
+                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
+                                  JOIN `application` on `application`.`id` = `application_owner`.`application_id`'''
+
+get_all_application_custom_sender_addresses = '''SELECT `application`.`id` as app_id, `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
+                                  FROM `application_custom_sender_address`
+                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
+                                  JOIN `application` on `application`.`id` = `application_custom_sender_address`.`application_id`'''
+
+get_all_application_categories = '''
+    SELECT `application`.`id` as app_id, `notification_category`.`id` as id, `notification_category`.`name` as name,
+        `notification_category`.`description`, `mode`.`name` AS mode
+    FROM `notification_category`
+    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
+    JOIN `application` on `application`.`id` = `notification_category`.`application_id`'''
+
+
 get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
 
 get_allowed_roles_query = '''SELECT `target_role`.`id`
@@ -588,18 +627,6 @@ check_application_ownership_query = '''SELECT 1
                                        WHERE `target`.`name` = :username
                                        AND `application_owner`.`application_id` = :application_id'''
 
-get_application_owners_query = '''SELECT `target`.`name`
-                                  FROM `application_owner`
-                                  JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                                  WHERE `application_owner`.`application_id` = %s'''
-
-get_application_categories = '''
-    SELECT `notification_category`.`id`, `notification_category`.`name`,
-        `notification_category`.`description`, `mode`.`name` AS mode
-    FROM `notification_category`
-    JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
-    WHERE `application_id` = %s'''
-
 category_query = '''
     SELECT `notification_category`.`id`, `notification_category`.`name`, `application`.`name` as application,
         `notification_category`.`description`, `mode`.`name` as mode
@@ -621,12 +648,6 @@ category_filter_types = {
     'application': str,
     'mode': str
 }
-
-get_application_custom_sender_addresses = '''SELECT `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
-                                  FROM `application_custom_sender_address`
-                                  JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
-                                  WHERE `application_custom_sender_address`.`application_id` = %s'''
-
 
 uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
@@ -3181,20 +3202,20 @@ class Application(object):
             if row['title_variable']:
                 app['title_variable'] = row['name']
 
-        cursor.execute(get_default_application_modes_query, app_name)
+        cursor.execute(get_all_default_application_modes_query + ' WHERE `application`.`name` = %s', app_name)
         app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
 
-        cursor.execute(get_supported_application_modes_query, app['id'])
+        cursor.execute(get_all_supported_application_modes_query + ' WHERE `application_mode`.`application_id` = %s', app['id'])
         app['supported_modes'] = [row['name'] for row in cursor]
 
-        cursor.execute(get_application_owners_query, app['id'])
+        cursor.execute(get_all_application_owners_query + ' WHERE `application_owner`.`application_id` = %s', app['id'])
         app['owners'] = [row['name'] for row in cursor]
 
-        cursor.execute(get_application_custom_sender_addresses, app['id'])
+        cursor.execute(get_all_application_custom_sender_addresses + ' WHERE `application_custom_sender_address`.`application_id` = %s', app['id'])
         app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
 
-        cursor.execute(get_application_categories, app['id'])
-        app['categories'] = [row for row in cursor]
+        cursor.execute(get_all_application_categories + ' WHERE `application_id` = %s', app['id'])
+        app['categories'] = [{'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']} for row in cursor]
 
         cursor.close()
         connection.close()
@@ -4036,36 +4057,112 @@ class Applications(object):
     def on_get(self, req, resp):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
-        cursor.execute(get_applications_query + ' ORDER BY `application`.`name` ASC')
+        query_limit = req.get_param_as_int('limit')
+        req.params.pop('limit', None)
+        requested_fields = req.get_param_as_list('fields')
+        fields = [f for f in requested_fields if f in application_columns] if requested_fields else []
+        if requested_fields is None:
+            fields = application_columns
+        if 'id' not in fields:
+            fields.append('id')
+        req.params.pop('fields', None)
+
+        query = application_query % ', '.join(application_columns[f] for f in fields)
+
+        where = ['`auth_only` is False']
+        where += gen_where_filter_clause(connection, application_filters, application_filter_types, req.params)
+
+        if where:
+            query = query + ' WHERE ' + ' AND '.join(where)
+        query += ' ORDER BY `application`.`name` ASC'
+        if query_limit is not None:
+            query += ' LIMIT %s' % query_limit
+
+        cursor.execute(query)
         apps = cursor.fetchall()
+        addional_fields = {'variables', 'default_modes', 'supported_modes', 'owners', 'custom_sender_addresses', 'categories'}
+        if requested_fields is None or any(field in addional_fields for field in requested_fields):
+
+            # keep a map of application id to apps index so we can apply the selected rows to the correct app
+            app_id_idx_map = {}
+            for idx, app in enumerate(apps):
+                app_id_idx_map[app['id']] = idx
+
+            if requested_fields is None or 'variables' in requested_fields:
+                query = get_all_vars_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for app in apps:
+                    app['title_variable'] = None
+                    app['variables'] = []
+                    app['required_variables'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['variables'].append(row['name'])
+                    if row['required']:
+                        apps[app_idx]['required_variables'].append(row['name'])
+                    if row['title_variable'] == 1:
+                        apps[app_idx]['title_variable'] = row['name']
+
+            if requested_fields is None or 'default_modes' in requested_fields:
+                query = get_all_default_application_modes_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['default_modes'] = {}
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['default_modes'][row['priority']] = row['mode']
+
+            if requested_fields is None or 'supported_modes' in requested_fields:
+                query = get_all_supported_application_modes_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['supported_modes'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['supported_modes'].append(row['name'])
+
+            if requested_fields is None or 'owners' in requested_fields:
+                query = get_all_application_owners_query
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['owners'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['owners'].append(row['name'])
+
+            if requested_fields is None or 'custom_sender_addresses' in requested_fields:
+                query = get_all_application_custom_sender_addresses
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['custom_sender_addresses'] = {}
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['custom_sender_addresses'][row['mode_name']] = row['address']
+
+            if requested_fields is None or 'categories' in requested_fields:
+                query = get_all_application_categories
+                if where:
+                    query = query + ' WHERE ' + ' AND '.join(where)
+                cursor.execute(query)
+                for idx in app_id_idx_map.values():
+                    apps[idx]['categories'] = []
+                for row in cursor:
+                    app_idx = app_id_idx_map[row['app_id']]
+                    apps[app_idx]['categories'].append({'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']})
+
         for app in apps:
-            app['title_variable'] = None
-            cursor.execute(get_vars_query, app['id'])
-            app['variables'] = []
-            app['required_variables'] = []
-            for row in cursor:
-                app['variables'].append(row['name'])
-                if row['required']:
-                    app['required_variables'].append(row['name'])
-                if row['title_variable'] == 1:
-                    app['title_variable'] = row['name']
-
-            cursor.execute(get_default_application_modes_query, app['name'])
-            app['default_modes'] = {row['priority']: row['mode'] for row in cursor}
-
-            cursor.execute(get_supported_application_modes_query, app['id'])
-            app['supported_modes'] = [row['name'] for row in cursor]
-
-            cursor.execute(get_application_owners_query, app['id'])
-            app['owners'] = [row['name'] for row in cursor]
-
-            cursor.execute(get_application_custom_sender_addresses, app['id'])
-            app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
-
-            cursor.execute(get_application_categories, app['id'])
-            app['categories'] = [row for row in cursor]
-
-            del app['id']
+            if requested_fields is None or 'id' not in requested_fields:
+                del app['id']
         payload = apps
         cursor.close()
         connection.close()
