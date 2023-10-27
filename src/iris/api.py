@@ -165,7 +165,8 @@ incident_columns = {
     'owner': '`target`.`name` as `owner`',
     'current_step': '`incident`.`current_step` as `current_step`',
     'title_variable_name': '`template_variable`.`name` as `title_variable_name`',
-    'resolved': '`incident`.`resolved` as `resolved`'
+    'resolved': '`incident`.`resolved` as `resolved`',
+    'tags': ' (SELECT JSON_ARRAYAGG(JSON_OBJECT("name", `name`, "value", `value`)) from incident_metadata_tag where incident.id = incident_metadata_tag.incident_id) AS tags'
 }
 
 incident_filters = {
@@ -179,7 +180,7 @@ incident_filters = {
     'created': '`incident`.`created`',
     'owner': '`target`.`name`',
     'current_step': '`incident`.`current_step`',
-    'resolved': '`incident`.`resolved` as `resolved`'
+    'resolved': '`incident`.`resolved`'
 }
 
 incident_filter_types = {
@@ -194,6 +195,7 @@ incident_query = '''SELECT DISTINCT %s FROM `incident`
 JOIN `plan` ON `incident`.`plan_id` = `plan`.`id`
 LEFT OUTER JOIN `target` ON `incident`.`owner_id` = `target`.`id`
 JOIN `application` ON `incident`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `incident_metadata_tag` ON `incident`.`id` = `incident_metadata_tag`.`incident_id`
 LEFT OUTER JOIN `template_variable` ON (`template_variable`.`application_id` = `application`.`id` AND `template_variable`.`title_variable` = 1)'''
 
 single_incident_query = '''SELECT `incident`.`id` as `id`,
@@ -237,6 +239,8 @@ FROM `comment` JOIN `target` ON `user_id` = `target`.`id`
 WHERE `comment`.`incident_id` = %s
 '''
 
+single_incident_query_tags = '''SELECT `name`, `value` from `incident_metadata_tag` where `incident_metadata_tag`.`incident_id` = %s'''
+
 plan_columns = {
     'id': '`plan`.`id` as `id`',
     'name': '`plan`.`name` as `name`',
@@ -251,6 +255,7 @@ plan_columns = {
     'created': 'UNIX_TIMESTAMP(`plan`.`created`) as `created`',
     'creator': '`target`.`name` as `creator`',
     'active': 'IF(`plan_active`.`plan_id` IS NULL, FALSE, TRUE) as `active`',
+    'tags': ' (SELECT JSON_ARRAYAGG(JSON_OBJECT("name", `name`, "value", `value`)) from plan_metadata_tag where plan.id = plan_metadata_tag.plan_id) AS tags'
 }
 
 plan_filters = {
@@ -276,7 +281,8 @@ plan_filter_types = {
 }
 
 plan_query = '''SELECT DISTINCT %s FROM `plan` JOIN `target` ON `plan`.`user_id` = `target`.`id`
-LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`'''
+LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
+LEFT OUTER JOIN `plan_metadata_tag` ON `plan`.`id` = `plan_metadata_tag`.`plan_id`'''
 
 plan_target_query = '''SELECT `plan_id` FROM `plan_notification`
 JOIN `target` ON `plan_notification`.`target_id` = `target`.`id`'''
@@ -319,12 +325,15 @@ JOIN `priority` ON `plan_notification`.`priority_id` = `priority`.`id`
 WHERE `plan_notification`.`plan_id` = %s
 ORDER BY `plan_notification`.`step`'''
 
+single_plan_query_tags = '''SELECT `name`, `value` from `plan_metadata_tag` where `plan_metadata_tag`.`plan_id` = %s'''
+
 template_columns = {
     'id': '`template`.`id` as `id`',
     'name': '`template`.`name` as `name`',
     'creator': '`target`.`name` as `creator`',
     'created': 'UNIX_TIMESTAMP(`template`.`created`) as `created`',
     'active': 'IF(`template_active`.`template_id` IS NULL, FALSE, TRUE) as `active`',
+    'tags': '(SELECT JSON_ARRAYAGG(JSON_OBJECT("name", `name`, "value", `value`)) from template_metadata_tag where template.id = template_metadata_tag.template_id) AS tags'
 }
 
 template_filters = {
@@ -342,7 +351,8 @@ template_filter_types = {
 
 template_query = '''SELECT %s FROM `template`
 JOIN `target` ON `template`.`user_id`=`target`.`id`
-LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`'''
+LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+LEFT OUTER JOIN `template_metadata_tag` ON `template`.`id` = `template_metadata_tag`.`template_id`'''
 
 single_template_query = '''SELECT
     `template`.`id` as `id`,
@@ -365,6 +375,8 @@ DISTINCT `plan_active`.`plan_id` as `id`, `plan_active`.`name` as `name`
 FROM `plan_notification`
 JOIN `plan_active` ON `plan_notification`.`plan_id` = `plan_active`.`plan_id`
 WHERE `plan_notification`.`template` = %s'''
+
+single_template_query_tags = '''SELECT `name`, `value` from `template_metadata_tag` where `template_metadata_tag`.`template_id` = %s'''
 
 insert_plan_query = '''INSERT INTO `plan` (
     `user_id`, `name`, `created`, `description`, `step_count`,
@@ -537,13 +549,16 @@ get_applications_query = '''SELECT
 FROM `application`
 WHERE `auth_only` is False'''
 
+single_application_query_tags = '''SELECT `name`, `value` from `application_metadata_tag` where `application_metadata_tag`.`application_id` = %s'''
+
 application_columns = {
     'id': '`application`.`id` as `id`',
     'name': '`application`.`name` as `name`',
     'context_template': '`application`.`context_template` as `context_template`',
     'sample_context': '`application`.`sample_context` as `sample_context`',
     'summary_template': '`application`.`summary_template` as `summary_template`',
-    'mobile_template': '`application`.`mobile_template` as `mobile_template`'
+    'mobile_template': '`application`.`mobile_template` as `mobile_template`',
+    'tags': ' (SELECT JSON_ARRAYAGG(JSON_OBJECT("name", `name`, "value", `value`)) from `application_metadata_tag` where `application`.`id` = `application_metadata_tag`.`application_id`) AS tags'
 }
 
 application_filters = {
@@ -555,40 +570,46 @@ application_filter_types = {
     'id': int
 }
 
-application_query = '''SELECT %s FROM `application`'''
+application_query = '''SELECT %s FROM `application`
+LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
-get_all_vars_query = 'SELECT `application`.`id` as app_id, `template_variable`.`name` as name, `template_variable`.`required` as required, `template_variable`.`title_variable` as title_variable FROM `template_variable` JOIN `application` on `template_variable`.`application_id` = `application`.`id`'
+get_all_vars_query = '''SELECT `application`.`id` as app_id, `template_variable`.`name` as name, `template_variable`.`required` as required, `template_variable`.`title_variable` as title_variable FROM `template_variable` JOIN `application` on `template_variable`.`application_id` = `application`.`id`
+LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 get_all_default_application_modes_query = '''
 SELECT `application`.`id` as app_id, `priority`.`name` as priority, `mode`.`name` as mode
 FROM `default_application_mode`
 JOIN `mode`  on `mode`.`id` = `default_application_mode`.`mode_id`
 JOIN `priority` on `priority`.`id` = `default_application_mode`.`priority_id`
-JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`'''
+JOIN `application` on `application`.`id` = `default_application_mode`.`application_id`
+LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 get_all_supported_application_modes_query = '''
 SELECT `application`.`id` as app_id, `mode`.`name`
 FROM `mode`
 JOIN `application_mode` on `mode`.`id` = `application_mode`.`mode_id`
 JOIN `application` on  `application_mode`.`application_id` = `application`.`id`
-'''
+LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 get_all_application_owners_query = '''SELECT `application`.`id` as app_id, `target`.`name`
                                   FROM `application_owner`
                                   JOIN `target` on `target`.`id` = `application_owner`.`user_id`
-                                  JOIN `application` on `application`.`id` = `application_owner`.`application_id`'''
+                                  JOIN `application` on `application`.`id` = `application_owner`.`application_id`
+                                  LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 get_all_application_custom_sender_addresses = '''SELECT `application`.`id` as app_id, `mode`.`name` AS mode_name, `application_custom_sender_address`.`sender_address` AS address
                                   FROM `application_custom_sender_address`
                                   JOIN `mode` on `mode`.`id` = `application_custom_sender_address`.`mode_id`
-                                  JOIN `application` on `application`.`id` = `application_custom_sender_address`.`application_id`'''
+                                  JOIN `application` on `application`.`id` = `application_custom_sender_address`.`application_id`
+                                  LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 get_all_application_categories = '''
     SELECT `application`.`id` as app_id, `notification_category`.`id` as id, `notification_category`.`name` as name,
         `notification_category`.`description`, `mode`.`name` AS mode
     FROM `notification_category`
     JOIN `mode` ON `notification_category`.`mode_id` = `mode`.`id`
-    JOIN `application` on `application`.`id` = `notification_category`.`application_id`'''
+    JOIN `application` on `application`.`id` = `notification_category`.`application_id`
+    LEFT OUTER JOIN `application_metadata_tag` ON `application`.`id` = `application_metadata_tag`.`application_id`'''
 
 
 get_vars_query = 'SELECT `name`, `required`, `title_variable` FROM `template_variable` WHERE `application_id` = %s ORDER BY `required` DESC, `name` ASC'
@@ -652,8 +673,8 @@ category_filter_types = {
 uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
 
-def stream_incidents_with_context(cursor, title=False):
-    for row in cursor:
+def stream_incidents_with_context(results, title=False):
+    for row in results:
         row['context'] = ujson.loads(row['context'])
         if title:
             title_variable_name = row.get('title_variable_name')
@@ -727,6 +748,57 @@ def is_valid_tracking_settings(t, k, tpl):
             except jinja2.TemplateSyntaxError as e:
                 return False, 'Invalid jinja syntax in incident tracking text: %s' % e
     return True, None
+
+
+def gen_tag_where_subquery(connection, id_field, tag_table, kwargs):
+    '''
+        return a subquery to be used in a where clause for filtering based on tags
+    '''
+    tag_prefix = 'tag_'
+    where = []
+    conditions = []
+    joins = []
+    for i, (key, values) in enumerate(kwargs.items()):
+        if not isinstance(key, str):
+            continue
+        # get tag name and any operation associated with it
+        col, _, op = key.partition('__')
+        # only process tag fields
+        if not col.startswith(tag_prefix):
+            continue
+        if op not in operators:
+            raise HTTPBadRequest('invalid filter operator %s' % op)
+
+        name = col[len(tag_prefix):]
+        # ensure proper typing and escape values
+        if isinstance(values, str):
+            values = values.split(',')
+        values = [connection.escape(x) for x in values if isinstance(x, str)]
+        escaped_name = connection.escape(name)
+
+        # Generate conditions for each tag name and its values
+        condition_bits = []
+        for value in values:
+            value_op = operators[op] % ('value', value)
+            condition_bits.append(f"(t{i + 1}.name = {escaped_name} AND t{i + 1}.{value_op})")
+        # a single tag name can have a list of values associated with it, evaluate those as OR
+        condition = " OR ".join(x for x in condition_bits)
+        conditions.append(f"({condition})")
+
+        # Create self-join for each tag name and its values this is necessary for allow matching to multiple tag name:value combiations
+        join_condition = f"t{i + 1}.{id_field} = t0.{id_field}"
+        joins.append(f"JOIN {tag_table} AS t{i + 1} ON {join_condition}")
+
+    if len(conditions) == 0:
+        return ""
+
+    # Combine all conditions using AND to ensure they are all satisfied
+    combined_conditions = " AND ".join(conditions)
+    # Combine all joins
+    combined_joins = " ".join(joins)
+    # SQL query to retrieve distinct resource ids based on the conditions and self-joins
+    sql_query = f"{tag_table}.{id_field} IN (SELECT DISTINCT t0.{id_field} FROM {tag_table} AS t0 {combined_joins} WHERE {combined_conditions})"
+    return sql_query
 
 
 def gen_where_filter_clause(connection, filters, filter_types, kwargs):
@@ -1062,6 +1134,9 @@ class Plan(object):
             if plan['tracking_template']:
                 plan['tracking_template'] = ujson.loads(plan['tracking_template'])
 
+            cursor.execute(single_plan_query_tags, plan['id'])
+            plan['tags'] = cursor.fetchall()
+
             resp.body = ujson.dumps(plan)
             connection.close()
         else:
@@ -1209,11 +1284,15 @@ class Plans(object):
         '''
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
-        fields = req.get_param_as_list('fields')
+        requested_fields = req.get_param_as_list('fields')
+        fields = requested_fields[:] if requested_fields else None
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
             fields = plan_columns
+        # require id in fields for groupby
+        if 'id' not in fields:
+            fields.append('id')
 
         query = plan_query % ', '.join(plan_columns[f] for f in fields)
 
@@ -1244,15 +1323,36 @@ class Plans(object):
         where += gen_where_filter_clause(
             connection, plan_filters, plan_filter_types, req.params)
 
+        tag_subquery = gen_tag_where_subquery(connection, 'plan_id', 'plan_metadata_tag', req.params)
+        if tag_subquery != "":
+            where.append(tag_subquery)
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
+
+        # since we are joining with a table that has many to one relationship apply a group by to remove duplicates
+        query += ' GROUP BY `plan`.`id`'
 
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
         cursor.execute(query)
+        results = []
+        # format 'tags' if necessary
+        for plan in cursor:
+            if 'tags' in plan:
+                if plan['tags'] is None:
+                    plan['tags'] = []
+                else:
+                    plan['tags'] = ujson.loads(plan['tags'])
 
-        payload = ujson.dumps(cursor)
+            # do not return id if user did not request it
+            if requested_fields is not None and 'id' not in requested_fields:
+                del plan['id']
+
+            results.append(plan)
+
+        payload = ujson.dumps(results)
         connection.close()
         resp.status = HTTP_200
         resp.body = payload
@@ -1579,6 +1679,7 @@ class Incidents(object):
         - plan: Escalation plan name (string)
         - plan_id: Escalation plan id (int)
         - claimed: Claimed status (bool)
+        - tags: Arbitrary metadata tags associated with the incident
 
         This endpoint also allows specification of a limit via another query parameter, which limits
         results to the N most recent incidents. Calls to this endpoint that do not specify either a limit
@@ -1587,10 +1688,14 @@ class Incidents(object):
         (e.g. id,owner), and the API will only include these incident fields in the output. If no "fields" value is
         specified, all fields will be returned.
         '''
-        fields = req.get_param_as_list('fields')
+        requested_fields = req.get_param_as_list('fields')
+        fields = requested_fields[:] if requested_fields else None
         req.params.pop('fields', None)
         if not fields:
             fields = incident_columns
+        # require id in fields for groupby
+        if 'id' not in fields:
+            fields.append('id')
         req.params.pop('fields', None)
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
@@ -1647,23 +1752,45 @@ class Incidents(object):
                     logger.error('failed retrieving messages from external sender %s', r.text)
             except Exception as e:
                 logger.exception('failed to establish connection with iris message processor')
+
+        tag_subquery = gen_tag_where_subquery(connection, 'incident_id', 'incident_metadata_tag', req.params)
+        if tag_subquery != "":
+            where.append(tag_subquery)
+
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
+
+        # since we are joining with a table that has many to one relationship apply a group by to remove duplicates
+        query += ' GROUP BY `incident`.`id`'
+
         if query_limit is not None:
             query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC LIMIT %s' % query_limit
 
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
+        results = []
+        # format 'tags' if necessary
+        for incident in cursor:
+            if 'tags' in incident:
+                if incident['tags'] is None:
+                    incident['tags'] = []
+                else:
+                    incident['tags'] = ujson.loads(incident['tags'])
+            if requested_fields is not None and 'id' not in requested_fields:
+                # do not return id if it was not requested by user
+                del incident['id']
+            results.append(incident)
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
-                payload = ujson.dumps(stream_incidents_with_context(cursor, True))
+                payload = ujson.dumps(stream_incidents_with_context(results, True))
             else:
-                payload = ujson.dumps(stream_incidents_with_context(cursor, False))
+                payload = ujson.dumps(stream_incidents_with_context(results, False))
         else:
-            payload = ujson.dumps(cursor)
+            payload = ujson.dumps(results)
         connection.close()
         resp.status = HTTP_200
         resp.body = payload
@@ -1952,6 +2079,8 @@ class Incident(object):
                "current_step": 1
            }
         '''
+
+        # add fetching tags to individual endpoints too
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         try:
@@ -1979,6 +2108,9 @@ class Incident(object):
 
             cursor.execute(single_incident_query_comments, incident['id'])
             incident['comments'] = cursor.fetchall()
+
+            cursor.execute(single_incident_query_tags, incident['id'])
+            incident['tags'] = cursor.fetchall()
             connection.close()
 
             incident['context'] = ujson.loads(incident['context'])
@@ -2749,7 +2881,7 @@ class Template(object):
 
         if results:
             r = results[0]
-            t = {
+            template = {
                 'id': r[0],
                 'name': r[1],
                 'active': r[2],
@@ -2759,12 +2891,14 @@ class Template(object):
             content = {}
             for r in results:
                 content.setdefault(r[5], {})[r[6]] = {'subject': r[7], 'body': r[8]}
-            t['content'] = content
+            template['content'] = content
             cursor = connection.cursor(db.dict_cursor)
-            cursor.execute(single_template_query_plans, t['name'])
-            t['plans'] = cursor.fetchall()
+            cursor.execute(single_template_query_plans, template['name'])
+            template['plans'] = cursor.fetchall()
+            cursor.execute(single_template_query_tags, template['id'])
+            template['tags'] = cursor.fetchall()
             connection.close()
-            payload = ujson.dumps(t)
+            payload = ujson.dumps(template)
         else:
             raise HTTPNotFound()
         resp.status = HTTP_200
@@ -2801,10 +2935,14 @@ class Templates(object):
     def on_get(self, req, resp):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
-        fields = req.get_param_as_list('fields')
+        requested_fields = req.get_param_as_list('fields')
+        fields = requested_fields[:] if requested_fields else None
         fields = [f for f in fields if f in template_columns] if fields else None
         if not fields:
             fields = template_columns
+        # require id field with tags
+        if 'id' not in fields:
+            fields.append('id')
         req.params.pop('fields', None)
 
         query = template_query % ', '.join(template_columns[f] for f in fields)
@@ -2821,16 +2959,35 @@ class Templates(object):
         connection = db.engine.raw_connection()
         where += gen_where_filter_clause(connection, template_filters, template_filter_types, req.params)
 
+        tag_subquery = gen_tag_where_subquery(connection, 'template_id', 'template_metadata_tag', req.params)
+        if tag_subquery != "":
+            where.append(tag_subquery)
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
+
+        # since we are joining with a table that has many to one relationship apply a group by to remove duplicates
+        query += ' GROUP BY `template`.`id`'
 
         if query_limit is not None:
             query += ' ORDER BY `template`.`created` DESC LIMIT %s' % query_limit
 
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
+        results = []
+        # format 'tags' if necessary
+        for template in cursor:
+            if 'tags' in template:
+                if template['tags'] is None:
+                    template['tags'] = []
+                else:
+                    template['tags'] = ujson.loads(template['tags'])
+            if requested_fields is not None and 'id' not in requested_fields:
+                # do not return id if it was not requested by user
+                del template['id']
+            results.append(template)
 
-        payload = ujson.dumps(cursor)
+        payload = ujson.dumps(results)
         connection.close()
         resp.status = HTTP_200
         resp.body = payload
@@ -3165,12 +3322,17 @@ class Target(object):
             filters_sql.append('`active` = :active')
 
         sql = 'SELECT `name` FROM `target`'
+        if 'get_id' in req.params:
+            sql = 'SELECT `name`, `id` FROM `target`'
         if filters_sql:
             sql += ' WHERE %s' % ' AND '.join(filters_sql)
 
         with db.guarded_session() as session:
             results = session.execute(sql, req.params)
-            payload = ujson.dumps([row for (row,) in results])
+            if 'get_id' in req.params:
+                payload = ujson.dumps([row for row in results])
+            else:
+                payload = ujson.dumps([row for (row,) in results])
             session.close()
 
         resp.status = HTTP_200
@@ -3214,13 +3376,15 @@ class Application(object):
         cursor.execute(get_all_application_custom_sender_addresses + ' WHERE `application_custom_sender_address`.`application_id` = %s', app['id'])
         app['custom_sender_addresses'] = {row['mode_name']: row['address'] for row in cursor}
 
-        cursor.execute(get_all_application_categories + ' WHERE `application_id` = %s', app['id'])
+        cursor.execute(get_all_application_categories + ' WHERE `notification_category`.`application_id` = %s', app['id'])
         app['categories'] = [{'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']} for row in cursor]
+
+        cursor.execute(single_application_query_tags, app['id'])
+        app['tags'] = cursor.fetchall()
 
         cursor.close()
         connection.close()
 
-        del app['id']
         payload = app
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
@@ -3525,6 +3689,9 @@ class Application(object):
             try:
                 affected = session.execute('DELETE FROM `application` WHERE `name` = :app_name',
                                            {'app_name': app_name}).rowcount
+                # delete any existing metadata tags as well
+                session.execute('DELETE FROM `application_metadata_tag` WHERE `application_id` IN (SELECT `application`.`id` FROM `application` WHERE `application`.`name`= :app_name)',
+                                {'app_name': app_name}).rowcount
                 session.commit()
                 session.close()
             except IntegrityError:
@@ -4072,14 +4239,31 @@ class Applications(object):
         where = ['`auth_only` is False']
         where += gen_where_filter_clause(connection, application_filters, application_filter_types, req.params)
 
+        tag_subquery = gen_tag_where_subquery(connection, 'application_id', 'application_metadata_tag', req.params)
+        if tag_subquery != "":
+            where.append(tag_subquery)
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
+
+        # since we are joining with a table that has many to one relationship apply a group by to remove duplicates
+        query += ' GROUP BY `application`.`id`'
+
         query += ' ORDER BY `application`.`name` ASC'
         if query_limit is not None:
             query += ' LIMIT %s' % query_limit
 
         cursor.execute(query)
-        apps = cursor.fetchall()
+        apps = []
+        # format 'tags' if necessary
+        for app in cursor.fetchall():
+            if 'tags' in app:
+                if app['tags'] is None:
+                    app['tags'] = []
+                else:
+                    app['tags'] = ujson.loads(app['tags'])
+            apps.append(app)
+
         addional_fields = {'variables', 'default_modes', 'supported_modes', 'owners', 'custom_sender_addresses', 'categories'}
         if requested_fields is None or any(field in addional_fields for field in requested_fields):
 
@@ -4161,7 +4345,7 @@ class Applications(object):
                     apps[app_idx]['categories'].append({'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']})
 
         for app in apps:
-            if requested_fields is None or 'id' not in requested_fields:
+            if requested_fields is not None and 'id' not in requested_fields:
                 del app['id']
         payload = apps
         cursor.close()
@@ -6662,6 +6846,189 @@ class PriorityModeMap():
         resp.body = ujson.dumps(result)
 
 
+def validate_tag_post_req(req, allowed_tags):
+    # validate payload
+    try:
+        body = ujson.loads(req.context['body'])
+    except ValueError:
+        raise HTTPBadRequest('Invalid request: could not load json from POST body')
+    if 'name' not in body or 'values' not in body or 'id' not in body:
+        raise HTTPBadRequest('Missing name, value, or id in POST body')
+    name = body['name']
+    values = body['values']
+    id = body['id']
+    if not isinstance(id, int):
+        raise HTTPBadRequest('Invalid request: id must be integer')
+    if not isinstance(name, str):
+        raise HTTPBadRequest('Invalid request: name must be string')
+    if name not in allowed_tags:
+        raise HTTPBadRequest('Invalid request: name is not one of the allowlisted tag names: %s' % str(allowed_tags))
+    if not (isinstance(values, list) and all(isinstance(value, str) for value in values)):
+        raise HTTPBadRequest('Invalid request: values must a list of strings')
+
+    return (name, values, id)
+
+
+class IncidentTag():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.allowed_tags = config.get("metadata_tagging", {}).get("allowed_tags", {}).get("incidents", {})
+
+    def on_put(self, req, resp):
+        name, values, incident_id = validate_tag_post_req(req, self.allowed_tags)
+
+        with db.guarded_session() as session:
+            # check that the incident actually exists
+            result = session.execute('''SELECT EXISTS( SELECT 1 FROM `incident` WHERE `incident`.`id` = :id)''', {'id': incident_id}).fetchone()
+            if not result[0]:
+                raise HTTPBadRequest('Invalid request: no matching incident id')
+
+            # clean up old tags
+            session.execute('DELETE FROM `incident_metadata_tag` WHERE `name`=:name AND `incident_id`=:id', {'id': incident_id, 'name': name})
+
+            # insert new tags
+            for value in values:
+                session.execute('INSERT INTO `incident_metadata_tag` (`name`, `value`, `incident_id`) VALUES(:name,:value,:incident_id)', {'name': name, 'value': value, 'incident_id': incident_id})
+
+            session.commit()
+            session.close()
+
+        resp.status = HTTP_201
+
+
+class TemplateTag():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.allowed_tags = config.get("metadata_tagging", {}).get("allowed_tags", {}).get("templates", {})
+
+    def on_put(self, req, resp):
+        name, values, template_id = validate_tag_post_req(req, self.allowed_tags)
+
+        with db.guarded_session() as session:
+            # check that the template actually exists
+            result = session.execute('''SELECT EXISTS( SELECT 1 FROM `template` WHERE `template`.`id` = :id)''', {'id': template_id}).fetchone()
+            if not result[0]:
+                raise HTTPBadRequest('Invalid request: no matching template id')
+
+            # clean up old tags
+            session.execute('DELETE FROM `template_metadata_tag` WHERE `name`=:name AND `template_id`=:id', {'id': template_id, 'name': name})
+
+            # insert new tags
+            for value in values:
+                session.execute('INSERT INTO `template_metadata_tag` (`name`, `value`, `template_id`) VALUES(:name,:value,:template_id)', {'name': name, 'value': value, 'template_id': template_id})
+
+            session.commit()
+            session.close()
+
+        resp.status = HTTP_201
+
+
+class PlanTag():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.allowed_tags = config.get("metadata_tagging", {}).get("allowed_tags", {}).get("plans", {})
+
+    def on_put(self, req, resp):
+        # validate payload
+        name, values, plan_id = validate_tag_post_req(req, self.allowed_tags)
+
+        with db.guarded_session() as session:
+            # check that the plan actually exists
+            result = session.execute('''SELECT EXISTS( SELECT 1 FROM `plan` WHERE `plan`.`id` = :id)''', {'id': plan_id}).fetchone()
+            if not result[0]:
+                raise HTTPBadRequest('Invalid request: no matching plan id')
+
+            # clean up old tags
+            session.execute('DELETE FROM `plan_metadata_tag` WHERE `name`=:name AND `plan_id`=:id', {'id': plan_id, 'name': name})
+
+            # insert new tags
+            for value in values:
+                session.execute('INSERT INTO `plan_metadata_tag` (`name`, `value`, `plan_id`) VALUES(:name,:value,:plan_id)', {'name': name, 'value': value, 'plan_id': plan_id})
+
+            session.commit()
+            session.close()
+
+        resp.status = HTTP_201
+
+
+class TargetTag():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.allowed_tags = config.get("metadata_tagging", {}).get("allowed_tags", {}).get("targets", {})
+
+    def on_put(self, req, resp):
+        # validate payload
+        name, values, target_id = validate_tag_post_req(req, self.allowed_tags)
+
+        with db.guarded_session() as session:
+            # check that the target actually exists
+            result = session.execute('''SELECT EXISTS( SELECT 1 FROM `target` WHERE `target`.`id` = :id)''', {'id': target_id}).fetchone()
+            if not result[0]:
+                raise HTTPBadRequest('Invalid request: no matching target id')
+
+            # clean up old tags
+            session.execute('DELETE FROM `target_metadata_tag` WHERE `name`=:name AND `target_id`=:id', {'id': target_id, 'name': name})
+
+            # insert new tags
+            for value in values:
+                session.execute('INSERT INTO `target_metadata_tag` (`name`, `value`, `target_id`) VALUES(:name,:value,:target_id)', {'name': name, 'value': value, 'target_id': target_id})
+
+            session.commit()
+            session.close()
+
+        resp.status = HTTP_201
+
+
+class ApplicationTag():
+    allow_read_no_auth = False
+    internal_allowlist_only = True
+
+    def __init__(self, config):
+        self.allowed_tags = config.get("metadata_tagging", {}).get("allowed_tags", {}).get("applications", {})
+
+    def on_put(self, req, resp):
+        # validate payload
+        name, values, application_id = validate_tag_post_req(req, self.allowed_tags)
+
+        with db.guarded_session() as session:
+            # check that the application actually exists
+            result = session.execute('''SELECT EXISTS( SELECT 1 FROM `application` WHERE `application`.`id` = :id)''', {'id': application_id}).fetchone()
+            if not result[0]:
+                raise HTTPBadRequest('Invalid request: no matching application id')
+
+            # clean up old tags
+            session.execute('DELETE FROM `application_metadata_tag` WHERE `name`=:name AND `application_id`=:id', {'id': application_id, 'name': name})
+
+            # insert new tags
+            for value in values:
+                session.execute('INSERT INTO `application_metadata_tag` (`name`, `value`, `application_id`) VALUES(:name,:value,:application_id)', {'name': name, 'value': value, 'application_id': application_id})
+
+            session.commit()
+            session.close()
+
+        resp.status = HTTP_201
+
+
+class AllowedTags():
+    allow_read_no_auth = True
+    internal_allowlist_only = False
+
+    def __init__(self, config):
+        self.resource_tags = config.get("metadata_tagging", {}).get("allowed_tags", {})
+
+    def on_get(self, req, resp):
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(self.resource_tags)
+
+
 def update_cache_worker():
     while True:
         logger.debug('Reinitializing cache')
@@ -6769,6 +7136,13 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/internal/incidents/{node_id}', InternalIncidents(config))
     api.add_route('/v0/internal/sender_peer_count', SenderPeerCount())
     api.add_route('/v0/internal/priority_mode_map', PriorityModeMap())
+
+    api.add_route('/v0/allowed_metadata_tags', AllowedTags(config))
+    api.add_route('/v0/internal/incident_tag', IncidentTag(config))
+    api.add_route('/v0/internal/application_tag', ApplicationTag(config))
+    api.add_route('/v0/internal/plan_tag', PlanTag(config))
+    api.add_route('/v0/internal/template_tag', TemplateTag(config))
+    api.add_route('/v0/internal/target_tag', TargetTag(config))
 
     mobile_config = config.get('iris-mobile', {})
     if mobile_config.get('activated'):

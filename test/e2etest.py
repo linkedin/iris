@@ -1014,6 +1014,135 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.json()['description'] == 'You must have at least one non-optional notification per step. Step 1 has none.'
 
 
+def test_tag_plan(sample_plan_name, sample_application_name, sample_team, superuser_application, sample_user, sample_template_name):
+
+    # create a plan
+    data = {
+        "creator": sample_user,
+        "name": sample_user + "-test-foo-tags",
+        "description": "Test plan for e2e test tags",
+        "threshold_window": 900,
+        "threshold_count": 10,
+        "aggregation_window": 300,
+        "aggregation_reset": 300,
+        "steps": [
+            [
+                {
+                    "role": "team",
+                    "target": sample_team,
+                    "priority": "low",
+                    "wait": 600,
+                    "repeat": 0,
+                    "template": sample_template_name,
+                    "optional": 0
+                }
+            ]
+        ],
+        "isValid": True
+    }
+
+    re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
+    assert re.status_code == 201
+    plan_id = int(re.content.strip().decode('utf-8'))
+
+    re = requests.get(base_url + 'plans/%d' % plan_id)
+    assert re.status_code == 200
+    response = re.json()
+    assert response['tags'] == []
+
+    # add team tags
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team", "baz_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/plan_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'plans/%d' % plan_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "team",
+            "value": "baz_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # modify team tags by eliminating one
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/plan_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'plans/%d' % plan_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # add service tag
+    payload = {
+        "name": "service",
+        "values": ["foo_service"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/plan_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'plans/%d' % plan_id)
+    assert re.status_code == 200
+    response = re.json()
+
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "service",
+            "value": "foo_service"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # filter incidents search by tags
+    re = requests.get(base_url + 'plans?tag_team=foo_team&tag_team=bar_team&tag_service__contains=service')
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert len(response[0]['tags']) == 3
+    assert response[0]['id'] == plan_id
+
+
 def test_post_dynamic_plan(sample_user, sample_team, sample_template_name):
     data = {
         "creator": sample_user,
@@ -1866,6 +1995,124 @@ def test_create_template(sample_user, sample_application_name):
     assert len(data) == 1
 
 
+def test_tag_template(sample_application_name, sample_user, superuser_application):
+
+    # create a template
+    payload = {
+        'creator': sample_user,
+        'name': 'test_tag_template',
+        'content': {
+            sample_application_name: {
+                'sms': {'subject': '', 'body': 'test_sms'},
+                'slack': {'subject': '', 'body': 'test_slack'},
+                'call': {'subject': '', 'body': 'test_call'},
+                'email': {'subject': 'email_subject', 'body': 'email_body'}
+            }
+        },
+    }
+
+    re = requests.post(base_url + 'templates', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+    template_id = int(re.text)
+
+    re = requests.get(base_url + 'templates/%d' % template_id)
+    assert re.status_code == 200
+    response = re.json()
+    assert response['tags'] == []
+
+    # add team tags
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team", "baz_team"],
+        "id": template_id
+    }
+
+    re = requests.put(base_url + 'internal/template_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'templates/%d' % template_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "team",
+            "value": "baz_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # modify team tags by eliminating one
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team"],
+        "id": template_id
+    }
+
+    re = requests.put(base_url + 'internal/template_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'templates/%d' % template_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # add service tag
+    payload = {
+        "name": "service",
+        "values": ["foo_service"],
+        "id": template_id
+    }
+
+    re = requests.put(base_url + 'internal/template_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'templates/%d' % template_id)
+    assert re.status_code == 200
+    response = re.json()
+
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "service",
+            "value": "foo_service"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # filter template search by tags
+    re = requests.get(base_url + 'templates?tag_team=foo_team&tag_team=bar_team&tag_service__contains=service')
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert len(response[0]['tags']) == 3
+    assert response[0]['id'] == template_id
+
+
 def test_get_targets(sample_user, sample_user2, sample_team, sample_team2):
     re = requests.get(base_url + 'targets')
     assert re.status_code == 200
@@ -2016,7 +2263,7 @@ def test_get_applications(sample_application_name):
     app_keys = set([
         'variables', 'required_variables', 'name', 'context_template', 'summary_template',
         'sample_context', 'default_modes', 'supported_modes', 'owners', 'title_variable',
-        'mobile_template', 'custom_sender_addresses', 'categories'])
+        'mobile_template', 'custom_sender_addresses', 'categories', 'tags', 'id'])
     # TODO: insert application data before get
     re = requests.get(base_url + 'applications/' + sample_application_name)
     assert re.status_code == 200
@@ -2467,6 +2714,105 @@ def test_modify_applicaton_quota(sample_application_name, sample_admin_user, sam
     re = requests.get(base_url + 'applications/%s/quota' % sample_application_name)
     assert re.status_code == 200
     assert re.json() == {}
+
+
+def test_tag_application(sample_application_name, superuser_application):
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    response = re.json()
+    assert response['tags'] == []
+
+    # add team tags
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team", "baz_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/application_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "team",
+            "value": "baz_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # modify team tags by eliminating one
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/application_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # add service tag
+    payload = {
+        "name": "service",
+        "values": ["foo_service"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/application_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'applications/%s' % sample_application_name)
+    assert re.status_code == 200
+    response = re.json()
+
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "service",
+            "value": "foo_service"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # filter applciation search by tags
+    re = requests.get(base_url + 'applications?tag_team=foo_team&tag_team=bar_team&tag_service__contains=service')
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert len(response[0]['tags']) == 3
+    assert response[0]['name'] == sample_application_name
 
 
 def test_modify_application(sample_application_name, sample_admin_user, sample_user, sample_mode, sample_priority):
@@ -2940,6 +3286,143 @@ def test_create_incident(sample_plan_name, sample_application_name):
     assert incident_id
     re = requests.get(base_url + 'incidents/%d' % incident_id)
     assert re.status_code == 200
+
+
+def test_tag_incident(sample_plan_name, sample_application_name, superuser_application):
+
+    # create an incident
+    re = requests.post(base_url + 'incidents',
+                       json={"plan": sample_plan_name, "context": {}},
+                       headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 201
+    incident_id = re.json()
+    assert incident_id
+
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
+    response = re.json()
+    assert response['tags'] == []
+
+    # add team tags
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team", "baz_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/incident_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "team",
+            "value": "baz_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # modify team tags by eliminating one
+    payload = {
+        "name": "team",
+        "values": ["foo_team", "bar_team"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/incident_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # add service tag
+    payload = {
+        "name": "service",
+        "values": ["foo_service"],
+        "id": response['id']
+    }
+
+    re = requests.put(base_url + 'internal/incident_tag', json=payload, headers={'Authorization': 'hmac %s:abc' % superuser_application})
+    assert re.status_code == 201
+
+    re = requests.get(base_url + 'incidents/%d' % incident_id)
+    assert re.status_code == 200
+    response = re.json()
+
+    expected_list = [
+        {
+            "name": "team",
+            "value": "foo_team"
+        },
+        {
+            "name": "team",
+            "value": "bar_team"
+        },
+        {
+            "name": "service",
+            "value": "foo_service"
+        }
+    ]
+    assert len(response['tags']) == len(expected_list) and all(item in expected_list for item in response['tags'])
+
+    # filter incidents search by tags
+    re = requests.get(base_url + 'incidents?tag_team=foo_team&tag_team=bar_team&tag_service__contains=service')
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert len(response[0]['tags']) == 3
+    assert response[0]['id'] == incident_id
+
+
+def test_get_allowed_tags(superuser_application):
+    re = requests.get(base_url + 'allowed_metadata_tags')
+    assert re.status_code == 200
+    response = re.json()
+    expected = {
+        "applications": [
+            "service",
+            "team"
+        ],
+        "plans": [
+            "service",
+            "team"
+        ],
+        "templates": [
+            "service",
+            "team"
+        ],
+        "incidents": [
+            "service",
+            "team"
+        ],
+        "targets": [
+            "service",
+            "team"
+        ]
+    }
+    assert response == expected
 
 
 def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_plan_name2, sample_admin_user):

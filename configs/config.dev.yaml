@@ -116,6 +116,24 @@ webhooks:
 #   external_sender_version: 0
 #   zookeeper_cluster: localhost:2181
 
+metadata_tagging:
+  allowed_tags:
+    applications:
+      - service
+      - team
+    plans:
+      - service
+      - team
+    templates:
+      - service
+      - team
+    incidents:
+      - service
+      - team
+    targets:
+      - service
+      - team
+
 #####################
 ### Iris-sender
 #####################
