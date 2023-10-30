@@ -787,7 +787,7 @@ def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs)
     # Combine all joins
     combined_joins = " ".join(joins)
     # SQL query to retrieve distinct resource ids based on the conditions and self-joins
-    sql_query = f"EXISTS (SELECT t0.{id_field} FROM {tag_table} AS t0 {combined_joins} WHERE {combined_conditions} AND t0.{id_field} = {resource_id})"
+    sql_query = f"EXISTS (SELECT 1 FROM {tag_table} AS t0 {combined_joins} WHERE {combined_conditions} AND t0.{id_field} = {resource_id})"
     return sql_query
 
 
