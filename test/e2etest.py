@@ -3401,23 +3401,23 @@ def test_get_allowed_tags(superuser_application):
     assert re.status_code == 200
     response = re.json()
     expected = {
-        "applications": [
+        "application": [
             "service",
             "team"
         ],
-        "plans": [
+        "plan": [
             "service",
             "team"
         ],
-        "templates": [
+        "template": [
             "service",
             "team"
         ],
-        "incidents": [
+        "incident": [
             "service",
             "team"
         ],
-        "targets": [
+        "target": [
             "service",
             "team"
         ]

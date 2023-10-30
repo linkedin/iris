@@ -118,19 +118,19 @@ webhooks:
 
 metadata_tagging:
   allowed_tags:
-    applications:
+    application:
       - service
       - team
-    plans:
+    plan:
       - service
       - team
-    templates:
+    template:
       - service
       - team
-    incidents:
+    incident:
       - service
       - team
-    targets:
+    target:
       - service
       - team
 
