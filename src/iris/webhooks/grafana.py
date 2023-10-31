@@ -2,7 +2,7 @@ import datetime
 import time
 import logging
 import ujson
-from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
+from falcon import HTTP_201, HTTPBadRequest
 
 from iris import db
 from iris import utils
