@@ -2,7 +2,7 @@ import datetime
 import time
 import logging
 import ujson
-from falcon import HTTP_201, HTTPBadRequest, HTTPInvalidParam
+from falcon import HTTP_201, HTTPBadRequest
 
 from iris import db
 from iris import utils
@@ -39,7 +39,7 @@ class grafana(webhook):
                                       {'plan': plan}).scalar()
             if not plan_id:
                 logger.warning('No active plan "%s" found', plan)
-                raise HTTPInvalidParam('plan does not exist or is not active')
+                raise HTTPBadRequest('plan does not exist or is not active')
 
             app = req.context['app']
 
