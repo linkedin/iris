@@ -828,6 +828,62 @@ CREATE TABLE `category_override` (
   CONSTRAINT `category_override_mode_id_ibfk` FOREIGN KEY (`mode_id`) REFERENCES `mode` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+DROP TABLE IF EXISTS `target_metadata_tag`;
+CREATE TABLE `target_metadata_tag` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `target_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `target_id_id_name` (`target_id`, `name`),
+  KEY `name_value` (`name`, `value`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `application_metadata_tag`;
+CREATE TABLE `application_metadata_tag` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `application_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `application_id_name` (`application_id`, `name`),
+  KEY `name_value` (`name`, `value`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+
+DROP TABLE IF EXISTS `plan_metadata_tag`;
+CREATE TABLE `plan_metadata_tag` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `plan_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `plan_id_name` (`plan_id`, `name`),
+  KEY `name_value` (`name`, `value`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `template_metadata_tag`;
+CREATE TABLE `template_metadata_tag` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `template_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `template_id_name` (`template_id`, `name`),
+  KEY `name_value` (`name`, `value`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+DROP TABLE IF EXISTS `incident_metadata_tag`;
+CREATE TABLE `incident_metadata_tag` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `value` varchar(255) NOT NULL,
+  `incident_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `incident_id_name` (`incident_id`, `name`),
+  KEY `name_value` (`name`, `value`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 DROP TABLE IF EXISTS `IMP_cluster_members`;
 CREATE TABLE `IMP_cluster_members` (
   `node_id` varchar(255) NOT NULL,
