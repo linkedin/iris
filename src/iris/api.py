@@ -4409,6 +4409,26 @@ class Priorities(object):
         resp.body = payload
 
 
+def get_user_active_status(user):
+    user_active_status = False
+    connection = db.engine.raw_connection()
+    cursor = connection.cursor(db.dict_cursor)
+    # Get user id/name
+    user_query = '''SELECT `target`.`active` FROM `target`'''
+    if user.isdigit():
+        user_query += ' WHERE `target`.`id` = %s'
+    else:
+        user_query += ' WHERE `target`.`name` = %s'
+    cursor.execute(user_query, user)
+    if cursor.rowcount != 0:
+        user_data = cursor.fetchone()
+        if bool(user_data['active']):
+            user_active_status = True
+    cursor.close()
+    connection.close()
+    return user_active_status
+
+
 def get_user_details(username):
     connection = db.engine.raw_connection()
     cursor = connection.cursor(db.dict_cursor)
@@ -6179,7 +6199,7 @@ class InternalBuildMessages():
                 SELECT `target_role`.`name` as role, `target`.`name` as target FROM `dynamic_plan_map`
                 JOIN `target` ON `target`.`id` = `dynamic_plan_map`.`target_id`
                 JOIN `target_role` ON `dynamic_plan_map`.`role_id` = `target_role`.`id`
-                WHERE `dynamic_plan_map`.`incident_id` = %s AND `dynamic_plan_map`.`dynamic_index` = %s
+                WHERE `target`.`active` = 1 AND `dynamic_plan_map`.`incident_id` = %s AND `dynamic_plan_map`.`dynamic_index` = %s
                 ''', (notification["incident_id"], notification["dynamic_index"]))
             result = cursor.fetchone()
             if result is not None:
@@ -6221,14 +6241,14 @@ class InternalBuildMessages():
                                 notification['destination'].append(target)
                             has_literal_target = True
                         else:
-                            names = direct_lookup(self.cfg, role, target)
+                            names = direct_lookup(self.cfg, role, target, True)
                             expanded_targets += [{'target': e, 'bcc': bcc} for e in names]
                     except IrisRoleLookupException:
                         # Maintain best-effort delivery for remaining targets if one fails to resolve
                         continue
             else:
                 try:
-                    expanded_targets = direct_lookup(self.cfg, role, target)
+                    expanded_targets = direct_lookup(self.cfg, role, target, True)
                 except IrisRoleLookupException:
                     expanded_targets = None
             if not expanded_targets and not has_literal_target:
@@ -6412,7 +6432,7 @@ class InternalTarget():
         target = req.get_param('target', required=True)
 
         payload = {"error": None, "users": {}}
-        names = direct_lookup(self.cfg, role, target)
+        names = direct_lookup(self.cfg, role, target, True)
 
         for username in names:
             user_data = get_user_details(username)
@@ -6422,14 +6442,20 @@ class InternalTarget():
         resp.body = ujson.dumps(payload)
 
 
-def direct_lookup(config, role, target):
-    targets = None
+def direct_lookup(config, role, target, enforce_active=False):
+    unfiltered_targets = None
+    targets = []
     for role_lookup in get_role_lookups(config):
-        targets = role_lookup.get(role, target)
-        if targets is not None:
+        unfiltered_targets = role_lookup.get(role, target)
+        if unfiltered_targets is not None:
+            if not enforce_active:
+                targets = unfiltered_targets
+                break
+            # if enforce_active, ensure that we only return active targets
+            for target in unfiltered_targets:
+                if get_user_active_status(target):
+                    targets.append(target)
             break
-        else:
-            targets = []
     return targets
 
 
