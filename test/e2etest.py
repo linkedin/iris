@@ -972,6 +972,10 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re.status_code == 200
     assert len(re.json()) == 1
 
+    # test counts
+    re = requests.get(base_url + 'plans?counts=true&fields=creator').json()
+    assert re == {'field_counts': {'creator': {'demo': 16}}, 'total_count': 16}
+
     # Test errors
     bad_step = {"role": "foo",
                 "target": sample_team,
@@ -1801,6 +1805,10 @@ def test_get_incident(iris_incidents):
     re = requests.get(base_url + 'incidents/-1')
     assert re.status_code == 404
 
+    # test counts
+    re = requests.get(base_url + 'incidents?counts=true&fields=plan&id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json()
+    assert re == {'field_counts': {'plan': {'demo-test-bar': 3}}, 'total_count': 3}
+
 
 def test_get_invalid_incident(iris_incidents):
     if len(iris_incidents) < 1:
@@ -1980,6 +1988,10 @@ def test_create_template(sample_user, sample_application_name):
     assert re.status_code == 200
     data = re.json()
     assert len(data) >= 1
+
+    # test counts
+    re = requests.get(base_url + 'templates?counts=true&fields=creator').json()
+    assert re == {'field_counts': {'creator': {'demo': 5}}, 'total_count': 5}
 
     re = requests.get(base_url + 'templates?limit=1&name=test_template&creator=%s&active=0' % sample_user)
     assert re.status_code == 200
