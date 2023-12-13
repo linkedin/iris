@@ -11,7 +11,7 @@ import random
 import re
 import time
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import ExitStack
 from urllib.parse import parse_qs
 
@@ -831,12 +831,12 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     return where
 
 
-def generate_grouped_query(query, columns, fields):
+def generate_grouped_query(query, columns, allowed_fields):
     '''modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually'''
     # avoid DISTINCT grouping
     modified_query = query.replace("SELECT DISTINCT", "SELECT")
     # Construct the counts query
-    group_by_clause = ", ".join([f"`{column}`" for column in fields if column in columns])
+    group_by_clause = ", ".join([f"`{column}`" for column in allowed_fields if column in columns])
     count_query = f"SELECT {group_by_clause}, COUNT(*) as `group_count` FROM ({modified_query}) AS subquery GROUP BY {group_by_clause}"
     return count_query
 
@@ -844,7 +844,7 @@ def generate_grouped_query(query, columns, fields):
 def format_count_results(results):
     '''parse mysql results into counts dictionary'''
     id_count = 0
-    count_dict = defaultdict(lambda: defaultdict(int))
+    count_dict = defaultdict(Counter)
     for idx, item in enumerate(results):
         for key, value in item.items():
             # group count contains only the counts, handle differently
@@ -1348,7 +1348,7 @@ class Plans(object):
             }
 
         '''
-        counts_only = req.get_param('counts')
+        counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
