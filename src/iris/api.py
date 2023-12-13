@@ -831,12 +831,14 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     return where
 
 
-def generate_grouped_query(query, columns, allowed_fields):
+def generate_grouped_query(query, allowed_columns, requested_fields):
     '''modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually'''
     # avoid DISTINCT grouping
     modified_query = query.replace("SELECT DISTINCT", "SELECT")
     # Construct the counts query
-    group_by_clause = ", ".join([f"`{column}`" for column in allowed_fields if column in columns])
+    group_by_clause = ", ".join([f"`{column}`" for column in requested_fields if column in allowed_columns])
+    if len(group_by_clause) == 0:
+        raise HTTPBadRequest('Did not find any valid fields requested')
     count_query = f"SELECT {group_by_clause}, COUNT(*) as `group_count` FROM ({modified_query}) AS subquery GROUP BY {group_by_clause}"
     return count_query
 
