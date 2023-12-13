@@ -1797,7 +1797,7 @@ class Incidents(object):
                 "total_count": 11
             }
         '''
-        counts_only = req.get_param('counts')
+        counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
@@ -3128,7 +3128,7 @@ class Templates(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
-        counts_only = req.get_param('counts')
+        counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
