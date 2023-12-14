@@ -11,7 +11,7 @@ import random
 import re
 import time
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import ExitStack
 from urllib.parse import parse_qs
 
@@ -831,6 +831,43 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     return where
 
 
+def generate_grouped_query(query, allowed_columns, requested_fields):
+    '''modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually'''
+    # avoid DISTINCT grouping
+    modified_query = query.replace("SELECT DISTINCT", "SELECT")
+    # Construct the counts query
+    group_by_clause = ", ".join([f"`{column}`" for column in requested_fields if column in allowed_columns])
+    if len(group_by_clause) == 0:
+        raise HTTPBadRequest('Did not find any valid fields requested')
+    count_query = f"SELECT {group_by_clause}, COUNT(*) as `group_count` FROM ({modified_query}) AS subquery GROUP BY {group_by_clause}"
+    return count_query
+
+
+def format_count_results(results):
+    '''parse mysql results into counts dictionary'''
+    id_count = 0
+    count_dict = defaultdict(Counter)
+    for idx, item in enumerate(results):
+        for key, value in item.items():
+            # group count contains only the counts, handle differently
+            if key == 'group_count':
+                id_count += value
+                continue
+
+            # tags are a list so they need to be handled differently
+            if key == 'tags':
+                for tag in value:
+                    count_dict[tag['name']][tag['value']] += results[idx]['group_count']
+                continue
+
+            # increment the count by number of rows that were grouped together
+            count_dict[key][value] += results[idx]['group_count']
+
+    # format response
+    count_dict = {'field_counts': {key: dict(value) for key, value in count_dict.items()}, 'total_count': id_count}
+    return count_dict
+
+
 class HeaderMiddleware(object):
     def process_request(self, req, resp):
         resp.content_type = 'application/json'
@@ -1267,11 +1304,54 @@ class Plans(object):
              ]
         You can also search for plans that have specific targets in their steps by using the field 'target'
 
+        *Allowed filter parameters:*
+
+        - id
+        - name
+        - tracking_type
+        - tracking_key
+        - created
+        - creator
+        - active
+        - tags
+
+        for querying tags a "tag_" prefix should be added before the tag name and then it can be used just as any other normal field
+        e.g. if we want to query for a plan that has a tag "service" with a value "foo" we would query: /v0/plan?tag_service=foo
+
         **example request**
 
         GET /v0/plans?target=foo&active=1 HTTP/1.1
 
+        Additionally adding the parameter "counts" will return a dictionary with unique values of each field and their counts as well as a total count
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            GET /v0/plans?counts=true&fields=creator  HTTP/1.1
+            Host: example.com
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            {
+                "field_counts": {
+                    "creator": {
+                        "user_foo": 10,
+                        "user_bar": 20,
+                        "user_baz": 5
+                    }
+                },
+                "total_count": 35
+            }
+
         '''
+        counts_only = req.get_param_as_bool('counts')
+        req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
@@ -1279,6 +1359,13 @@ class Plans(object):
         req.params.pop('fields', None)
         if not fields:
             fields = plan_columns
+
+        # validate that if we are fetching counts we are not asking for 'id', 'created', 'description', 'tracking_template' as they are all essentially unique to each plan
+        unsupported_count_fields = ['id', 'created', 'description', 'tracking_template']
+        if counts_only:
+            for word in unsupported_count_fields:
+                if any(word in string for string in fields):
+                    raise HTTPBadRequest('%s not supported fields when fetching counts' % unsupported_count_fields)
 
         query = plan_query % ', '.join(plan_columns[f] for f in fields)
 
@@ -1319,6 +1406,10 @@ class Plans(object):
         if query_limit is not None:
             query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
 
+        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
+        if counts_only:
+            query = generate_grouped_query(query, plan_columns, fields)
+
         cursor.execute(query)
         results = []
         # format 'tags' if necessary
@@ -1329,6 +1420,14 @@ class Plans(object):
                 else:
                     plan['tags'] = ujson.loads(plan['tags'])
             results.append(plan)
+
+        if counts_only:
+            count_dict = format_count_results(results)
+            payload = ujson.dumps(count_dict)
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = payload
+            return
 
         payload = ujson.dumps(results)
         connection.close()
@@ -1665,7 +1764,41 @@ class Incidents(object):
         query parameter can be used. The fields parameter takes the value of a comma-separated list of attributes
         (e.g. id,owner), and the API will only include these incident fields in the output. If no "fields" value is
         specified, all fields will be returned.
+
+        for querying tags a "tag_" prefix should be added before the tag name and then it can be used just as any other normal field
+        e.g. if we want to query for an incident that has a tag "service" with a value "foo" we would query: /v0/incidents?tag_service=foo
+
+        Additionally adding the parameter "counts" will return a dictionary with unique values of each field and their counts as well as a total count
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            GET /v0/incidents?created__ge=1700693640&fields=owner&fields=application&counts=true  HTTP/1.1
+            Host: example.com
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            {
+                "field_counts": {
+                    "owner": {
+                        "foo_user": 4,
+                        "None": 7
+                    },
+                    "application": {
+                        "Autoalerts": 11
+                    }
+                },
+                "total_count": 11
+            }
         '''
+        counts_only = req.get_param_as_bool('counts')
+        req.params.pop('counts', None)
         fields = req.get_param_as_list('fields')
         req.params.pop('fields', None)
         if not fields:
@@ -1675,6 +1808,13 @@ class Incidents(object):
         req.params.pop('limit', None)
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
+
+        # validate that if we are fetching counts we are not asking for context, created, updated as they are all essentially unique to each incident
+        unsupported_count_fields = ['id', 'context', 'created', 'updated']
+        if counts_only:
+            for word in unsupported_count_fields:
+                if any(word in string for string in fields):
+                    raise HTTPBadRequest('%s not supported fields when fetching counts' % unsupported_count_fields)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
         if target and not self.external_sender_incident_processing:
@@ -1740,6 +1880,10 @@ class Incidents(object):
         if query_limit is not None:
             query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC LIMIT %s' % query_limit
 
+        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
+        if counts_only:
+            query = generate_grouped_query(query, incident_columns, fields)
+
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
         results = []
@@ -1751,6 +1895,14 @@ class Incidents(object):
                 else:
                     incident['tags'] = ujson.loads(incident['tags'])
             results.append(incident)
+
+        if counts_only:
+            count_dict = format_count_results(results)
+            payload = ujson.dumps(count_dict)
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = payload
+            return
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
@@ -2836,6 +2988,81 @@ class Template(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, template_id):
+        '''
+        Template search endpoint.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/templates?name__contains=foo&active=1 HTTP/1.1
+
+          **Example response**:
+
+          .. sourcecode:: http
+
+             HTTP/1.1 200 OK
+             Content-Type: application/json
+
+             [
+                {
+                    "id": 5050,
+                    "name": "test_template",
+                    "creator": "foo_user",
+                    "created": 1698419737,
+                    "active": 1,
+                    "tags": []
+                },
+                {
+                    "id": 5034,
+                    "name": "test_template_also",
+                    "creator": "foo_user",
+                    "created": 1657829790,
+                    "active": 1,
+                    "tags": []
+                }
+            ]
+
+        *Allowed filter parameters:*
+
+        - id
+        - name
+        - created
+        - creator
+        - active
+        - tags
+
+        for querying tags a "tag_" prefix should be added before the tag name and then it can be used just as any other normal field
+        e.g. if we want to query for a template that has a tag "service" with a value "foo" we would query: /v0/templates?tag_service=foo
+
+        Additionally adding the parameter "counts" will return a dictionary with unique values of each field and their counts as well as a total count
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+            GET /v0/templates?counts=true&fields=creator  HTTP/1.1
+            Host: example.com
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+
+            {
+                "field_counts": {
+                    "creator": {
+                        "user_foo": 10,
+                        "user_bar": 20,
+                        "user_baz": 5
+                    }
+                },
+                "total_count": 35
+            }
+
+        '''
         if template_id.isdigit():
             where = 'WHERE `template`.`id` = %s'
         else:
@@ -2901,6 +3128,8 @@ class Templates(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
+        counts_only = req.get_param_as_bool('counts')
+        req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
@@ -2908,6 +3137,13 @@ class Templates(object):
         if not fields:
             fields = template_columns
         req.params.pop('fields', None)
+
+        # validate that if we are fetching counts we are not asking for id, created as they are all essentially unique to each templates
+        unsupported_count_fields = ["id", "created", "updated"]
+        if counts_only:
+            for word in unsupported_count_fields:
+                if any(word in string for string in fields):
+                    raise HTTPBadRequest('%s not supported fields when fetching counts' % unsupported_count_fields)
 
         query = template_query % ', '.join(template_columns[f] for f in fields)
 
@@ -2933,6 +3169,10 @@ class Templates(object):
         if query_limit is not None:
             query += ' ORDER BY `template`.`created` DESC LIMIT %s' % query_limit
 
+        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
+        if counts_only:
+            query = generate_grouped_query(query, template_columns, fields)
+
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
         results = []
@@ -2944,6 +3184,14 @@ class Templates(object):
                 else:
                     template['tags'] = ujson.loads(template['tags'])
             results.append(template)
+
+        if counts_only:
+            count_dict = format_count_results(results)
+            payload = ujson.dumps(count_dict)
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = payload
+            return
 
         payload = ujson.dumps(results)
         connection.close()
