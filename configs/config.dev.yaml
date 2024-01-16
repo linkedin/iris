@@ -116,6 +116,15 @@ webhooks:
 #   external_sender_version: 0
 #   zookeeper_cluster: localhost:2181
 
+## configs for incident rate limiting
+# incident_rate_limiting:
+#   enabled: True
+#   max_active_incidents: 1000
+#   max_recent_incidents: 1000
+#   recent_lookback_seconds: 300
+#   exempt_applications:
+#     - fooApp
+
 metadata_tagging:
   allowed_tags:
     application:
