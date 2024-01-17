@@ -22,7 +22,7 @@ import msgpack
 import ujson
 from falcon import (API, HTTP_200, HTTP_201, HTTP_204, HTTP_503,
                     HTTPBadRequest, HTTPForbidden, HTTPFound,
-                    HTTPInternalServerError, HTTPNotFound, HTTPUnauthorized)
+                    HTTPInternalServerError, HTTPNotFound, HTTPUnauthorized, HTTPTooManyRequests)
 from falcon_cors import CORS
 from gevent import Timeout, sleep, socket, spawn
 from jinja2.sandbox import SandboxedEnvironment
@@ -1709,6 +1709,13 @@ class Incidents(object):
         # if disable_auth is True, set verify to False
         self.verify = external_sender_configs.get('ca_bundle_path', False)
         self.custom_incident_handler_dispatcher = CustomIncidentHandlerDispatcher(config)
+        # incident rate limiting configs
+        rate_limit_configs = config.get('incident_rate_limiting', {})
+        self.rate_limit_enabled = rate_limit_configs.get('enabled', False)
+        self.max_active_incidents = rate_limit_configs.get('max_active_incidents', 1000)
+        self.max_recent_incidents = rate_limit_configs.get('max_recent_incidents', 1000)
+        self.recent_lookback_seconds = rate_limit_configs.get('recent_lookback_seconds', 300)
+        self.exempt_applications = rate_limit_configs.get('exempt_applications', [])
 
     def on_get(self, req, resp):
         '''
@@ -2001,6 +2008,16 @@ class Incidents(object):
 
                 if not app:
                     raise HTTPBadRequest('Invalid application')
+
+            # rate limit incident creation if threshold for active incidents or recently created incidents is breached
+            if self.rate_limit_enabled and app['name'] not in self.exempt_applications:
+                current_active_count = session.execute('SELECT COUNT(*) FROM `incident` WHERE `plan_id` = :plan_id AND `active`=1 AND `application_id`=:app_id', {'plan_id': plan_id, 'app_id': app['id']}).scalar()
+                if current_active_count > self.max_active_incidents:
+                    raise HTTPTooManyRequests('Incident creation rate limit exceeded. Surpassed maximum of %d active incidents for a given plan' % self.max_active_incidents)
+                current_lookback_count = session.execute('SELECT COUNT(*) FROM `incident` WHERE `created` > NOW() - INTERVAL :lookback_seconds SECOND AND `plan_id` = :plan_id AND `application_id`=:app_id', {'plan_id': plan_id, 'lookback_seconds': self.recent_lookback_seconds, 'app_id': app['id']}).scalar()
+                if current_lookback_count > self.max_recent_incidents:
+                    raise HTTPTooManyRequests('Incident creation rate limit exceeded. Surpassed maximum of %d incidents created in the last %d seconds' % (self.max_recent_incidents, self.recent_lookback_seconds))
+
             if num_dynamic > 0:
                 target_list = incident_params.get('dynamic_targets', [])
                 if num_dynamic != len(target_list):
