@@ -1627,7 +1627,12 @@ class Plans(object):
                                  'Plan length exceeds the 24 hour maximum')
 
         with db.guarded_session() as session:
-            plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
+            try:
+                plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
+            except IntegrityError:
+                session.rollback()
+                session.close()
+                raise HTTPBadRequest('Invalid Plan', f'Invalid creator name {plan_dict["creator"]}')
 
             for index, steps in enumerate(plan_params['steps'], start=1):
 
@@ -3249,28 +3254,38 @@ class Templates(object):
             raise
 
         with db.guarded_session() as session:
-            template_id = session.execute(
-                '''INSERT INTO `template` (`name`, `created`, `user_id`)
-                   VALUES (
-                       :name,
-                       now(),
-                       (SELECT `id` FROM `target`
-                        WHERE `name` = :creator
-                            AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
-                   )''',
-                template_params).lastrowid
+            try:
+                template_id = session.execute(
+                    '''INSERT INTO `template` (`name`, `created`, `user_id`)
+                       VALUES (
+                           :name,
+                           now(),
+                           (SELECT `id` FROM `target`
+                            WHERE `name` = :creator
+                                AND `type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user'))
+                       )''',
+                    template_params).lastrowid
+            except IntegrityError:
+                session.rollback()
+                session.close()
+                raise HTTPBadRequest(f'Cannot create template with invalid creator name {template_params["creator"]}')
 
             for _content in contents:
                 _content.update({'template_id': template_id})
-                session.execute(
-                    '''INSERT INTO `template_content` (
-                           `template_id`, `subject`, `body`, `application_id`, `mode_id`)
-                       VALUES (
-                           :template_id, :subject, :body,
-                           (SELECT `id` FROM `application` WHERE `name` = :application),
-                           (SELECT `id` FROM `mode` WHERE `name` = :mode)
-                       )''',
-                    _content)
+                try:
+                    session.execute(
+                        '''INSERT INTO `template_content` (
+                               `template_id`, `subject`, `body`, `application_id`, `mode_id`)
+                           VALUES (
+                               :template_id, :subject, :body,
+                               (SELECT `id` FROM `application` WHERE `name` = :application),
+                               (SELECT `id` FROM `mode` WHERE `name` = :mode)
+                           )''',
+                        _content)
+                except IntegrityError:
+                    session.rollback()
+                    session.close()
+                    raise HTTPBadRequest(f'Cannot create content due to invalid application {_content["application"]} or mode {_content["mode"]}')
 
             session.execute('''INSERT INTO `template_active` (`name`, `template_id`)
                                VALUES (:name, :template_id)
