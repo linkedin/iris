@@ -854,7 +854,7 @@ def test_plan_routing():
     assert re.status_code == 404
 
 
-def test_post_plan(sample_user, sample_team, sample_template_name):
+def test_post_plan(sample_user, sample_team, sample_template_name, sample_admin_user):
     re = requests.post(base_url + 'plans', json={'name': ' '})
     assert re.status_code == 400
     assert re.json()['description'] == 'Empty plan name'
@@ -977,6 +977,15 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
     assert re == {'field_counts': {'creator': {'demo': 16}}, 'total_count': 16}
 
     # Test errors
+
+    # Test bad creator
+    badcreator = data.copy()
+    badcreator['creator'] = 'notarealcreator'
+    re = requests.post(base_url + 'plans', json=badcreator, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['description'] == 'Invalid creator name notarealcreator'
+
+    # Test bad role
     bad_step = {"role": "foo",
                 "target": sample_team,
                 "priority": "medium",
@@ -984,7 +993,6 @@ def test_post_plan(sample_user, sample_team, sample_template_name):
                 "repeat": 0,
                 "template": sample_template_name,
                 "optional": 0}
-    # Test bad role
     data['steps'][0][0] = bad_step
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 400
@@ -1619,7 +1627,7 @@ def test_post_incident_invalid_plan_name(sample_application_name):
     assert re.status_code == 404
 
 
-def test_create_invalid_template(sample_user, sample_application_name):
+def test_create_invalid_template(sample_user, sample_application_name, sample_admin_user):
     valid_template = {
         "creator": sample_user,
         "name": "test template",
@@ -1644,6 +1652,18 @@ def test_create_invalid_template(sample_user, sample_application_name):
     re = requests.post(base_url + 'templates', json=invalid_template)
     assert re.status_code == 400
     assert re.json()['title'] == 'name argument missing'
+
+    invalid_template = valid_template.copy()
+    invalid_template['creator'] = 'notavalidtargetname'
+    re = requests.post(base_url + 'templates', json=invalid_template, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Cannot create template with invalid creator name notavalidtargetname'
+
+    invalid_template = valid_template.copy()
+    invalid_template['content']['wrongname'] = invalid_template['content'].pop(sample_application_name)
+    re = requests.post(base_url + 'templates', json=invalid_template, headers=username_header(sample_admin_user))
+    assert re.status_code == 400
+    assert re.json()['title'].startswith('Cannot create content due to invalid application wrongname or mode')
 
 
 def test_active_incidents():
