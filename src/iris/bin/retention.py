@@ -274,6 +274,28 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 else:
                     break
 
+        # Kill all metadata
+        while True:
+            try:
+                deleted_rows = cursor.execute('DELETE FROM `incident_metadata_tag` WHERE `incident_id` IN %s', [tuple(incident_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting from incident_metadata_tag')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+            else:
+                if deleted_rows:
+                    logger.info('Killed %d incident metadata tags', deleted_rows)
+                    deleted_messages += deleted_rows
+                    sleep(cooldown_time)
+                else:
+                    break
+
         # Archive+Kill all messages in these incidents
         while True:
 
@@ -452,3 +474,6 @@ def main():
             logger.exception('Hit problem while running retention')
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
+
+if __name__ == '__main__':
+    main()
