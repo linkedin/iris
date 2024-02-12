@@ -80,6 +80,12 @@ class oncall(object):
                 return [user['user'] for user in result]
             else:
                 return None
+        elif role == 'director':
+            result = self.call_oncall('/teams/%s/oncall/director' % target, list)
+            if result:
+                return [user['user'] for user in result]
+            else:
+                return None
         # "oncall" role maps to primary, otherwise grab shift type from the role suffix (eg "oncall-shadow")
         elif role.startswith('oncall'):
             oncall_type = 'primary' if role == 'oncall' else role[7:]
