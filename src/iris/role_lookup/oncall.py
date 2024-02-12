@@ -74,14 +74,8 @@ class oncall(object):
                 return user_list
             else:
                 return None
-        elif role == 'manager':
-            result = self.call_oncall('/teams/%s/oncall/manager' % target, list)
-            if result:
-                return [user['user'] for user in result]
-            else:
-                return None
-        elif role == 'director':
-            result = self.call_oncall('/teams/%s/oncall/director' % target, list)
+        elif role in ['director', 'manager']:
+            result = self.call_oncall('/teams/%s/oncall/%s' % (target, role), list)
             if result:
                 return [user['user'] for user in result]
             else:
