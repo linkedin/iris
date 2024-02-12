@@ -1717,9 +1717,9 @@ class Incidents(object):
         # incident rate limiting configs
         rate_limit_configs = config.get('incident_rate_limiting', {})
         self.rate_limit_enabled = rate_limit_configs.get('enabled', False)
-        self.max_active_incidents = rate_limit_configs.get('max_active_incidents', 1000)
-        self.max_recent_incidents = rate_limit_configs.get('max_recent_incidents', 1000)
-        self.recent_lookback_seconds = rate_limit_configs.get('recent_lookback_seconds', 300)
+        self.max_active_incidents = int(rate_limit_configs.get('max_active_incidents', 1000))
+        self.max_recent_incidents = int(rate_limit_configs.get('max_recent_incidents', 1000))
+        self.recent_lookback_seconds = int(rate_limit_configs.get('recent_lookback_seconds', 300))
         self.exempt_applications = rate_limit_configs.get('exempt_applications', [])
 
     def on_get(self, req, resp):
