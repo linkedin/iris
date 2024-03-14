@@ -1,7 +1,7 @@
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 -- DEFAULT DB VALUES
 LOCK TABLES `mode` WRITE;
-INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'slack'),(8,'sms'),(36,'drop');
+INSERT INTO `mode` VALUES (26,'call'),(35,'email'),(17,'slack'),(8,'sms'),(36,'drop'),(99,'pushover');
 UNLOCK TABLES;
 
 LOCK TABLES `priority` WRITE;

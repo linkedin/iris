@@ -13,6 +13,7 @@ EMAIL_SUPPORT = 'email'
 IM_SUPPORT = 'im'
 SLACK_SUPPORT = 'slack'
 HIPCHAT_SUPPORT = 'hipchat'
+PUSHOVER_SUPPORT = 'pushover'
 
 # Priorities listed in order of severity, ascending
 PRIORITY_PRECEDENCE = ('low', 'medium', 'high', 'urgent')
