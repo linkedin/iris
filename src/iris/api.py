@@ -745,7 +745,7 @@ def check_param_list_len(kwargs):
         check that all query param lists in kwargs do not exceed the max length
     '''
     for key, value in kwargs.items():
-        # this shit can come as a comma separated list, in that case
+        # only check filter query params
         if '__' not in key:
             continue
         if isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
