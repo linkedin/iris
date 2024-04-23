@@ -1797,9 +1797,9 @@ def test_get_messages(iris_messages):
     assert re['id'] == iris_messages[0]['id']
 
     # test sending too many in params
-    re = requests.get(base_url + 'messages?id__in=' + ', '.join(str(i) for i in range(1, 151))).json()
+    re = requests.get(base_url + 'messages?id__in=' + ', '.join(str(i) for i in range(1, 151)))
     assert re.status_code == 400
-    assert re.json()['error'] == 'query id__in list length exceeds maximum allowed length of 100'
+    assert re.json()['title'] == 'query id__in list length exceeds maximum allowed length of 100'
 
 
 def test_get_messages_not_found():
