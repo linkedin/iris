@@ -745,8 +745,15 @@ def check_param_list_len(kwargs):
         check that all query param lists in kwargs do not exceed the max length
     '''
     for key, value in kwargs.items():
-        if '__' in key and isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
+        # this shit can come as a comma separated list, in that case
+        if '__' not in key:
+            continue
+        if isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
             raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
+        if isinstance(value, str):
+            value = value.split(',')
+            if len(value) > MAX_QUERY_LIST_LEN:
+                raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
 
 
 def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs):
