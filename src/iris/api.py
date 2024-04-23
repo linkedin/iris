@@ -44,7 +44,7 @@ from iris.vendors.iris_slack import iris_slack
 from . import app_stats, cache, client, db, ui, utils
 from .config import load_config
 from .constants import (PRIORITY_PRECEDENCE_MAP, XCONTENTTYPEOPTIONS, XFRAME,
-                        XXSSPROTECTION)
+                        XXSSPROTECTION, MAX_QUERY_LIST_LEN)
 from .plugins import find_plugin, init_plugins
 from .role_lookup import get_role_lookups
 from .validators import (IrisValidationException, init_validators,
@@ -740,6 +740,15 @@ def is_valid_tracking_settings(t, k, tpl):
     return True, None
 
 
+def check_param_list_len(kwargs):
+    '''
+        check that all query param lists in kwargs do not exceed the max length
+    '''
+    for key, value in kwargs.items():
+        if key.contains('__') and isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
+            raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
+
+
 def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs):
     '''
         return a subquery to be used in a where clause for filtering based on tags
@@ -1350,6 +1359,7 @@ class Plans(object):
             }
 
         '''
+        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
@@ -1809,6 +1819,7 @@ class Incidents(object):
                 "total_count": 11
             }
         '''
+        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         fields = req.get_param_as_list('fields')
@@ -3150,6 +3161,7 @@ class Templates(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
+        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
@@ -3534,6 +3546,7 @@ class Target(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
+        check_param_list_len(req.params)
         with cache.api_cache_lock:
             type_id = cache.target_types.get(target_type)
         if not type_id:
@@ -4426,6 +4439,7 @@ class ApplicationPlans(object):
                }
            ]
         '''
+        check_param_list_len(req.params)
         fields = req.get_param_as_list('fields')
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
@@ -4460,6 +4474,7 @@ class Applications(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
+        check_param_list_len(req.params)
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         query_limit = req.get_param_as_int('limit')
@@ -6051,6 +6066,7 @@ class NotificationCategories(object):
                 }
             ]
         '''
+        check_param_list_len(req.params)
         conn = db.engine.raw_connection()
         cursor = conn.cursor(db.dict_cursor)
         if application:
