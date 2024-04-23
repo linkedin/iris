@@ -745,7 +745,7 @@ def check_param_list_len(kwargs):
         check that all query param lists in kwargs do not exceed the max length
     '''
     for key, value in kwargs.items():
-        if key.contains('__') and isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
+        if '__' in key and isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
             raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
 
 
