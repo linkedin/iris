@@ -740,22 +740,6 @@ def is_valid_tracking_settings(t, k, tpl):
     return True, None
 
 
-def check_param_list_len(kwargs):
-    '''
-        check that all query param lists in kwargs do not exceed the max length
-    '''
-    for key, value in kwargs.items():
-        # only check filter query params
-        if '__' not in key:
-            continue
-        if isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
-            raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
-        if isinstance(value, str):
-            value = value.split(',')
-            if len(value) > MAX_QUERY_LIST_LEN:
-                raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, MAX_QUERY_LIST_LEN))
-
-
 def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs):
     '''
         return a subquery to be used in a where clause for filtering based on tags
@@ -882,6 +866,22 @@ def format_count_results(results):
     # format response
     count_dict = {'field_counts': {key: dict(value) for key, value in count_dict.items()}, 'total_count': id_count}
     return count_dict
+
+
+class QueryParamLengthMiddleware:
+    def __init__(self, config={}):
+        self.max_query_list_len = config.get('max_filter_query_list_len', MAX_QUERY_LIST_LEN)
+
+    def process_request(self, req, resp):
+        for key, value in req.params.items():
+            if '__' not in key:
+                continue
+            if isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
+                raise falcon.HTTPBadRequest('Query parameter list length exceeds maximum allowed length of %d' % MAX_QUERY_LIST_LEN)
+            if isinstance(value, str):
+                value = value.split(',')
+                if len(value) > self.max_query_list_len:
+                    raise falcon.HTTPBadRequest('Query parameter list length exceeds maximum allowed length of %d' % MAX_QUERY_LIST_LEN)
 
 
 class HeaderMiddleware(object):
@@ -1366,7 +1366,6 @@ class Plans(object):
             }
 
         '''
-        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
@@ -1826,7 +1825,6 @@ class Incidents(object):
                 "total_count": 11
             }
         '''
-        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         fields = req.get_param_as_list('fields')
@@ -3168,7 +3166,6 @@ class Templates(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
-        check_param_list_len(req.params)
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
         query_limit = req.get_param_as_int('limit')
@@ -3553,7 +3550,6 @@ class Target(object):
     allow_read_no_auth = False
 
     def on_get(self, req, resp, target_type):
-        check_param_list_len(req.params)
         with cache.api_cache_lock:
             type_id = cache.target_types.get(target_type)
         if not type_id:
@@ -4446,7 +4442,6 @@ class ApplicationPlans(object):
                }
            ]
         '''
-        check_param_list_len(req.params)
         fields = req.get_param_as_list('fields')
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
@@ -4481,7 +4476,6 @@ class Applications(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp):
-        check_param_list_len(req.params)
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         query_limit = req.get_param_as_int('limit')
@@ -6073,7 +6067,6 @@ class NotificationCategories(object):
                 }
             ]
         '''
-        check_param_list_len(req.params)
         conn = db.engine.raw_connection()
         cursor = conn.cursor(db.dict_cursor)
         if application:
@@ -7220,6 +7213,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         AuthMiddleware(config=config, debug=debug),
         ACLMiddleware(config=config, debug=debug),
         HeaderMiddleware(),
+        QueryParamLengthMiddleware(config=config),
         cors.middleware
     ])
     external_sender_incident_processing = config.get('external_sender', {}).get('external_sender_incident_processing', False)
