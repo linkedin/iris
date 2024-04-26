@@ -876,12 +876,12 @@ class QueryParamLengthMiddleware:
         for key, value in req.params.items():
             if '__' not in key:
                 continue
-            if isinstance(value, list) and len(value) > MAX_QUERY_LIST_LEN:
-                raise falcon.HTTPBadRequest('Query parameter list length exceeds maximum allowed length of %d' % MAX_QUERY_LIST_LEN)
+            if isinstance(value, list) and len(value) > self.max_query_list_len:
+                raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, self.max_query_list_len))
             if isinstance(value, str):
                 value = value.split(',')
                 if len(value) > self.max_query_list_len:
-                    raise falcon.HTTPBadRequest('Query parameter list length exceeds maximum allowed length of %d' % MAX_QUERY_LIST_LEN)
+                    raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, self.max_query_list_len))
 
 
 class HeaderMiddleware(object):
