@@ -475,5 +475,6 @@ def main():
         logger.info('Waiting %d seconds until next iteration..', run_interval)
         sleep(run_interval)
 
+
 if __name__ == '__main__':
     main()

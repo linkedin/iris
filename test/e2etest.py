@@ -1829,6 +1829,16 @@ def test_get_incident(iris_incidents):
     re = requests.get(base_url + 'incidents?counts=true&fields=plan&id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json()
     assert re == {'field_counts': {'plan': {'demo-test-bar': 3}}, 'total_count': 3}
 
+    # test sending too many in params as comma delimited
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(i) for i in range(1, 151)))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'query id__in list length exceeds maximum allowed length of 100'
+
+    # test sending too many in params as separtate query params
+    re = requests.get(base_url + 'incidents?id__in=' + '&id__in='.join(str(i) for i in range(1, 151)))
+    assert re.status_code == 400
+    assert re.json()['title'] == 'query id__in list length exceeds maximum allowed length of 100'
+
 
 def test_get_invalid_incident(iris_incidents):
     if len(iris_incidents) < 1:

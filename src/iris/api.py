@@ -44,7 +44,7 @@ from iris.vendors.iris_slack import iris_slack
 from . import app_stats, cache, client, db, ui, utils
 from .config import load_config
 from .constants import (PRIORITY_PRECEDENCE_MAP, XCONTENTTYPEOPTIONS, XFRAME,
-                        XXSSPROTECTION)
+                        XXSSPROTECTION, MAX_QUERY_LIST_LEN)
 from .plugins import find_plugin, init_plugins
 from .role_lookup import get_role_lookups
 from .validators import (IrisValidationException, init_validators,
@@ -866,6 +866,22 @@ def format_count_results(results):
     # format response
     count_dict = {'field_counts': {key: dict(value) for key, value in count_dict.items()}, 'total_count': id_count}
     return count_dict
+
+
+class QueryParamLengthMiddleware:
+    def __init__(self, config={}):
+        self.max_query_list_len = config.get('max_filter_query_list_len', MAX_QUERY_LIST_LEN)
+
+    def process_request(self, req, resp):
+        for key, value in req.params.items():
+            if '__' not in key:
+                continue
+            if isinstance(value, list) and len(value) > self.max_query_list_len:
+                raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, self.max_query_list_len))
+            if isinstance(value, str):
+                value = value.split(',')
+                if len(value) > self.max_query_list_len:
+                    raise HTTPBadRequest('query %s list length exceeds maximum allowed length of %d' % (key, self.max_query_list_len))
 
 
 class HeaderMiddleware(object):
@@ -7197,6 +7213,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
         AuthMiddleware(config=config, debug=debug),
         ACLMiddleware(config=config, debug=debug),
         HeaderMiddleware(),
+        QueryParamLengthMiddleware(config=config),
         cors.middleware
     ])
     external_sender_incident_processing = config.get('external_sender', {}).get('external_sender_incident_processing', False)

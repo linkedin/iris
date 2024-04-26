@@ -17,3 +17,6 @@ HIPCHAT_SUPPORT = 'hipchat'
 # Priorities listed in order of severity, ascending
 PRIORITY_PRECEDENCE = ('low', 'medium', 'high', 'urgent')
 PRIORITY_PRECEDENCE_MAP = {name: index for index, name in enumerate(PRIORITY_PRECEDENCE)}
+
+# limits how many items may be used in query filters __in operator
+MAX_QUERY_LIST_LEN = 100
