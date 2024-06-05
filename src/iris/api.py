@@ -4472,6 +4472,79 @@ class ApplicationPlans(object):
         connection.close()
 
 
+class ApplicationTemplates(object):
+    allow_read_no_auth = True
+
+    def on_get(self, req, resp, app_name):
+        """
+        Search endpoint for active templates that support a given app.
+
+        **Example request**:
+
+        .. sourcecode:: http
+
+           GET /v0/applications/app-foo/templates?name__contains=bar& HTTP/1.1
+
+        **Example response**:
+
+        .. sourcecode:: http
+
+           HTTP/1.1 200 OK
+           Content-Type: application/json
+
+           [
+                {
+                    "id": 3943,
+                    "name": "template-name-foo",
+                    "creator": "fooUser",
+                    "created": 1489604094,
+                    "active": 1,
+                    "tags": null
+                },
+                {
+                    "id": 4928,
+                    "name": "template-name-bar",
+                    "creator": "BarUser",
+                    "created": 1585762825,
+                    "active": 1,
+                    "tags": null
+                }
+            ]
+        """
+        fields = req.get_param_as_list("fields")
+        fields = [f for f in fields if f in template_columns] if fields else None
+        req.params.pop("fields", None)
+        if not fields:
+            fields = list(template_columns.keys())
+
+        connection = db.engine.raw_connection()
+        cursor = connection.cursor()
+        where = ["`application`.`name` = %s"]
+        where += gen_where_filter_clause(
+            connection, template_filters, template_filter_types, req.params
+        )
+
+        query = """SELECT %s
+                   FROM `template`
+                   JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+                   JOIN `template_content` ON `template`.`id` = `template_content`.`template_id`
+                   JOIN `application` ON `template_content`.`application_id` = `application`.`id`
+                   JOIN `target` ON `target`.`id` = `template`.`user_id`
+                   WHERE %s
+                   GROUP BY `template`.`id`""" % (
+            ",".join(template_columns[f] for f in fields if f in template_columns),
+            " AND ".join(where),
+        )
+
+        cursor.execute(query, (app_name,))
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchall()
+        payload = [dict(zip(columns, row)) for row in rows]
+        resp.body = ujson.dumps(payload)
+        cursor.close()
+        connection.close()
+
+
 class Applications(object):
     allow_read_no_auth = True
 
@@ -7266,6 +7339,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     api.add_route('/v0/applications/{app_name}/incident_emails', ApplicationEmailIncidents())
     api.add_route('/v0/applications/{app_name}/rename', ApplicationRename())
     api.add_route('/v0/applications/{app_name}/plans', ApplicationPlans())
+    api.add_route('/v0/applications/{app_name}/templates', ApplicationTemplates())
     api.add_route('/v0/applications/{app_name}', Application())
     api.add_route('/v0/applications', Applications())
 
