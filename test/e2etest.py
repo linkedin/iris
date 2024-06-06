@@ -854,6 +854,16 @@ def test_plan_routing():
     assert re.status_code == 404
 
 
+def test_get_application_template(sample_application_name, sample_template_name):
+    re = requests.get(base_url + 'applications/%s/templates' % sample_application_name)
+    assert re.status_code == 200
+    assert sample_template_name in [x['name'] for x in re.json()]
+
+    re = requests.get(base_url + 'applications/TESTDOESNOTEXIST/templates')
+    assert re.status_code == 200
+    assert re.json() == []
+
+
 def test_post_plan(sample_user, sample_team, sample_template_name, sample_admin_user):
     re = requests.post(base_url + 'plans', json={'name': ' '})
     assert re.status_code == 400
