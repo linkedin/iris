@@ -4518,7 +4518,7 @@ class ApplicationTemplates(object):
             fields = list(template_columns.keys())
 
         connection = db.engine.raw_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(db.dict_cursor)
         where = ["`application`.`name` = %s"]
         where += gen_where_filter_clause(
             connection, template_filters, template_filter_types, req.params
@@ -4536,11 +4536,8 @@ class ApplicationTemplates(object):
             " AND ".join(where),
         )
 
-        cursor.execute(query, (app_name,))
-        columns = [desc[0] for desc in cursor.description]
-        rows = cursor.fetchall()
-        payload = [dict(zip(columns, row)) for row in rows]
-        resp.body = ujson.dumps(payload)
+        cursor.execute(query, app_name)
+        resp.body = ujson.dumps(cursor)
         cursor.close()
         connection.close()
 
