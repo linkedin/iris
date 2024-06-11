@@ -1485,7 +1485,8 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                 },
             ],
         ],
-        "isValid": True
+        "isValid": True,
+        "dynamic_tracking": True
     }
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_user))
     assert re.status_code == 201
@@ -1495,12 +1496,52 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
         'dynamic_targets': [{'role': 'user', 'target': sample_user},
-                            {'role': 'team', 'target': sample_team}]
+                            {'role': 'team', 'target': sample_team}],
+        "dynamic_tracking_notifications": [{"mode": "slack", "destination": "#iris-slack-testing"}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     incident_id = int(re.content)
     assert re.status_code == 201
     re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
+
+    incident_data = {
+        'plan_id': 55,
+        'plan': 'demo-test-incident-dynamic-post',
+        'updated': None,
+        'context': {
+            'fabric': None,
+            'console_url': None,
+            'filename': None,
+            'name': None,
+            'graph_image_url': None,
+            'zones': None,
+            'nodes': None,
+            'metanodes': None,
+            'notes': None
+        },
+        'owner': None,
+        'application': 'Autoalerts',
+        'current_step': 0,
+        'active': 1,
+        'resolved': 0,
+        'steps': [],
+        'comments': [],
+        'tags': [],
+        'dynamic_tracking': [
+            {
+                'application_id': 8,
+                'application': 'Autoalerts',
+                'destination': '#iris-slack-testing',
+                'mode_id': 17,
+                'mode': 'slack'
+            }
+        ]
+    }
+
+    incident_response = re.json()
+    incident_response.pop('created')
+    incident_response.pop('id')
+    assert incident_response == incident_data
 
     # Claim
     re = requests.post(base_url + 'incidents/%d' % (incident_id, ), json={
@@ -3475,6 +3516,16 @@ def test_get_allowed_tags(superuser_application):
         ]
     }
     assert response == expected
+
+
+def test_dynamic_tracking_notification_fail(sample_plan_name, sample_application_name):
+
+    # create an incident with dynamic tracking notification agaings a plan that doesn't have them enabled
+    re = requests.post(base_url + 'incidents',
+                       json={"plan": sample_plan_name, "context": {}, "dynamic_tracking_notifications": [{"mode": "slack", "destination": "#iris-slack-testing"}]},
+                       headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.status_code == 400
+    assert re.json()['title'] == 'Invalid plan for dynamic tracking'
 
 
 def test_create_incident_by_email(sample_application_name, sample_plan_name, sample_plan_name2, sample_admin_user):

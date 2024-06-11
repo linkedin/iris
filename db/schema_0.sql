@@ -164,6 +164,7 @@ CREATE TABLE `plan` (
   `tracking_key` varchar(255) DEFAULT NULL,
   `tracking_type` varchar(255) DEFAULT NULL,
   `tracking_template` text,
+  `dynamic_tracking` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
   KEY `team_id` (`team_id`),
@@ -241,6 +242,28 @@ CREATE TABLE `dynamic_plan_map` (
   CONSTRAINT `dynamic_plan_map_ibfk_3` FOREIGN KEY (`incident_id`) REFERENCES `incident` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+
+--
+-- Table structure for table `dynamic_tracking_notification`
+--
+
+DROP TABLE IF EXISTS `dynamic_tracking_notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `dynamic_tracking_notification` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `incident_id` bigint(20) NOT NULL,
+  `application_id` int(11) NOT NULL,
+  `destination` varchar(255) NOT NULL,
+  `mode_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `ix_dynamic_tracking_notification_incident_id` (`incident_id`),
+  KEY `ix_dynamic_tracking_notification_application_id` (`application_id`),
+  KEY `ix_dynamic_tracking_notification_mode_id` (`mode_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 
 --
 -- Table structure for table `priority`
