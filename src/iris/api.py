@@ -1187,6 +1187,7 @@ class Plan(object):
 
             cursor.execute(single_plan_query_tags, plan['id'])
             plan['tags'] = cursor.fetchall()
+            plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
 
             resp.body = ujson.dumps(plan)
             connection.close()
@@ -1444,6 +1445,7 @@ class Plans(object):
                     plan['tags'] = []
                 else:
                     plan['tags'] = ujson.loads(plan['tags'])
+            plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
             results.append(plan)
 
         if counts_only:
