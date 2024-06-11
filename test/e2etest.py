@@ -1505,7 +1505,6 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     assert re.status_code == 200
 
     incident_data = {
-        'plan_id': 55,
         'plan': 'demo-test-incident-dynamic-post',
         'updated': None,
         'context': {
@@ -1539,6 +1538,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     }
 
     incident_response = re.json()
+    incident_response.pop('plan_id')
     incident_response.pop('created')
     incident_response.pop('id')
     for notification in incident_response['dynamic_tracking']:

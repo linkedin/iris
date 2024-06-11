@@ -1445,7 +1445,8 @@ class Plans(object):
                     plan['tags'] = []
                 else:
                     plan['tags'] = ujson.loads(plan['tags'])
-            plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
+            if 'dynamic_tracking' in plan:
+                plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
             results.append(plan)
 
         if counts_only:
@@ -7200,16 +7201,17 @@ class InternalIncidents():
 
     def on_get(self, req, resp, node_id):
 
-        if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
-            # do not return any incidents
-            resp.status = HTTP_200
-            resp.body = ujson.dumps([])
-            return
+        # if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
+        #     # do not return any incidents
+        #     resp.status = HTTP_200
+        #     resp.body = ujson.dumps([])
+        #     return
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute('''SELECT `id` FROM `incident` WHERE `active` = 1 AND `bucket_id` IN (SELECT `bucket_id` FROM `IMP_bucket_assignments` WHERE `node_id` = %s)''', node_id)
         result = cursor.fetchall()
+        print(node_id, result)
         cursor.close()
         connection.close()
         incident_ids = [row["id"] for row in result]
