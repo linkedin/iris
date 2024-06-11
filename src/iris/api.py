@@ -240,7 +240,7 @@ WHERE `comment`.`incident_id` = %s
 
 single_incident_query_tags = '''SELECT `name`, `value` from `incident_metadata_tag` where `incident_metadata_tag`.`incident_id` = %s'''
 
-incident_dynamic_tracking_notifications_query = '''SELECT `application_id`, `application`.`name` as application, `destination`, `mode_id`, `mode`.`name` as mode
+incident_dynamic_tracking_notifications_query = '''SELECT `incident_id`, `application_id`, `application`.`name` as application, `destination`, `mode_id`, `mode`.`name` as mode
         FROM `dynamic_tracking_notification` JOIN `application` ON `application`.`id` = `dynamic_tracking_notification`.`application_id`
         JOIN `mode` ON `mode`.`id` = `dynamic_tracking_notification`.`mode_id`
         WHERE `dynamic_tracking_notification`.`incident_id` IN %s'''
