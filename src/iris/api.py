@@ -7201,11 +7201,11 @@ class InternalIncidents():
 
     def on_get(self, req, resp, node_id):
 
-        # if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
-        #     # do not return any incidents
-        #     resp.status = HTTP_200
-        #     resp.body = ujson.dumps([])
-        #     return
+        if not (self.external_sender_incident_processing or self.external_sender_incident_dryrun):
+            # do not return any incidents
+            resp.status = HTTP_200
+            resp.body = ujson.dumps([])
+            return
 
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.dict_cursor)
