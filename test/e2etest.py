@@ -1541,6 +1541,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
     incident_response = re.json()
     incident_response.pop('created')
     incident_response.pop('id')
+    incident_response['dynamic_tracking'].pop('incident_id')
     assert incident_response == incident_data
 
     # Claim
