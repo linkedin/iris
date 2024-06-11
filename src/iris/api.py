@@ -7211,7 +7211,6 @@ class InternalIncidents():
         cursor = connection.cursor(db.dict_cursor)
         cursor.execute('''SELECT `id` FROM `incident` WHERE `active` = 1 AND `bucket_id` IN (SELECT `bucket_id` FROM `IMP_bucket_assignments` WHERE `node_id` = %s)''', node_id)
         result = cursor.fetchall()
-        print(node_id, result)
         cursor.close()
         connection.close()
         incident_ids = [row["id"] for row in result]
