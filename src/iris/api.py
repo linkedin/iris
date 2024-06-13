@@ -1187,7 +1187,7 @@ class Plan(object):
 
             cursor.execute(single_plan_query_tags, plan['id'])
             plan['tags'] = cursor.fetchall()
-            plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
+            plan['dynamic_tracking'] = bool(plan['dynamic_tracking'])
 
             resp.body = ujson.dumps(plan)
             connection.close()
@@ -2363,12 +2363,8 @@ class Incident(object):
 
             incident['context'] = ujson.loads(incident['context'])
             # retrieve dynamic_tracking_notification for each incident
-            incident['dynamic_tracking'] = []
             cursor.execute(incident_dynamic_tracking_notifications_query, [(incident_id,)])
-            dynamic_tracking_results = cursor.fetchall()
-            if dynamic_tracking_results:
-                for tracking in dynamic_tracking_results:
-                    incident['dynamic_tracking'].append(tracking)
+            incident['dynamic_tracking'] = cursor.fetchall()
 
             connection.close()
             payload = ujson.dumps(incident)
