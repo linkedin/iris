@@ -201,6 +201,13 @@
             <label data-toggle="tooltip" title="Target key for the tracking message" class="required">Target:</label>
             <input type="text" id="tracking-key" class="form-control border-bottom" data-default="true" value="{{ tracking_key }}" placeholder="example@example.com">
           </span>
+          <span class="item-content" title="Dynamic tracking"></span>
+            <label data-toggle="tooltip" title="Enabling Dynamic Tracking will override the target of the tracking notification with the destinations passed at incident creation time in the 'dynamic_tracking_notification' field">Dynamic tracking:</label>
+            <select id="dynamic-tracking" class="form-control border-bottom">
+              <option value="false" {{#unless dynamic_tracking}}selected{{/unless}}>disabled</option>
+              <option value="true" {{#if dynamic_tracking}}selected{{/if}}>enabled</option>
+            </select>
+          </div>
         </div>
         <ul class="template-steps">
           {{>plan-tracking-notification}}

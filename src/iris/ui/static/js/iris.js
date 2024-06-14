@@ -156,6 +156,7 @@ iris = {
       aggregationBtn: '#aggregation h4',
       trackingType: '#tracking-type',
       trackingKey: '#tracking-key',
+      dynamicTracking: '#dynamic-tracking',
       trackingTemplateBtn: '#tracking-notification[data-view="false"] .tracking-inner h4',
       variablesTemplateSource: $('#variables-template').html(),
       appSelect: '.template-application',
@@ -638,6 +639,12 @@ iris = {
 
         model.tracking_type = $trackingEl.find('#tracking-type').val();
         model.tracking_key = $trackingEl.find('#tracking-key').val();
+
+        if ($trackingEl.find('#dynamic-tracking').val() == "true"){
+          model.dynamic_tracking = true;
+        } else {
+          model.dynamic_tracking = false;
+        }
 
         if (!model.tracking_key) {
           $trackingEl.find('#tracking-key').addClass('invalid-input');

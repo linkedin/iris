@@ -274,6 +274,27 @@ def process_retention(engine, max_days, batch_size, cooldown_time, archive_path)
                 else:
                     break
 
+        # Kill all dynamic tracking notifications associated with these incidents
+        while True:
+            try:
+                deleted_rows = cursor.execute('DELETE FROM `dynamic_tracking_notification` WHERE `incident_id` IN %s', [tuple(incident_ids)])
+                connection.commit()
+            except Exception:
+                metrics.incr('sql_errors')
+                logger.exception('Failed deleting dynamic tracking notifications')
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+                cursor = connection.cursor(engine.dialect.dbapi.cursors.SSCursor)
+                break
+            else:
+                if deleted_rows:
+                    logger.info('Killed %d dynamic tracking notifications', deleted_rows)
+                    sleep(cooldown_time)
+                else:
+                    break
+
         # Kill all metadata
         while True:
             try:
