@@ -123,6 +123,11 @@ INSERT INTO `plan_active` VALUES
     ('Oncall test',41);
 UNLOCK TABLES;
 
+LOCK TABLES `plan_restricted` WRITE;
+INSERT INTO `plan_restricted` VALUES
+    ('restricted');
+UNLOCK TABLES;
+
 LOCK TABLES `plan_notification` WRITE;
 INSERT INTO `plan_notification` VALUES
     (1,1,1,'test_template',4,0,44,17,1,300,NULL),

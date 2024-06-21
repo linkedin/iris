@@ -10,9 +10,7 @@ import os
 import random
 import re
 import time
-import uuid
 from collections import Counter, defaultdict
-from contextlib import ExitStack
 from urllib.parse import parse_qs
 
 import falcon
@@ -26,8 +24,6 @@ from falcon import (API, HTTP_200, HTTP_201, HTTP_204, HTTP_503,
 from falcon_cors import CORS
 from gevent import Timeout, sleep, socket, spawn
 from jinja2.sandbox import SandboxedEnvironment
-from kazoo.client import KazooClient
-from kazoo.handlers.gevent import SequentialGeventHandler
 from sqlalchemy.exc import IntegrityError, InternalError, OperationalError
 
 from iris.bin.sender import render, set_target_contact
@@ -1660,6 +1656,19 @@ class Plans(object):
                                  'Plan length exceeds the 24 hour maximum')
 
         with db.guarded_session() as session:
+            # check if plan is restricted and user is admin
+            restricted_plan = session.execute(
+                """
+                    SELECT EXISTS (SELECT 1 FROM `plan_restricted` WHERE `plan_name` = :name)
+                """,
+                {"name": plan_dict["name"]},
+            ).scalar()
+            if restricted_plan and not req.context["is_admin"]:
+                raise HTTPUnauthorized(
+                    "Restricted plan",
+                    "Plan name %s is restricted and can only be modified by Iris admins"
+                    % plan_dict["name"],
+                )
             try:
                 plan_id = session.execute(insert_plan_query, plan_dict).lastrowid
             except IntegrityError:
@@ -6935,254 +6944,340 @@ class SenderPeerCount():
         resp.body = ujson.dumps(result)
 
 
-class SenderHeartbeat():
+class SenderHeartbeat:
     allow_read_no_auth = False
     internal_allowlist_only = True
 
     def __init__(self, config):
         cfg = config.get("external_sender", {})
-        self.lock_path = cfg.get("lock_path", "/iris_message_processor/db_locks/bucket_lock")
+        self.lock_path = cfg.get(
+            "lock_path", "/iris_message_processor/db_locks/bucket_lock"
+        )
         self.number_of_buckets = cfg.get("number_of_buckets", 100)
-        self.sender_ttl = cfg.get("sender_ttl", 60)
-        self.zk_debug = cfg.get("zk_debug", True)
-        if not self.zk_debug:
-            self.zk_client = KazooClient(
-                hosts=cfg.get("zookeeper_cluster"),
-                use_ssl=cfg.get('zk_use_ssl', False),
-                certfile=cfg.get('ssl_cert_path'),
-                keyfile=cfg.get('ssl_cert_key_path'),
-                ca=cfg.get('ca_bundle_path'),
-                handler=SequentialGeventHandler()
-            )
-            zk_conn = self.zk_client.start_async()
-            zk_conn.wait(timeout=5)
+        self.sender_ttl = cfg.get("sender_ttl", 90)
+        self.heartbeat_payload = cfg.get("heartbeat_payload", True)
+        self.retry_limit = cfg.get("heartbeat_retries", 5)
+        self.retry_jitter = cfg.get("heartbeat_jitter", 4)
 
     def on_get(self, req, resp, node_id):
+        start_time = time.time()
         payload = {}
-        sender_hostname = req.get_param('fqdn', default=req.remote_addr)
+        sender_hostname = req.get_param("fqdn", default=req.remote_addr)
 
-        # configure sql client
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-
-        if self.zk_debug:
-            # use exitstack to replace zookeeper lock context manager for testing
-            lock = ExitStack()
-        else:
-            node_uuid = node_id + "-" + str(uuid.uuid4())
-            lock = self.zk_client.Lock(self.lock_path, node_uuid)
-        # wait until we are able to acquire the global lock before proceeding
-        with lock:
-
-            # check if node is already a member of the cluster and if new member assign it some buckets
-            cursor.execute("SELECT * FROM IMP_cluster_members where node_id = %s", node_id)
-            if not cursor.fetchone():
-
-                cursor.execute("select * from IMP_cluster_members")
-                cluster_members = cursor.fetchall()
-
-                # node was not previously a member of this cluster so figure out what nodes to assign to itself
+        retry_count = 0
+        while True:
+            try:
+                # get new connection
+                connection = db.engine.raw_connection()
+                # begin transaction that wraps entire heartbeat operation
+                connection.begin()
+                cursor = connection.cursor(db.dict_cursor)
+                # check if node is already a member of the cluster and if new member assign it some buckets
                 cursor.execute(
-                    "INSERT INTO IMP_cluster_members VALUES(%s, %s, NOW())", (node_id, sender_hostname))
+                    "SELECT * FROM IMP_cluster_members where node_id = %s", node_id
+                )
+                if not cursor.fetchone():
 
-                # node is the first node in the cluster, directly assign all buckets to it
-                if len(cluster_members) == 0:
-                    insert_sql = "INSERT INTO IMP_bucket_assignments VALUES"
-                    insert_values = []
-                    # build bulk insert sql query
-                    insert_sql += ("(%s, %s)," * self.number_of_buckets)[:-1]
-                    for i in range(self.number_of_buckets):
-                        insert_values.append(node_id)
-                        insert_values.append(i)
-                    cursor.execute(insert_sql, tuple(insert_values))
-                    connection.commit()
+                    cursor.execute("select * from IMP_cluster_members")
+                    cluster_members = cursor.fetchall()
 
-                # node is not first find buckets to reallocate to itself from other nodes
-                else:
-
-                    node_to_assigned_buckets = {}
-                    node_to_change_buckets = {}
-                    for row in cluster_members:
-                        node_to_assigned_buckets[row.get("node_id")] = []
-                        node_to_change_buckets[row.get("node_id")] = []
-
-                    # fetch data from bucket changes table
-                    cursor.execute("SELECT * FROM IMP_bucket_changes")
-                    bucket_changes_results = cursor.fetchall()
-                    for row in bucket_changes_results:
-                        node_to_change_buckets.get(
-                            row["node_id"], []).append(row.get("bucket_id"))
-
-                    # fetch data from bucket assignments table for buckets that do not have any pending changes
+                    # node was not previously a member of this cluster so figure out what nodes to assign to itself
                     cursor.execute(
-                        "SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.bucket_id NOT IN (SELECT IMP_bucket_changes.bucket_id from IMP_bucket_changes)")
-                    assigned_buckets = cursor.fetchall()
-                    for row in assigned_buckets:
-                        node_to_assigned_buckets.get(
-                            row["node_id"], []).append(row["bucket_id"])
+                        "INSERT INTO IMP_cluster_members VALUES(%s, %s, NOW())",
+                        (node_id, sender_hostname),
+                    )
 
-                    # how many total buckets does the new node need
-                    required_buckets = math.floor(self.number_of_buckets / (len(cluster_members) + 1))
+                    # node is the first node in the cluster, directly assign all buckets to it
+                    if len(cluster_members) == 0:
+                        # clean up any bucket assignments if they remained
+                        cursor.execute(
+                            "DELETE FROM IMP_bucket_assignments WHERE node_id = %s",
+                            (node_id,),
+                        )
+                        cursor.execute(
+                            "DELETE FROM IMP_bucket_changes WHERE node_id = %s",
+                            (node_id,),
+                        )
+                        insert_sql = "INSERT INTO IMP_bucket_assignments VALUES"
+                        insert_values = []
+                        # build bulk insert sql query
+                        insert_sql += ("(%s, %s)," * self.number_of_buckets)[:-1]
+                        for i in range(self.number_of_buckets):
+                            insert_values.append(node_id)
+                            insert_values.append(i)
+                        cursor.execute(insert_sql, tuple(insert_values))
 
-                    # go node by node through existing nodes to determine what buckets we are going to take from each
-                    for row in cluster_members:
-                        # keep track af how many buckets we have reassigned for each node
-                        buckets_reassigned = 0
-                        donor_node_id = row.get("node_id")
-                        donor_buckets_total = len(node_to_change_buckets.get(
-                            donor_node_id, [])) + len(node_to_assigned_buckets.get(donor_node_id, []))
-                        buckets_to_take = donor_buckets_total - required_buckets
+                    # node is not first find buckets to reallocate to itself from other nodes
+                    else:
 
-                        if buckets_to_take > 0:
-                            # prioritize reassigning buckets in IMP_bucket_changes to minimize bucket shuffling
-                            for bucket in node_to_change_buckets.get(donor_node_id):
-                                cursor.execute(
-                                    "UPDATE IMP_bucket_changes SET node_id = %s WHERE bucket_id = %s", (node_id, bucket))
-                                buckets_reassigned += 1
-                                if buckets_reassigned >= buckets_to_take:
-                                    break
-                            # we still need more buckets from this donor node so take buckets from IMP_bucket_assignments
-                            if buckets_reassigned < buckets_to_take:
-                                for bucket in node_to_assigned_buckets.get(donor_node_id):
+                        node_to_assigned_buckets = {}
+                        node_to_change_buckets = {}
+                        for row in cluster_members:
+                            node_to_assigned_buckets[row.get("node_id")] = []
+                            node_to_change_buckets[row.get("node_id")] = []
+
+                        # fetch data from bucket changes table
+                        cursor.execute("SELECT * FROM IMP_bucket_changes")
+                        bucket_changes_results = cursor.fetchall()
+                        for row in bucket_changes_results:
+                            node_to_change_buckets.get(row["node_id"], []).append(
+                                row.get("bucket_id")
+                            )
+
+                        # fetch data from bucket assignments table for buckets that do not have any pending changes
+                        cursor.execute(
+                            "SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.bucket_id NOT IN (SELECT IMP_bucket_changes.bucket_id from IMP_bucket_changes)"
+                        )
+                        assigned_buckets = cursor.fetchall()
+                        for row in assigned_buckets:
+                            node_to_assigned_buckets.get(row["node_id"], []).append(
+                                row["bucket_id"]
+                            )
+
+                        # how many total buckets does the new node need
+                        required_buckets = math.floor(
+                            self.number_of_buckets / (len(cluster_members) + 1)
+                        )
+
+                        # go node by node through existing nodes to determine what buckets we are going to take from each
+                        for row in cluster_members:
+                            # keep track af how many buckets we have reassigned for each node
+                            buckets_reassigned = 0
+                            donor_node_id = row.get("node_id")
+                            donor_buckets_total = len(
+                                node_to_change_buckets.get(donor_node_id, [])
+                            ) + len(node_to_assigned_buckets.get(donor_node_id, []))
+                            buckets_to_take = donor_buckets_total - required_buckets
+
+                            if buckets_to_take > 0:
+                                # prioritize reassigning buckets in IMP_bucket_changes to minimize bucket shuffling
+                                for bucket in node_to_change_buckets.get(donor_node_id):
                                     cursor.execute(
-                                        "INSERT INTO IMP_bucket_changes VALUES(%s,%s)", (node_id, bucket))
+                                        "UPDATE IMP_bucket_changes SET node_id = %s WHERE bucket_id = %s",
+                                        (node_id, bucket),
+                                    )
                                     buckets_reassigned += 1
                                     if buckets_reassigned >= buckets_to_take:
                                         break
+                                # we still need more buckets from this donor node so take buckets from IMP_bucket_assignments
+                                if buckets_reassigned < buckets_to_take:
+                                    for bucket in node_to_assigned_buckets.get(
+                                        donor_node_id
+                                    ):
+                                        cursor.execute(
+                                            "INSERT INTO IMP_bucket_changes VALUES(%s,%s)",
+                                            (node_id, bucket),
+                                        )
+                                        buckets_reassigned += 1
+                                        if buckets_reassigned >= buckets_to_take:
+                                            break
+                else:
+                    # update last modified time to renew our TTL
+                    cursor.execute(
+                        "UPDATE IMP_cluster_members SET last_modified = NOW(), hostname = %s WHERE node_id = %s",
+                        (sender_hostname, node_id),
+                    )
 
-                    connection.commit()
-            else:
-                # update last modified time to renew our TTL
+                # check if there are any buckets that belong to this node that we have to give up
+
                 cursor.execute(
-                    "UPDATE IMP_cluster_members SET last_modified = NOW(), hostname = %s WHERE node_id = %s", (sender_hostname, node_id))
+                    "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)",
+                    node_id,
+                )
+                bucket_changes_results = cursor.fetchall()
+                for row in bucket_changes_results:
+                    # release buckets to the node that requested them
+                    cursor.execute(
+                        "UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
+                        (row["node_id"], row["bucket_id"]),
+                    )
+                    # delete IMP_bucket_changes request for teh bucket we just reassigned
+                    cursor.execute(
+                        "DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s",
+                        (row["node_id"], row["bucket_id"]),
+                    )
 
-            # check if there are any buckets that belong to this node that we have to give up
+                # check if there are are nodes who's cluster membership TTL has expired and redistribute their buckets
 
-            cursor.execute(
-                "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", node_id)
-            bucket_changes_results = cursor.fetchall()
-            for row in bucket_changes_results:
-                # release buckets to the node that requested them
-                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
-                               (row["node_id"], row["bucket_id"]))
-                # delete IMP_bucket_changes request for teh bucket we just reassigned
-                cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s",
-                               (row["node_id"], row["bucket_id"]))
-            connection.commit()
-
-            # check if there are are nodes who's cluster membership TTL has expired and redistribute their buckets
-
-            # if a node has gone more than TTL seconds without checking in kick it out of the cluster
-            cursor.execute(
-                "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s", self.sender_ttl)
-            dead_nodes = cursor.fetchall()
-
-            if len(dead_nodes) > 0:
+                # if a node has gone more than TTL seconds without checking in kick it out of the cluster
                 cursor.execute(
-                    "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s", self.sender_ttl)
+                    "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s",
+                    self.sender_ttl,
+                )
+                dead_nodes = cursor.fetchall()
+
+                if len(dead_nodes) > 0:
+                    cursor.execute(
+                        "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s",
+                        self.sender_ttl,
+                    )
+                    alive_nodes = cursor.fetchall()
+
+                    # apply any changes that were already pending for the dead nodes
+                    for dead_node in dead_nodes:
+                        cursor.execute(
+                            "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)",
+                            dead_node["node_id"],
+                        )
+                        bucket_changes_results = cursor.fetchall()
+                        for row in bucket_changes_results:
+                            # release buckets to the node that requested them
+                            cursor.execute(
+                                "UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
+                                (row["node_id"], row["bucket_id"]),
+                            )
+                            # delete IMP_bucket_changes request for teh bucket we just reassigned
+                            cursor.execute(
+                                "DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s",
+                                (row["node_id"], row["bucket_id"]),
+                            )
+
+                    # give away the rest of the dead nodes' buckets in round robin fashion
+                    cursor.execute(
+                        "SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id IN (SELECT IMP_cluster_members.node_id FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s)",
+                        self.sender_ttl,
+                    )
+                    dead_node_buckets = cursor.fetchall()
+
+                    i = 0
+                    for bucket in dead_node_buckets:
+                        if i >= len(alive_nodes):
+                            i = 0
+                        cursor.execute(
+                            "UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
+                            (alive_nodes[i]["node_id"], bucket["bucket_id"]),
+                        )
+                        i += 1
+                    #  delete dead nodes from cluster membership
+                    dead_node_ids = [node["node_id"] for node in dead_nodes]
+                    cursor.execute(
+                        "DELETE FROM IMP_cluster_members WHERE node_id IN %s",
+                        (tuple(dead_node_ids),),
+                    )
+
+                if self.heartbeat_payload:
+                    cursor.execute("SELECT * FROM IMP_bucket_assignments")
+                    bucket_assignments = cursor.fetchall()
+                    payload = bucket_assignments
+
+                # if all goes well commit and break from the loop
+                connection.commit()
+                break
+
+            except Exception:
+                try:
+                    connection.rollback()
+                except Exception:
+                    logger.exception("Failed to rollback transaction")
+                # If exception occurs, retry. This will be somewhat common due to deadlocks if multiple nodes are trying to update at the same time
+                if retry_count >= self.retry_limit:
+                    logger.exception(
+                        f"Failed heartbeat get after {self.retry_limit} retries..."
+                    )
+                    raise  # If reached retry limit, raise the exception
+                else:
+                    retry_count += 1
+                    # Wait for a random period before retrying
+                    wait_time = random.uniform(0, self.retry_jitter)
+                    time.sleep(wait_time)
+            finally:
+                cursor.close()
+                connection.close()
+
+        resp.status = HTTP_200
+        resp.body = ujson.dumps(payload)
+        end_time = time.time()
+        logger.info(
+            "Completed heartbeat for node %s with hostname %s  in %.2f seconds",
+            node_id,
+            sender_hostname,
+            end_time - start_time,
+        )
+
+    def on_delete(self, req, resp, node_id):
+        # gracefully remove node from the cluster
+
+        start_time = time.time()
+        payload = {}
+        retry_count = 0
+        while True:
+            try:
+                # get new connection
+                connection = db.engine.raw_connection()
+                # begin transaction that wraps entire heartbeat operation
+                connection.begin()
+                cursor = connection.cursor(db.dict_cursor)
+
+                # fetch list of healthy nodes
+                cursor.execute(
+                    "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s AND node_id != %s", (self.sender_ttl, node_id))
                 alive_nodes = cursor.fetchall()
 
-                # apply any changes that were already pending for the dead nodes
-                for dead_node in dead_nodes:
-                    cursor.execute(
-                        "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", dead_node["node_id"])
-                    bucket_changes_results = cursor.fetchall()
-                    for row in bucket_changes_results:
-                        # release buckets to the node that requested them
-                        cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (
-                            row["node_id"], row["bucket_id"]))
-                        # delete IMP_bucket_changes request for teh bucket we just reassigned
-                        cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s", (
-                            row["node_id"], row["bucket_id"]))
+                # if everyone is dead just free up all the node's buckets
+                if len(alive_nodes) == 0:
+                    cursor.execute("DELETE FROM IMP_cluster_members WHERE node_id = %s", (node_id,))
+                    cursor.execute("DELETE FROM IMP_bucket_assignments WHERE node_id = %s", (node_id,))
+                    cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s", (node_id,))
+                    cursor.execute("COMMIT")
+                    break
 
-                # give away the rest of the dead nodes' buckets in round robin fashion
-                cursor.execute("SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id IN (SELECT IMP_cluster_members.node_id FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) >= %s)", self.sender_ttl)
+                # take care of any pending bucket changes for this node
+                cursor.execute(
+                    "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", node_id)
+                bucket_changes_results = cursor.fetchall()
+                for row in bucket_changes_results:
+                    # release buckets to the node that requested them
+                    cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (
+                        row["node_id"], row["bucket_id"]))
+                    # delete IMP_bucket_changes request for the bucket we just reassigned
+                    cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s", (
+                        row["node_id"], row["bucket_id"]))
+
+                # give away the rest of the node's buckets in round robin fashion
+                cursor.execute("SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id = %s", node_id)
                 dead_node_buckets = cursor.fetchall()
 
                 i = 0
                 for bucket in dead_node_buckets:
                     if i >= len(alive_nodes):
                         i = 0
-                    cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s",
-                                   (alive_nodes[i]["node_id"], bucket["bucket_id"]))
+                    cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (alive_nodes[i]["node_id"], bucket["bucket_id"]))
                     i += 1
+
+                #  delete node from cluster membership
+                cursor.execute(
+                    "DELETE FROM IMP_cluster_members WHERE node_id = %s", node_id)
+
+                if self.heartbeat_payload:
+                    cursor.execute("SELECT * FROM IMP_bucket_assignments")
+                    bucket_assignments = cursor.fetchall()
+                    payload = bucket_assignments
+                # if all goes well commit and break out of the loop
                 connection.commit()
-                #  delete dead nodes from cluster membership
-                dead_node_ids = [node["node_id"] for node in dead_nodes]
-                with db.guarded_session() as session:
-                    session.execute("DELETE FROM IMP_cluster_members WHERE node_id IN :dead_node_ids", {"dead_node_ids": tuple(dead_node_ids)})
-                    session.commit()
+                break
 
-            if self.zk_debug:
-                cursor.execute("SELECT * FROM IMP_bucket_assignments")
-                bucket_assignments = cursor.fetchall()
-                payload = bucket_assignments
-
-        cursor.close()
-        connection.close()
+            except Exception:
+                try:
+                    connection.rollback()
+                except Exception:
+                    logger.exception("Failed to rollback transaction")
+                # If deadlock occurs, retry
+                if retry_count >= self.retry_limit:
+                    logger.exception(f"Failed heartbeat delete after {self.retry_limit} retries...")
+                    raise  # If reached retry limit, raise the exception
+                else:
+                    retry_count += 1
+                    # Wait for a random period between 0 and 5 seconds before retrying
+                    wait_time = random.uniform(0, self.retry_jitter)
+                    time.sleep(wait_time)
+            finally:
+                cursor.close()
+                connection.close()
 
         resp.status = HTTP_200
         resp.body = ujson.dumps(payload)
-
-    def on_delete(self, req, resp, node_id):
-        # gracefully remove node from the cluster
-
-        # configure sql client
-        payload = {}
-        connection = db.engine.raw_connection()
-        cursor = connection.cursor(db.dict_cursor)
-
-        if self.zk_debug:
-            # use exitstack to replace zookeeper lock context manager for testing
-            lock = ExitStack()
-        else:
-            node_uuid = node_id + "-" + str(uuid.uuid4())
-            lock = self.zk_client.Lock(self.lock_path, node_uuid)
-        # wait until we are able to acquire the global lock before proceeding
-        with lock:
-
-            # fetch list of healthy nodes
-            cursor.execute(
-                "SELECT * FROM IMP_cluster_members WHERE TIMESTAMPDIFF(SECOND,last_modified, NOW()) < %s AND node_id != %s", (self.sender_ttl, node_id))
-            alive_nodes = cursor.fetchall()
-
-            # take care of any pending bucket changes for this node
-            cursor.execute(
-                "SELECT * FROM IMP_bucket_changes WHERE bucket_id IN (SELECT bucket_id FROM IMP_bucket_assignments WHERE node_id = %s)", node_id)
-            bucket_changes_results = cursor.fetchall()
-            for row in bucket_changes_results:
-                # release buckets to the node that requested them
-                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (
-                    row["node_id"], row["bucket_id"]))
-                # delete IMP_bucket_changes request for the bucket we just reassigned
-                cursor.execute("DELETE FROM IMP_bucket_changes WHERE node_id = %s AND bucket_id = %s", (
-                    row["node_id"], row["bucket_id"]))
-
-            # give away the rest of the node's buckets in round robin fashion
-            cursor.execute("SELECT * FROM IMP_bucket_assignments WHERE IMP_bucket_assignments.node_id = %s", node_id)
-            dead_node_buckets = cursor.fetchall()
-
-            i = 0
-            for bucket in dead_node_buckets:
-                if i >= len(alive_nodes):
-                    i = 0
-                cursor.execute("UPDATE IMP_bucket_assignments SET node_id = %s WHERE bucket_id = %s", (alive_nodes[i]["node_id"], bucket["bucket_id"]))
-                i += 1
-
-            #  delete node from cluster membership
-            cursor.execute(
-                "DELETE FROM IMP_cluster_members WHERE node_id = %s", node_id)
-            connection.commit()
-
-        if self.zk_debug:
-            cursor.execute("SELECT * FROM IMP_bucket_assignments")
-            bucket_assignments = cursor.fetchall()
-            payload = bucket_assignments
-
-        cursor.close()
-        connection.close()
-        resp.status = HTTP_200
-        resp.body = ujson.dumps(payload)
+        end_time = time.time()
+        logger.info('Completed delete heartbeat for node %s in %.2f seconds', node_id, end_time - start_time)
 
 
 class InternalIncidents():
