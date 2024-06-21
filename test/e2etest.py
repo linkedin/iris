@@ -1393,6 +1393,7 @@ def test_restricted_plan(sample_non_admin_user, sample_admin_user, sample_team, 
     # Test creating and deleting by ID
     re = requests.post(base_url + 'plans', json=data, headers=username_header(sample_non_admin_user))
     assert re.status_code == 401
+    assert re.json()['title'] == 'Restricted plan'
 
 
 def test_post_invalid_step_role(sample_user, sample_team, sample_template_name):
