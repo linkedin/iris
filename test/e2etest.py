@@ -3561,6 +3561,84 @@ def test_tag_incident(sample_plan_name, sample_application_name, superuser_appli
     assert len(response[0]['tags']) == 3
     assert response[0]['id'] == incident_id
 
+    # create another incident
+    re = requests.post(
+        base_url + "incidents",
+        json={"plan": sample_plan_name, "context": {}},
+        headers={"Authorization": "hmac %s:abc" % sample_application_name},
+    )
+    assert re.status_code == 201
+    incident_id2 = re.json()
+    assert incident_id2
+
+    re = requests.get(base_url + "incidents/%d" % incident_id2)
+    assert re.status_code == 200
+    response = re.json()
+    assert response["tags"] == []
+
+    # add team tags
+    payload = {"name": "team", "values": ["foo_team", "bar_team"], "id": response["id"]}
+
+    re = requests.put(
+        base_url + "internal/incident_tag",
+        json=payload,
+        headers={"Authorization": "hmac %s:abc" % superuser_application},
+    )
+    assert re.status_code == 201
+
+    re = requests.get(base_url + "incidents/%d" % incident_id2)
+    assert re.status_code == 200
+    response = re.json()
+    expected_list = [
+        {"name": "team", "value": "foo_team"},
+        {"name": "team", "value": "bar_team"},
+    ]
+    assert len(response["tags"]) == len(expected_list) and all(
+        item in expected_list for item in response["tags"]
+    )
+
+    # filter incidents search by tags
+    re = requests.get(base_url + "incidents?tag_team=foo_team")
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 2
+    assert response[0]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert (
+        response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    ) and response[0]["id"] != response[1]["id"]
+
+    # filter on existence of team tag
+    re = requests.get(base_url + "incidents?tag_team__exists=true&tag_team=foo_team")
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 2
+    assert response[0]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert (
+        response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    ) and response[0]["id"] != response[1]["id"]
+
+    # filter on non-existence of team tag
+    re = requests.get(base_url + "incidents?tag_team__exists=false&tag_team=foo_team")
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 0
+
+    # filter on existence of service tag
+    re = requests.get(base_url + "incidents?tag_service__exists=true&tag_team=foo_team")
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert response[0]["id"] == incident_id
+
+    # filter on non-existence of service tag
+    re = requests.get(
+        base_url + "incidents?tag_service__exists=false&tag_team=foo_team"
+    )
+    assert re.status_code == 200
+    response = re.json()
+    assert len(response) == 1
+    assert response[0]["id"] == incident_id2
+
 
 def test_get_allowed_tags(superuser_application):
     re = requests.get(base_url + 'allowed_metadata_tags')

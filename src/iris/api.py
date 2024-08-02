@@ -62,6 +62,8 @@ operators = {
     'endswith': '%s LIKE CONCAT("%%%%", %s)',
 }
 
+exists_operator = "exists"
+
 
 def ts_to_sql_datetime(ts):
     return 'FROM_UNIXTIME(%s)' % ts
@@ -760,6 +762,8 @@ def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs)
         # only process tag fields
         if not col.startswith(tag_prefix):
             continue
+        if op == exists_operator:
+            continue
         if op not in operators:
             raise HTTPBadRequest('invalid filter operator %s' % op)
 
@@ -795,6 +799,44 @@ def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs)
     return sql_query
 
 
+def gen_tag_exists_where_subquery(connection, id_field, tag_table, resource_id, kwargs):
+    """
+    return multiple subqueries to be used in a where clause for filtering based on tags existance
+    """
+    tag_prefix = "tag_"
+    conditions = []
+    for _, (key, value) in enumerate(kwargs.items()):
+        if not isinstance(key, str):
+            continue
+        # get tag name and any operation associated with it
+        col, _, op = key.partition("__")
+
+        if not col.startswith(tag_prefix):
+            continue
+        if op in operators:
+            continue
+        if op != exists_operator:
+            raise HTTPBadRequest("invalid filter operator %s" % op)
+
+        name = col[len(tag_prefix) :]
+        escaped_name = connection.escape(name)
+        # ensure proper typing and escape values
+        if not isinstance(value, str) or (value != "true" and value != "false"):
+            raise HTTPBadRequest(
+                "invalid argument type",
+                '%s value should be either "true" or "false"' % key,
+            )
+
+        if value == "true":
+            condition = f"EXISTS (SELECT 1 FROM {tag_table} WHERE name = {escaped_name} AND {id_field} = {resource_id})"
+            conditions.append(condition)
+        else:
+            condition = f"NOT EXISTS (SELECT 1 FROM {tag_table} WHERE name = {escaped_name} AND {id_field} = {resource_id})"
+            conditions.append(condition)
+
+    return conditions
+
+
 def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     '''
     How each where clauses are generated:
@@ -810,6 +852,9 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
         # Skip columns that don't exist
         if col not in filters:
             continue
+        if op not in operators:
+            continue
+
         col_type = filter_types.get(col, str)
         # Format strings because Falcon splits on ',' but not on '%2C'
         # TODO: Get rid of this by setting request options on Falcon 1.1
@@ -1422,6 +1467,11 @@ class Plans(object):
         if tag_subquery != "":
             where.append(tag_subquery)
 
+        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
+        if tag_exists_subqueries:
+            for tag_exists_subquery in tag_exists_subqueries:
+                where.append(tag_exists_subquery)
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
 
@@ -1924,6 +1974,11 @@ class Incidents(object):
         tag_subquery = gen_tag_where_subquery(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
         if tag_subquery != "":
             where.append(tag_subquery)
+
+        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
+        if tag_exists_subqueries:
+            for tag_exists_subquery in tag_exists_subqueries:
+                where.append(tag_exists_subquery)
 
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
@@ -3305,6 +3360,11 @@ class Templates(object):
         if tag_subquery != "":
             where.append(tag_subquery)
 
+        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'template_id', 'template_metadata_tag', '`template`.`id`', req.params)
+        if tag_exists_subqueries:
+            for tag_exists_subquery in tag_exists_subqueries:
+                where.append(tag_exists_subquery)
+
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
 
@@ -4670,6 +4730,11 @@ class Applications(object):
         tag_subquery = gen_tag_where_subquery(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
         if tag_subquery != "":
             where.append(tag_subquery)
+
+        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
+        if tag_exists_subqueries:
+            for tag_exists_subquery in tag_exists_subqueries:
+                where.append(tag_exists_subquery)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
