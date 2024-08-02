@@ -1477,8 +1477,7 @@ class Plans(object):
 
         tag_subqueries = gen_tag_wheres(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
         if tag_subqueries:
-            for tag_subquery in tag_subqueries:
-                where.append(tag_subquery)
+            where.extend(tag_subqueries)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
@@ -1981,8 +1980,7 @@ class Incidents(object):
 
         tag_subqueries = gen_tag_wheres(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
         if tag_subqueries:
-            for tag_subquery in tag_subqueries:
-                where.append(tag_subquery)
+            where.extend(tag_subqueries)
 
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
@@ -3362,8 +3360,7 @@ class Templates(object):
 
         tag_subqueries = gen_tag_wheres(connection, 'template_id', 'template_metadata_tag', '`template`.`id`', req.params)
         if tag_subqueries:
-            for tag_subquery in tag_subqueries:
-                where.append(tag_subquery)
+            where.extend(tag_subqueries)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
@@ -4729,8 +4726,7 @@ class Applications(object):
 
         tag_subqueries = gen_tag_wheres(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
         if tag_subqueries:
-            for tag_subquery in tag_subqueries:
-                where.append(tag_subquery)
+            where.extend(tag_subqueries)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
