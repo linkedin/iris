@@ -837,6 +837,18 @@ def gen_tag_exists_where_subquery(connection, id_field, tag_table, resource_id, 
     return conditions
 
 
+def gen_tag_wheres(connection, id_field, tag_table, resource_id, kwargs):
+    where_subqueries = []
+    tag_subquery = gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs)
+    if tag_subquery:
+        where_subqueries.append(tag_subquery)
+    tag_exists_subqueries = gen_tag_exists_where_subquery(connection, id_field, tag_table, resource_id, kwargs)
+    if tag_exists_subqueries:
+        where_subqueries.extend(tag_exists_subqueries)
+
+    return where_subqueries
+
+
 def gen_where_filter_clause(connection, filters, filter_types, kwargs):
     '''
     How each where clauses are generated:
@@ -1463,14 +1475,10 @@ class Plans(object):
         where += gen_where_filter_clause(
             connection, plan_filters, plan_filter_types, req.params)
 
-        tag_subquery = gen_tag_where_subquery(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
-        if tag_subquery != "":
-            where.append(tag_subquery)
-
-        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
-        if tag_exists_subqueries:
-            for tag_exists_subquery in tag_exists_subqueries:
-                where.append(tag_exists_subquery)
+        tag_subqueries = gen_tag_wheres(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
+        if tag_subqueries:
+            for tag_subquery in tag_subqueries:
+                where.append(tag_subquery)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
@@ -1971,14 +1979,10 @@ class Incidents(object):
             except Exception as e:
                 logger.exception('failed to establish connection with iris message processor')
 
-        tag_subquery = gen_tag_where_subquery(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
-        if tag_subquery != "":
-            where.append(tag_subquery)
-
-        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
-        if tag_exists_subqueries:
-            for tag_exists_subquery in tag_exists_subqueries:
-                where.append(tag_exists_subquery)
+        tag_subqueries = gen_tag_wheres(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
+        if tag_subqueries:
+            for tag_subquery in tag_subqueries:
+                where.append(tag_subquery)
 
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
@@ -3356,14 +3360,10 @@ class Templates(object):
         connection = db.engine.raw_connection()
         where += gen_where_filter_clause(connection, template_filters, template_filter_types, req.params)
 
-        tag_subquery = gen_tag_where_subquery(connection, 'template_id', 'template_metadata_tag', '`template`.`id`', req.params)
-        if tag_subquery != "":
-            where.append(tag_subquery)
-
-        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'template_id', 'template_metadata_tag', '`template`.`id`', req.params)
-        if tag_exists_subqueries:
-            for tag_exists_subquery in tag_exists_subqueries:
-                where.append(tag_exists_subquery)
+        tag_subqueries = gen_tag_wheres(connection, 'template_id', 'template_metadata_tag', '`template`.`id`', req.params)
+        if tag_subqueries:
+            for tag_subquery in tag_subqueries:
+                where.append(tag_subquery)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
@@ -4727,14 +4727,10 @@ class Applications(object):
         where = ['`auth_only` is False']
         where += gen_where_filter_clause(connection, application_filters, application_filter_types, req.params)
 
-        tag_subquery = gen_tag_where_subquery(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
-        if tag_subquery != "":
-            where.append(tag_subquery)
-
-        tag_exists_subqueries = gen_tag_exists_where_subquery(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
-        if tag_exists_subqueries:
-            for tag_exists_subquery in tag_exists_subqueries:
-                where.append(tag_exists_subquery)
+        tag_subqueries = gen_tag_wheres(connection, 'application_id', 'application_metadata_tag', '`application`.`id`', req.params)
+        if tag_subqueries:
+            for tag_subquery in tag_subqueries:
+                where.append(tag_subquery)
 
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
