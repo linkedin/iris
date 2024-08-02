@@ -818,7 +818,7 @@ def gen_tag_exists_where_subquery(connection, id_field, tag_table, resource_id, 
         if op != exists_operator:
             raise HTTPBadRequest("invalid filter operator %s" % op)
 
-        name = col[len(tag_prefix) :]
+        name = col[len(tag_prefix):]
         escaped_name = connection.escape(name)
         # ensure proper typing and escape values
         if not isinstance(value, str) or (value != "true" and value != "false"):
