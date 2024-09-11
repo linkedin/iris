@@ -3611,7 +3611,7 @@ def test_tag_incident(sample_plan_name, sample_application_name, superuser_appli
     )
 
     # filter incidents search by tags
-    re = requests.get(base_url + "incidents?tag_team=foo_team&order_by=id&0rder=ASC")
+    re = requests.get(base_url + "incidents?tag_team=foo_team&order_by=id&order=ASC")
     assert re.status_code == 200
     response = re.json()
     assert len(response) == 2
