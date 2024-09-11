@@ -62,6 +62,9 @@ operators = {
     'endswith': '%s LIKE CONCAT("%%%%", %s)',
 }
 
+asc_order = "ASC"
+desc_order = "DESC"
+
 exists_operator = "exists"
 
 
@@ -165,6 +168,20 @@ incident_columns = {
     'title_variable_name': '`template_variable`.`name` as `title_variable_name`',
     'resolved': '`incident`.`resolved` as `resolved`',
     'tags': ' (SELECT JSON_ARRAYAGG(JSON_OBJECT("name", `name`, "value", `value`)) from incident_metadata_tag where incident.id = incident_metadata_tag.incident_id) AS tags'
+}
+
+incident_order_by_fields = {
+    'id': '`incident`.`id`',
+    'plan': '`plan`.`name`',
+    'plan_id': '`incident`.`plan_id`',
+    'active': '`incident`.`active`',
+    'updated': '`incident`.`updated`',
+    'application': '`application`.`name`',
+    'created': '`incident`.`created`',
+    'owner': '`target`.`name`',
+    'current_step': '`incident`.`current_step`',
+    'title_variable_name': '`template_variable`.`name`',
+    'resolved': '`incident`.`resolved`'
 }
 
 incident_filters = {
@@ -670,6 +687,7 @@ uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
 
 def stream_incidents_with_context(results, title=False):
+    results_list = []
     for row in results:
         row['context'] = ujson.loads(row['context'])
         if title:
@@ -678,7 +696,8 @@ def stream_incidents_with_context(results, title=False):
                 row['title'] = row['context'].get(title_variable_name)
             else:
                 row['title'] = None
-        yield row
+        results_list.append(row)
+    return ujson.dumps(results_list)
 
 
 def get_app_from_msg_id(session, msg_id):
@@ -1881,6 +1900,20 @@ class Incidents(object):
 
         Additionally adding the parameter "counts" will return a dictionary with unique values of each field and their counts as well as a total count
 
+        Sorting by specific fields. You can use the parameter `order_by` eg. `order_by=$FIELD` to sort the response by a specific field. Supported fields are:
+        - `id`
+        - `created`
+        - `updated`
+        - `owner`
+        - `application`
+        - `plan`
+        - `context`
+        - `active`
+
+        Specify the order of the sort with the `order` parameter eg order=ASC. Supported values are:
+        - ASC
+        - DESC
+
         **Example request**:
 
         .. sourcecode:: http
@@ -1919,6 +1952,15 @@ class Incidents(object):
         req.params.pop('limit', None)
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
+        order = req.get_param('order', 'DESC')
+        if order not in [asc_order, desc_order]:
+            raise HTTPBadRequest('Invalid order parameter', 'Order parameter must be either "ASC" or "DESC"')
+        order_by = req.get_param('order_by')
+        if order_by is not None and order_by not in incident_order_by_fields:
+            raise falcon.HTTPBadRequest(
+                title='Invalid Parameter',
+                description="Invalid 'order_by' parameter"
+            )
 
         # validate that if we are fetching counts we are not asking for context, created, updated as they are all essentially unique to each incident
         unsupported_count_fields = ['id', 'context', 'created', 'updated']
@@ -1988,8 +2030,13 @@ class Incidents(object):
         if where:
             query = query + ' WHERE ' + ' AND '.join(where)
 
+        if order_by is not None:
+            query += ' ORDER BY %s %s' % (incident_order_by_fields[order_by], order)
+        else:
+            query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC'
+
         if query_limit is not None:
-            query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC LIMIT %s' % query_limit
+            query += ' LIMIT %s' % query_limit
 
         # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
         if counts_only:

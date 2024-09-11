@@ -1943,6 +1943,19 @@ def test_get_incident(iris_incidents):
     re = requests.get(base_url + 'incidents/%s' % iris_incidents[0]['id']).json()
     assert re['id'] == iris_incidents[0]['id']
 
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=ASC'
+    assert len(re) == 3
+    asc_id = re[0]['id']
+
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=DESC'
+    assert len(re) == 3
+    desc_id = re[2]['id']
+    # check ordering is reversed
+    assert asc_id == desc_id
+
+    re = requests.get(base_url + 'incidents?order_by=invalid_field')
+    assert re.status_code == 400
+
     re = requests.get(base_url + 'incidents/fakeid')
     assert re.status_code == 400
 
