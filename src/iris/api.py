@@ -1952,10 +1952,12 @@ class Incidents(object):
         req.params.pop('limit', None)
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
-        order = req.get_param('order', 'DESC')
+        order = req.get_param('order', default='DESC')
+        req.params.pop('order', None)
         if order not in [asc_order, desc_order]:
             raise HTTPBadRequest('Invalid order parameter', 'Order parameter must be either "ASC" or "DESC"')
         order_by = req.get_param('order_by')
+        req.params.pop('order_by', None)
         if order_by is not None and order_by not in incident_order_by_fields:
             raise falcon.HTTPBadRequest(
                 title='Invalid Parameter',
