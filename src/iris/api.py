@@ -1952,7 +1952,7 @@ class Incidents(object):
         req.params.pop('limit', None)
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
-        order = req.get_param('order', default='DESC')
+        order = req.get_param('order', default=desc_order)
         req.params.pop('order', None)
         if order not in [asc_order, desc_order]:
             raise HTTPBadRequest('Invalid order parameter', 'Order parameter must be either "ASC" or "DESC"')
