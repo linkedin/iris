@@ -686,7 +686,7 @@ category_filter_types = {
 uuid4hex = re.compile(r'[0-9a-f]{32}\Z', re.I)
 
 
-def stream_incidents_with_context(results, title=False):
+def format_incidents_with_context(results, title=False):
     results_list = []
     for row in results:
         row['context'] = ujson.loads(row['context'])
@@ -2066,9 +2066,9 @@ class Incidents(object):
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
-                payload = ujson.dumps(stream_incidents_with_context(results, True))
+                payload = ujson.dumps(format_incidents_with_context(results, True))
             else:
-                payload = ujson.dumps(stream_incidents_with_context(results, False))
+                payload = ujson.dumps(format_incidents_with_context(results, False))
         else:
             payload = ujson.dumps(results)
         connection.close()
