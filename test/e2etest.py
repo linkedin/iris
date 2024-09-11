@@ -1793,13 +1793,13 @@ def test_create_invalid_template(sample_user, sample_application_name, sample_ad
 def test_active_incidents():
     re = requests.get(base_url + 'incidents?active=1')
     assert re.status_code == 200
-    assert isinstance(json.loads(re.json()), list)
+    assert isinstance(re.json(), list)
 
 
 def test_filter_incidents_by_creator(sample_user, sample_user2):
     re = requests.get(base_url + 'incidents?target=%s&target=%s' % (sample_user, sample_user2))
     assert re.status_code == 200
-    data = json.loads(re.json())
+    data = re.json()
     assert isinstance(data, list)
 
     re = requests.get(base_url + 'incidents?target=' + sample_user)
@@ -1930,29 +1930,25 @@ def test_get_incident(iris_incidents):
     if len(iris_incidents) < 3:
         pytest.skip('Skipping this test as we don\'t have enough incidents')
 
-    r = requests.get(base_url + 'incidents?id__in=' + ','.join(str(m['id']) for m in iris_incidents[:3]))
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json()
     assert len(re) == 3
 
-    r = requests.get(base_url + 'incidents?limit=1&fields=id&id__in=' + ','.join(str(m['id']) for m in iris_incidents[:3]))
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents?limit=1&fields=id&id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json()
     assert len(re) == 1
 
-    r = requests.get(base_url + 'incidents?id__in=%s' % iris_incidents[1]['id'])
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents?id__in=%s' % iris_incidents[1]['id']).json()
     assert len(re) == 1
     assert re[0]['id'] == iris_incidents[1]['id']
 
-    r = requests.get(base_url + 'incidents/%s' % iris_incidents[0]['id']).json()
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents/%s' % iris_incidents[0]['id']).json()
     assert re['id'] == iris_incidents[0]['id']
 
-    r = requests.get(base_url + 'incidents?id__in=' + ','.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=ASC')
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=ASC'
+    assert len(re) == 3
     asc_id = re[0]['id']
 
-    r = requests.get(base_url + 'incidents?id__in=' + ','.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=DESC')
-    re = json.loads(r.text) if isinstance(r.text, str) else r.json()
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=DESC'
+    assert len(re) == 3
     desc_id = re[-1]['id']
     # check ordering is reversed
     assert asc_id == desc_id
@@ -1973,14 +1969,12 @@ def test_get_incident(iris_incidents):
     # test sending too many in params as comma delimited
     re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(i) for i in range(1, 151)))
     assert re.status_code == 400
-    re = json.loads(re)
-    assert re['title'] == 'query id__in list length exceeds maximum allowed length of 100'
+    assert re.json()['title'] == 'query id__in list length exceeds maximum allowed length of 100'
 
     # test sending too many in params as separtate query params
     re = requests.get(base_url + 'incidents?id__in=' + '&id__in='.join(str(i) for i in range(1, 151)))
     assert re.status_code == 400
-    re = json.loads(re)
-    assert re['title'] == 'query id__in list length exceeds maximum allowed length of 100'
+    assert re.json()['title'] == 'query id__in list length exceeds maximum allowed length of 100'
 
 
 def test_get_invalid_incident(iris_incidents):

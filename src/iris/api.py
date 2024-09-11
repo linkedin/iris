@@ -2066,9 +2066,9 @@ class Incidents(object):
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
-                payload = ujson.dumps(stream_incidents_with_context(results, True))
+                payload = stream_incidents_with_context(results, True)
             else:
-                payload = ujson.dumps(stream_incidents_with_context(results, False))
+                payload = stream_incidents_with_context(results, False)
         else:
             payload = ujson.dumps(results)
         connection.close()
