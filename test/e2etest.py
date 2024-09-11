@@ -1943,11 +1943,11 @@ def test_get_incident(iris_incidents):
     re = requests.get(base_url + 'incidents/%s' % iris_incidents[0]['id']).json()
     assert re['id'] == iris_incidents[0]['id']
 
-    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=ASC'
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=ASC').json()
     assert len(re) == 3
     asc_id = re[0]['id']
 
-    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3])).json() + '&order_by=id&order=DESC'
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=DESC').json()
     assert len(re) == 3
     desc_id = re[-1]['id']
     # check ordering is reversed
