@@ -3624,10 +3624,9 @@ def test_tag_incident(sample_plan_name, sample_application_name, superuser_appli
     assert re.status_code == 200
     response = re.json()
     assert len(response) == 2
-    assert response[0]["id"] == incident_id or response[1]["id"] == incident_id2
-    assert (
-        response[1]["id"] == incident_id or response[1]["id"] == incident_id2
-    ) and response[0]["id"] != response[1]["id"]
+    assert response[0]["id"] == incident_id or response[0]["id"] == incident_id2
+    assert response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert response[0]["id"] != response[1]["id"]
 
     # filter on non-existence of team tag
     re = requests.get(base_url + "incidents?tag_team__exists=false&tag_team=foo_team")
