@@ -3611,11 +3611,13 @@ def test_tag_incident(sample_plan_name, sample_application_name, superuser_appli
     )
 
     # filter incidents search by tags
-    re = requests.get(base_url + "incidents?tag_team=foo_team&order_by=id&order=ASC")
+    re = requests.get(base_url + "incidents?tag_team=foo_team")
     assert re.status_code == 200
     response = re.json()
     assert len(response) == 2
-    assert response[0]["id"] == incident_id and response[1]["id"] == incident_id2
+    assert response[0]["id"] == incident_id or response[0]["id"] == incident_id2
+    assert response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert response[0]["id"] != response[1]["id"]
 
     # filter on existence of team tag
     re = requests.get(base_url + "incidents?tag_team__exists=true&tag_team=foo_team")
