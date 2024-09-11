@@ -1793,13 +1793,13 @@ def test_create_invalid_template(sample_user, sample_application_name, sample_ad
 def test_active_incidents():
     re = requests.get(base_url + 'incidents?active=1')
     assert re.status_code == 200
-    assert isinstance(re.json(), list)
+    assert isinstance(json.loads(re.json()), list)
 
 
 def test_filter_incidents_by_creator(sample_user, sample_user2):
     re = requests.get(base_url + 'incidents?target=%s&target=%s' % (sample_user, sample_user2))
     assert re.status_code == 200
-    data = re.json()
+    data = json.loads(re.json())
     assert isinstance(data, list)
 
     re = requests.get(base_url + 'incidents?target=' + sample_user)
