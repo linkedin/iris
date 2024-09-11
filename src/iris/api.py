@@ -697,7 +697,7 @@ def stream_incidents_with_context(results, title=False):
             else:
                 row['title'] = None
         results_list.append(row)
-    return ujson.dumps(results_list)
+    return results_list
 
 
 def get_app_from_msg_id(session, msg_id):
@@ -2066,9 +2066,9 @@ class Incidents(object):
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
-                payload = stream_incidents_with_context(results, True)
+                payload = ujson.dumps(stream_incidents_with_context(results, True))
             else:
-                payload = stream_incidents_with_context(results, False)
+                payload = ujson.dumps(stream_incidents_with_context(results, False))
         else:
             payload = ujson.dumps(results)
         connection.close()
