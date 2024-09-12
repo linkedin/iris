@@ -1943,6 +1943,19 @@ def test_get_incident(iris_incidents):
     re = requests.get(base_url + 'incidents/%s' % iris_incidents[0]['id']).json()
     assert re['id'] == iris_incidents[0]['id']
 
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=ASC').json()
+    assert len(re) == 3
+    asc_id = re[0]['id']
+
+    re = requests.get(base_url + 'incidents?id__in=' + ', '.join(str(m['id']) for m in iris_incidents[:3]) + '&order_by=id&order=DESC').json()
+    assert len(re) == 3
+    desc_id = re[-1]['id']
+    # check ordering is reversed
+    assert asc_id == desc_id
+
+    re = requests.get(base_url + 'incidents?order_by=invalid_field')
+    assert re.status_code == 400
+
     re = requests.get(base_url + 'incidents/fakeid')
     assert re.status_code == 400
 
@@ -3602,20 +3615,18 @@ def test_tag_incident(sample_plan_name, sample_application_name, superuser_appli
     assert re.status_code == 200
     response = re.json()
     assert len(response) == 2
-    assert response[0]["id"] == incident_id or response[1]["id"] == incident_id2
-    assert (
-        response[1]["id"] == incident_id or response[1]["id"] == incident_id2
-    ) and response[0]["id"] != response[1]["id"]
+    assert response[0]["id"] == incident_id or response[0]["id"] == incident_id2
+    assert response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert response[0]["id"] != response[1]["id"]
 
     # filter on existence of team tag
     re = requests.get(base_url + "incidents?tag_team__exists=true&tag_team=foo_team")
     assert re.status_code == 200
     response = re.json()
     assert len(response) == 2
-    assert response[0]["id"] == incident_id or response[1]["id"] == incident_id2
-    assert (
-        response[1]["id"] == incident_id or response[1]["id"] == incident_id2
-    ) and response[0]["id"] != response[1]["id"]
+    assert response[0]["id"] == incident_id or response[0]["id"] == incident_id2
+    assert response[1]["id"] == incident_id or response[1]["id"] == incident_id2
+    assert response[0]["id"] != response[1]["id"]
 
     # filter on non-existence of team tag
     re = requests.get(base_url + "incidents?tag_team__exists=false&tag_team=foo_team")
