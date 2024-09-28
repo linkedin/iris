@@ -51,7 +51,7 @@ setuptools.setup(
         'beaker',
         'cryptography==3.2',
         'webassets',
-        'python-ldap==3.1.0',
+        'python-ldap==3.4.0',
         'exchangelib==2.2.0',
         'setproctitle',
         'pyfcm==1.4.3',
