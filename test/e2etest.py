@@ -1660,6 +1660,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                             {'role': 'user', 'target': sample_team},
                             {'role': 'user', 'target': sample_user}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
+    assert re.json() == {'title': 'test'}
     assert re.status_code == 200
 
 
