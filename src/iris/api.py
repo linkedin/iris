@@ -2227,7 +2227,7 @@ class Incidents(object):
             if num_dynamic > 0:
                 target_list = incident_params.get('dynamic_targets', [])
                 if num_dynamic > len(target_list):
-                    raise HTTPBadRequest('Invalid number of dynamic targets')
+                    raise HTTPBadRequest('Insufficient number of dynamic targets')
 
                 for idx, dynamic_target in enumerate(target_list):
                     if idx >= num_dynamic:

@@ -1642,7 +1642,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'dynamic_targets': [{'role': 'user', 'target': sample_user}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    assert re.json() == {'title': 'Insufficient number of dynamic targets'}
 
     # No targets specified
     re = requests.post(base_url + 'incidents', json={
@@ -1650,7 +1650,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'context': {}
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    assert re.json() == {'title': 'Insufficient number of dynamic targets'}
 
     # Too many targets
     re = requests.post(base_url + 'incidents', json={
