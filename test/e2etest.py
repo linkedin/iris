@@ -1657,10 +1657,13 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
         'dynamic_targets': [{'role': 'user', 'target': sample_user},
-                            {'role': 'user', 'target': sample_team},
-                            {'role': 'user', 'target': sample_user}]
+                            {'role': 'team', 'target': sample_team},
+                            {'role': 'user', 'target': sample_user}],
+        "dynamic_tracking_notifications": [{"mode": "slack", "destination": "#iris-slack-testing"}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
-    assert re.json() == {'title': 'test'}
+    incident_id = int(re.content)
+    assert re.status_code == 201
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
     assert re.status_code == 200
 
 
