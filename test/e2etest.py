@@ -1660,8 +1660,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
                             {'role': 'user', 'target': sample_team},
                             {'role': 'user', 'target': sample_user}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
-    assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    assert re.status_code == 200
 
 
 def test_post_incident_change_application(sample_user, sample_application_name, sample_application_name2, superuser_application):

@@ -2226,10 +2226,12 @@ class Incidents(object):
 
             if num_dynamic > 0:
                 target_list = incident_params.get('dynamic_targets', [])
-                if num_dynamic != len(target_list):
+                if num_dynamic > len(target_list):
                     raise HTTPBadRequest('Invalid number of dynamic targets')
 
-                for dynamic_target in target_list:
+                for idx, dynamic_target in enumerate(target_list):
+                    if idx >= num_dynamic:
+                        break
                     target = session.execute('''SELECT `target_role`.`id` AS `role_id`, `target`.`id` AS `target_id`
                                                 FROM `target` JOIN `target_role`
                                                     ON `target_role`.`type_id` = `target`.`type_id`
