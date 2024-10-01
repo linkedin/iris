@@ -1642,7 +1642,7 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'dynamic_targets': [{'role': 'user', 'target': sample_user}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    assert re.json() == {'title': 'Insufficient number of dynamic targets'}
 
     # No targets specified
     re = requests.post(base_url + 'incidents', json={
@@ -1650,18 +1650,21 @@ def test_post_dynamic_incident(sample_user, sample_team, sample_application_name
         'context': {}
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
     assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    assert re.json() == {'title': 'Insufficient number of dynamic targets'}
 
     # Too many targets
     re = requests.post(base_url + 'incidents', json={
         'plan': sample_user + '-test-incident-dynamic-post',
         'context': {},
         'dynamic_targets': [{'role': 'user', 'target': sample_user},
-                            {'role': 'user', 'target': sample_team},
-                            {'role': 'user', 'target': sample_user}]
+                            {'role': 'team', 'target': sample_team},
+                            {'role': 'user', 'target': sample_user}],
+        "dynamic_tracking_notifications": [{"mode": "slack", "destination": "#iris-slack-testing"}]
     }, headers={'Authorization': 'hmac %s:abc' % sample_application_name})
-    assert re.status_code == 400
-    assert re.json() == {'title': 'Invalid number of dynamic targets'}
+    incident_id = int(re.content)
+    assert re.status_code == 201
+    re = requests.get(base_url + 'incidents/%s' % incident_id)
+    assert re.status_code == 200
 
 
 def test_post_incident_change_application(sample_user, sample_application_name, sample_application_name2, superuser_application):
