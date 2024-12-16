@@ -37,7 +37,7 @@ from iris.sender.quota import (get_application_quotas_query,
 from iris.utils import sanitize_unicode_dict
 from iris.vendors.iris_slack import iris_slack
 
-from . import app_stats, cache, client, db, ui, utils
+from . import app_stats, cache, client, db, ui, utils, sso
 from .config import load_config
 from .constants import (PRIORITY_PRECEDENCE_MAP, XCONTENTTYPEOPTIONS, XFRAME,
                         XXSSPROTECTION, MAX_QUERY_LIST_LEN)
@@ -988,7 +988,7 @@ class ReqBodyMiddleware(object):
 
 class AuthMiddleware(object):
     def __init__(self, config={}, debug=False):
-
+        self.sso_manager = sso.SSOManager(config)
         self.allowlisted_apps = config.get('allowlisted_internal_apps', [])
         if debug:
             self.process_resource = self.debug_auth
@@ -1038,7 +1038,13 @@ class AuthMiddleware(object):
             return
 
     def process_resource(self, req, resp, resource, params):  # pragma: no cover
-        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
+        sso_username = self.sso_manager.authenticate(req)
+        sso_success = False
+        if sso_username:
+            req.context['username'] = sso_username
+            sso_success = True
+        else:
+            req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         method = req.method
 
         if resource.allow_read_no_auth and method == 'GET':
@@ -1134,7 +1140,7 @@ class AuthMiddleware(object):
                 logger.exception('Authentication failure')
                 raise HTTPUnauthorized('Authentication failure', '', [])
 
-        else:
+        elif not sso_success:
             logger.warning('Request has malformed/missing HMAC authorization header')
             raise HTTPUnauthorized('Authentication failure', 'Malformed/missing HMAC authorization header', [])
 
@@ -6852,14 +6858,17 @@ class InternalBuildMessages():
         notifications = []
         if notification.get('unexpanded'):
             notification['destination'] = notification['target']
+            notification['role'] = role
             notifications.append(notification)
         elif notification.get('multi-recipient'):
             notification['target'] = expanded_targets
+            notification['role'] = role
             notifications.append(notification)
         else:
             for _target in expanded_targets:
                 temp_notification = notification.copy()
                 temp_notification['target'] = _target
+                temp_notification['role'] = role
                 notifications.append(temp_notification)
 
         messages = []
