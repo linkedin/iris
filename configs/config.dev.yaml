@@ -66,6 +66,10 @@ user_session:
   encrypt_key: 'abc'
   sign_key: '123'
 
+sso:
+  enabled: True
+  debug: True  # DEBUG AUTH, DISABLE IN PRODUCTION!
+
 supported_timezones:
   - 'US/Pacific'
   - 'US/Eastern'

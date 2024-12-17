@@ -28,7 +28,6 @@ class SSOManager:
 
     def debug_authenticate(self, request):
         """Authenticate using debug credentials taken from header"""
-        print("DEBUG sso AUTHENTICATE")
         # DUMMY SSO AUTHENTICATION FOR TEST USE ONLY, DO NOT USE IN PRODUCTION! Replace with your own SSO authentication module.
         if 'SSO-DEBUG-HEADER' in request.headers:
             return request.headers.get('SSO-DEBUG-HEADER')

@@ -994,7 +994,11 @@ class AuthMiddleware(object):
             self.process_resource = self.debug_auth
 
     def debug_auth(self, req, resp, resource, params):
-        req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
+        sso_username = self.sso_manager.authenticate(req)
+        if sso_username:
+            req.context['username'] = sso_username
+        else:
+            req.context['username'] = req.env.get('beaker.session', {}).get('user', None)
         method = req.method
 
         if resource.allow_read_no_auth and method == 'GET':
