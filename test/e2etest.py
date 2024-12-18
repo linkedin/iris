@@ -3886,6 +3886,10 @@ def test_ui_routes_redirect(sample_user, sample_admin_user):
     assert re.status_code == 302
     assert re.headers['Location'] == '/login'
 
+    # add sso header, this should prevent login flow from happening
+    re = requests.get(ui_url + 'incidents', allow_redirects=False, headers={'SSO-DEBUG-HEADER': sample_user})
+    assert re.status_code == 200
+
 
 def test_ui_route_login_page(sample_user, sample_admin_user):
     # And login page displays itself
