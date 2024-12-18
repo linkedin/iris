@@ -9,7 +9,7 @@ class SSOManager:
     def __init__(self, config):
         sso_cfg = config.get('sso', {})
         if not sso_cfg.get('enabled', False):
-            logger.info('SSO passthrough enabled')
+            logger.info('SSO disabled')
             self.authenticate = self.passthrough
             return
 
