@@ -15,6 +15,7 @@ from sphinxcontrib.autohttp.common import (
     http_directive as autohttp_http_directive
 )
 
+
 def decode_docstring(docstring, module_name):
     """
     Decode the docstring if it's in bytes.
@@ -32,6 +33,7 @@ def decode_docstring(docstring, module_name):
         return docstring.decode(encoding)
     return docstring
 
+
 def get_routes(app):
     # deep first tree walk on routing tree
     walk_queue = [node for node in app._router._roots]
@@ -44,6 +46,7 @@ def get_routes(app):
 
         if curr_node.children:
             walk_queue = [chl_node for chl_node in curr_node.children] + walk_queue
+
 
 class AutofalconDirective(Directive):
     has_content = True
@@ -90,6 +93,7 @@ class AutofalconDirective(Directive):
             result.append(line, '<autofalcon>')
         nested_parse_with_titles(self.state, result, node)
         return node.children
+
 
 def setup(app):
     # Modern Sphinx does not have a `domains` attribute. Use `has_domain` instead.
