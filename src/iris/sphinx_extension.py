@@ -4,11 +4,10 @@
 from docutils import nodes
 from docutils.statemachine import ViewList
 
-from sphinx.util import force_decode
-from sphinx.util.compat import Directive
 from sphinx.util.nodes import nested_parse_with_titles
 from sphinx.util.docstrings import prepare_docstring
 from sphinx.pycode import ModuleAnalyzer
+from docutils.parsers.rst import Directive
 
 from sphinxcontrib import httpdomain
 from sphinxcontrib.autohttp.common import (
@@ -16,6 +15,22 @@ from sphinxcontrib.autohttp.common import (
     http_directive as autohttp_http_directive
 )
 
+def decode_docstring(docstring, module_name):
+    """
+    Decode the docstring if it's in bytes.
+
+    Args:
+        docstring: The docstring to decode.
+        module_name: The module name to fetch encoding information if needed.
+
+    Returns:
+        A decoded string.
+    """
+    if isinstance(docstring, bytes):
+        analyzer = ModuleAnalyzer.for_module(module_name)
+        encoding = analyzer.encoding or 'utf-8'
+        return docstring.decode(encoding)
+    return docstring
 
 def get_routes(app):
     # deep first tree walk on routing tree
@@ -30,19 +45,16 @@ def get_routes(app):
         if curr_node.children:
             walk_queue = [chl_node for chl_node in curr_node.children] + walk_queue
 
-
 class AutofalconDirective(Directive):
     has_content = True
     required_arguments = 1
 
     def make_rst(self, section_title_set):
-        # print('importing falcon app %s...' % self.arguments[0])
         app = autohttp_import_object(self.arguments[0])
         for method, path, handler in get_routes(app):
             docstring = handler.__doc__
             if not isinstance(docstring, str):
-                analyzer = ModuleAnalyzer.for_module(handler.__module__)
-                docstring = force_decode(docstring, analyzer.encoding)
+                docstring = decode_docstring(docstring, handler.__module__)
             if not docstring and 'include-empty-docstring' not in self.options:
                 continue
             # exclude falcon HTTPMethodNotAllowed endpoints
@@ -79,8 +91,8 @@ class AutofalconDirective(Directive):
         nested_parse_with_titles(self.state, result, node)
         return node.children
 
-
 def setup(app):
-    if 'http' not in app.domains:
+    # Modern Sphinx does not have a `domains` attribute. Use `has_domain` instead.
+    if not app.registry.has_domain('http'):
         httpdomain.setup(app)
     app.add_directive('autofalcon', AutofalconDirective)
