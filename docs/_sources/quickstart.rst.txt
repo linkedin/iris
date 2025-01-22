@@ -37,7 +37,7 @@ environment.
 
     virtualenv venv
     source venv/bin/activate
-    sudo apt-get install libssl-dev libxml2-dev libxslt1-dev libsasl2-dev python-dev libldap2-dev
+    sudo apt-get install libssl-dev libxml2-dev libxslt1-dev libsasl2-dev python3-dev libldap2-dev
     pip install -e '.[dev,kazoo]'
 
 Configuring the database
