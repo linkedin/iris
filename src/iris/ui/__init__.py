@@ -103,7 +103,7 @@ def get_flash(req):
 # beaker cookies so the current user can be authenticated. This will go away once each page
 # that makes use of window.appData is converted to use ajax for those values instead.
 def get_local_api(req, path):
-    return requests.get('%s/v0/%s' % (local_api_url, path), cookies=req.cookies).json()
+    return requests.get('%s/v0/%s' % (local_api_url, path), cookies=req.cookies, headers=req.headers).json()
 
 
 def create_qr_code(qr_base_url, qr_login_url):
