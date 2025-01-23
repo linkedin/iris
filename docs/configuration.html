@@ -1,47 +1,46 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Configuration &mdash; Iris 1.0.28 documentation</title>
+  <title>Configuration &mdash; Iris 1.1.38 documentation</title>
   
-
-  
-  
-  
-  
-
-  
-  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
-  
-    
-      <script type="text/javascript">
-          var DOCUMENTATION_OPTIONS = {
-              URL_ROOT:'./',
-              VERSION:'1.0.28',
-              LANGUAGE:'None',
-              COLLAPSE_INDEX:false,
-              FILE_SUFFIX:'.html',
-              HAS_SOURCE:  true,
-              SOURCELINK_SUFFIX: '.txt'
-          };
-      </script>
-        <script type="text/javascript" src="_static/jquery.js"></script>
-        <script type="text/javascript" src="_static/underscore.js"></script>
-        <script type="text/javascript" src="_static/doctools.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
 
   
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Nagios Integration" href="nagios.html" />
@@ -69,7 +68,7 @@
             
             
               <div class="version">
-                1.0.28
+                1.1.38
               </div>
             
           
@@ -86,6 +85,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -116,6 +116,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -150,11 +151,13 @@
 
 
 
+
+
 <div role="navigation" aria-label="breadcrumbs navigation">
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="index.html">Docs</a> &raquo;</li>
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
         
           <li><a href="admin_manual.html">Iris admin manual</a> &raquo;</li>
         
@@ -163,7 +166,7 @@
     
       <li class="wy-breadcrumbs-aside">
         
-            
+          
             <a href="_sources/configuration.rst.txt" rel="nofollow"> View page source</a>
           
         
@@ -178,110 +181,116 @@
            <div itemprop="articleBody">
             
   <div class="section" id="configuration">
-<h1>Configuration<a class="headerlink" href="#configuration" title="Permalink to this headline">¶</a></h1>
+<h1>Configuration<a class="headerlink" href="#configuration" title="Permalink to this heading">¶</a></h1>
 <div class="section" id="oncall-integration">
-<h2>Oncall integration<a class="headerlink" href="#oncall-integration" title="Permalink to this headline">¶</a></h2>
+<h2>Oncall integration<a class="headerlink" href="#oncall-integration" title="Permalink to this heading">¶</a></h2>
 <p>Iris communicates with Oncall primarily through its role_lookup plugins, which allow it to
 determine a message recipient given a role:target pair. To use Oncall with Iris:</p>
 <ol class="arabic simple">
-<li>Configure Iris to communicate with Oncall by setting the &#8220;oncall-api&#8221; key in the config to
-the URL where Oncall is hosted</li>
-<li>In the &#8220;role_lookups&#8221; key, include &#8220;oncall&#8221; in the list and remove &#8220;dummy&#8221;</li>
-<li>Import targets from Oncall by running the following command:</li>
+<li><p>Configure Iris to communicate with Oncall by setting the “oncall-api” key in the config to
+the URL where Oncall is hosted</p></li>
+<li><p>In the “role_lookups” key, include “oncall” in the list and remove “dummy”</p></li>
+<li><p>Import targets from Oncall by running the following command:</p></li>
 </ol>
-<div class="highlight-bash"><div class="highlight"><pre><span></span>./iris-sync-targets /home/iris/config/config.yaml
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./iris-sync-targets<span class="w"> </span>/home/iris/config/config.yaml
 </pre></div>
 </div>
 </div>
 <div class="section" id="slack-integration">
-<h2>Slack integration<a class="headerlink" href="#slack-integration" title="Permalink to this headline">¶</a></h2>
+<h2>Slack integration<a class="headerlink" href="#slack-integration" title="Permalink to this heading">¶</a></h2>
 <div class="section" id="adding-slack-bot">
-<h3>Adding Slack bot<a class="headerlink" href="#adding-slack-bot" title="Permalink to this headline">¶</a></h3>
+<h3>Adding Slack bot<a class="headerlink" href="#adding-slack-bot" title="Permalink to this heading">¶</a></h3>
 <p>Iris can send Slack messages by integrating with a Slack bot.</p>
 <ol class="arabic simple">
-<li>Create a Slack App<ol class="arabic">
-<li>Go to <a class="reference external" href="https://api.slack.com/apps">https://api.slack.com/apps</a>.</li>
-<li>Click &#8220;Create New App&#8221; button on the upper right.</li>
-<li>Provide an App Name (example - iris)</li>
-<li>Choose your Slack team</li>
-<li>Click &#8220;Create App&#8221;</li>
+<li><p>Create a Slack App</p>
+<ol class="arabic simple">
+<li><p>Go to <a class="reference external" href="https://api.slack.com/apps">https://api.slack.com/apps</a>.</p></li>
+<li><p>Click “Create New App” button on the upper right.</p></li>
+<li><p>Provide an App Name (example - iris)</p></li>
+<li><p>Choose your Slack team</p></li>
+<li><p>Click “Create App”</p></li>
 </ol>
 </li>
-<li>Go to &#8220;Bot Users&#8221; under &#8220;Features&#8221; and do the following:<ol class="arabic">
-<li>Click &#8220;Add a Bot User&#8221;</li>
-<li>Choose a default username for the bot (example - iris)</li>
-<li>Click &#8220;Add Bot User&#8221;</li>
-<li>Click &#8220;Save Changes&#8221;</li>
+<li><p>Go to “Bot Users” under “Features” and do the following:</p>
+<ol class="arabic simple">
+<li><p>Click “Add a Bot User”</p></li>
+<li><p>Choose a default username for the bot (example - iris)</p></li>
+<li><p>Click “Add Bot User”</p></li>
+<li><p>Click “Save Changes”</p></li>
 </ol>
 </li>
-<li>To enable Interactive Message, click &#8220;Interactive Messages&#8221; under &#8220;Features&#8221; and do the following:<ol class="arabic">
-<li>Click &#8220;Enable Interactive Messages&#8221;</li>
-<li>Add a HTTPS endpoint: &#8220;<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>&#8220;</li>
-<li>Click &#8220;Enable Interactive Messages&#8221; button</li>
+<li><p>To enable Interactive Message, click “Interactive Messages” under “Features” and do the following:</p>
+<ol class="arabic simple">
+<li><p>Click “Enable Interactive Messages”</p></li>
+<li><p>Add a HTTPS endpoint: “<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>”</p></li>
+<li><p>Click “Enable Interactive Messages” button</p></li>
 </ol>
 </li>
-<li>Click &#8220;OAuth &amp; Permissions&#8221; under &#8220;Features&#8221; and do the folling:<ol class="arabic">
-<li>Under Permission Scopes, add the following:<ul>
-<li>incoming-webhook</li>
-<li>commands</li>
-<li>bot</li>
-<li>channels:read</li>
-<li>chat:write:bot</li>
+<li><p>Click “OAuth &amp; Permissions” under “Features” and do the folling:</p>
+<ol class="arabic simple">
+<li><p>Under Permission Scopes, add the following:</p>
+<ul class="simple">
+<li><p>incoming-webhook</p></li>
+<li><p>commands</p></li>
+<li><p>bot</p></li>
+<li><p>channels:read</p></li>
+<li><p>chat:write:bot</p></li>
 </ul>
 </li>
-<li>Click &#8220;Save Changes&#8221;</li>
-<li>Under &#8220;OAuth Tokens &amp; Redirect URLs&#8221; section:<ol class="arabic">
-<li>Click &#8220;Install App to Team&#8221;</li>
-<li>Redirected to a confirmation page that has all the details about the bot</li>
-<li>Choose &#8220;Slackbot&#8221; in the Post to dropdown</li>
-<li>Click &#8220;Authorize&#8221;</li>
+<li><p>Click “Save Changes”</p></li>
+<li><p>Under “OAuth Tokens &amp; Redirect URLs” section:</p>
+<ol class="arabic simple">
+<li><p>Click “Install App to Team”</p></li>
+<li><p>Redirected to a confirmation page that has all the details about the bot</p></li>
+<li><p>Choose “Slackbot” in the Post to dropdown</p></li>
+<li><p>Click “Authorize”</p></li>
 </ol>
 </li>
 </ol>
 </li>
 </ol>
 <p>After completing the above steps, you should be able to find the following two secrets:</p>
-<dl class="docutils">
-<dt>Bot User OAuth Token</dt>
-<dd>Found under &#8220;Features&#8221; -&gt; &#8220;OAuth &amp; Permissions&#8221; -&gt; &#8220;OAuth Tokens &amp; Redirect Urls&#8221; -&gt; &#8220;Bot User OAuth Access Token&#8221;</dd>
-<dt>Verification Token</dt>
-<dd>Found under &#8220;Settings&#8221; -&gt; &#8220;Basic Information&#8221; -&gt; &#8220;App Credentials&#8221;</dd>
+<dl class="simple">
+<dt>Bot User OAuth Token</dt><dd><p>Found under “Features” -&gt; “OAuth &amp; Permissions” -&gt; “OAuth Tokens &amp; Redirect Urls” -&gt; “Bot User OAuth Access Token”</p>
+</dd>
+<dt>Verification Token</dt><dd><p>Found under “Settings” -&gt; “Basic Information” -&gt; “App Credentials”</p>
+</dd>
 </dl>
 </div>
 <div class="section" id="updating-iris-configs">
-<h3>Updating Iris configs<a class="headerlink" href="#updating-iris-configs" title="Permalink to this headline">¶</a></h3>
+<h3>Updating Iris configs<a class="headerlink" href="#updating-iris-configs" title="Permalink to this heading">¶</a></h3>
 <p>The last step is to create the slack config section with those secrets for Iris and Iris relay.</p>
 <p>In Iris config, add the following section under venders block with <strong>Bot User OAuth Token</strong>:</p>
-<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="nt">vendors</span><span class="p">:</span>
-<span class="p p-Indicator">-</span> <span class="nt">type</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">iris_slack</span>
-  <span class="nt">name</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">slack</span>
-  <span class="nt">auth_token</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">BOT_USER_OAUTH_TOKEN</span>
-  <span class="nt">base_url</span><span class="p">:</span> <span class="s">&#39;https://slack.com/api/chat.postMessage&#39;</span>
-  <span class="c1"># this url config is for constructing url link for the message title</span>
-  <span class="nt">iris_incident_url</span><span class="p">:</span> <span class="s">&#39;https://YOUR_IRIS_URL/incidents&#39;</span>
-  <span class="c1"># we also support an optional proxy key here</span>
-  <span class="nt">message_attachments</span><span class="p">:</span>
-    <span class="nt">fallback</span><span class="p">:</span> <span class="s">&#39;New</span><span class="nv"> </span><span class="s">Iris</span><span class="nv"> </span><span class="s">notification!&#39;</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">vendors</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">iris_slack</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slack</span>
+<span class="w">  </span><span class="nt">auth_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">BOT_USER_OAUTH_TOKEN</span>
+<span class="w">  </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;https://slack.com/api/chat.postMessage&#39;</span>
+<span class="w">  </span><span class="c1"># this url config is for constructing url link for the message title</span>
+<span class="w">  </span><span class="nt">iris_incident_url</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;https://YOUR_IRIS_URL/incidents&#39;</span>
+<span class="w">  </span><span class="c1"># we also support an optional proxy key here</span>
+<span class="w">  </span><span class="nt">message_attachments</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">fallback</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;New</span><span class="nv"> </span><span class="s">Iris</span><span class="nv"> </span><span class="s">notification!&#39;</span>
 </pre></div>
 </div>
 <p>In Iris relay config, add the following top level section with <strong>Verification Token</strong>:</p>
-<div class="highlight-yaml"><div class="highlight"><pre><span></span><span class="nt">slack</span><span class="p">:</span>
-  <span class="nt">auth_token</span><span class="p">:</span> <span class="l l-Scalar l-Scalar-Plain">VERIFICATION_TOKEN</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">slack</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">auth_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VERIFICATION_TOKEN</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="known-issues">
-<h3>Known issues<a class="headerlink" href="#known-issues" title="Permalink to this headline">¶</a></h3>
+<h3>Known issues<a class="headerlink" href="#known-issues" title="Permalink to this heading">¶</a></h3>
 <p>For message button integration, your relay should be getting POST request from
 Slack every time a button is clicked. If your relay is getting GET instead of
 POST, then you are running into a known bug in Slack. You will need to reset
 the relay webhook state by doing the following:</p>
 <ol class="arabic simple">
-<li>Go to &#8220;Interactive Messages&#8221; under &#8220;Features&#8221;</li>
-<li>Set HTTPS endpont to a URL under another domain. For example, you can use <a class="reference external" href="https://www.google.comw">https://www.google.comw</a></li>
-<li>Click &#8220;Save changes&#8221; button</li>
-<li>Set HTTPS endpoint back to your relay: &#8220;<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>&#8220;</li>
-<li>Click &#8220;Save changes&#8221; button again</li>
+<li><p>Go to “Interactive Messages” under “Features”</p></li>
+<li><p>Set HTTPS endpont to a URL under another domain. For example, you can use <a class="reference external" href="https://www.google.comw">https://www.google.comw</a></p></li>
+<li><p>Click “Save changes” button</p></li>
+<li><p>Set HTTPS endpoint back to your relay: “<a class="reference external" href="https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay">https://YOUR_PUBLIC_IRIS_RELAY_URL/api/v0/slack/messages/relay</a>”</p></li>
+<li><p>Click “Save changes” button again</p></li>
 </ol>
 </div>
 </div>
@@ -292,29 +301,29 @@ the relay webhook state by doing the following:</p>
            
           </div>
           <footer>
-  
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="nagios.html" class="btn btn-neutral float-right" title="Nagios Integration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
-      
-      
-        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
-      
+        <a href="nagios.html" class="btn btn-neutral float-right" title="Nagios Integration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
-  
 
   <hr/>
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2017, The Iris team
+        &#169; Copyright 2017, The Iris team.
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
-
         </div>
       </div>
 
@@ -322,7 +331,6 @@ the relay webhook state by doing the following:</p>
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {

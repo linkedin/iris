@@ -1,47 +1,46 @@
 
 
 <!DOCTYPE html>
-<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Installation &mdash; Iris 1.0.28 documentation</title>
+  <title>Installation &mdash; Iris 1.1.38 documentation</title>
   
-
-  
-  
-  
-  
-
-  
-  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
-  
-    
-      <script type="text/javascript">
-          var DOCUMENTATION_OPTIONS = {
-              URL_ROOT:'./',
-              VERSION:'1.0.28',
-              LANGUAGE:'None',
-              COLLAPSE_INDEX:false,
-              FILE_SUFFIX:'.html',
-              HAS_SOURCE:  true,
-              SOURCELINK_SUFFIX: '.txt'
-          };
-      </script>
-        <script type="text/javascript" src="_static/jquery.js"></script>
-        <script type="text/javascript" src="_static/underscore.js"></script>
-        <script type="text/javascript" src="_static/doctools.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
 
   
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Configuration" href="configuration.html" />
@@ -69,7 +68,7 @@
             
             
               <div class="version">
-                1.0.28
+                1.1.38
               </div>
             
           
@@ -86,6 +85,7 @@
           
         </div>
 
+        
         <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
           
             
@@ -118,6 +118,7 @@
             
           
         </div>
+        
       </div>
     </nav>
 
@@ -152,11 +153,13 @@
 
 
 
+
+
 <div role="navigation" aria-label="breadcrumbs navigation">
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="index.html">Docs</a> &raquo;</li>
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
         
           <li><a href="admin_manual.html">Iris admin manual</a> &raquo;</li>
         
@@ -165,7 +168,7 @@
     
       <li class="wy-breadcrumbs-aside">
         
-            
+          
             <a href="_sources/installation.rst.txt" rel="nofollow"> View page source</a>
           
         
@@ -180,46 +183,46 @@
            <div itemprop="articleBody">
             
   <div class="section" id="installation">
-<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h1>
 <div class="section" id="getting-started-with-docker">
-<h2>Getting started with Docker<a class="headerlink" href="#getting-started-with-docker" title="Permalink to this headline">¶</a></h2>
+<h2>Getting started with Docker<a class="headerlink" href="#getting-started-with-docker" title="Permalink to this heading">¶</a></h2>
 <p>We have built a docker compose setup for you to spin up Iris cluster in one
 command. Please clone the docker compose <a class="reference external" href="https://github.com/jrgp/iris-docker-compose">repository</a> and follow the readme
 there.</p>
 </div>
 <div class="section" id="user-management">
-<h2>User management<a class="headerlink" href="#user-management" title="Permalink to this headline">¶</a></h2>
+<h2>User management<a class="headerlink" href="#user-management" title="Permalink to this heading">¶</a></h2>
 <p>At LinkedIn, user management is done in an Active Directory server external
-to the Iris/Oncall system. We use the <code class="docutils literal"><span class="pre">sync_targets.py</span> <span class="pre">script</span></code> in <code class="docutils literal"><span class="pre">src/iris/bin</span></code>
-for our user management, syncing Iris&#8217;s list of users from Oncall. If this
-is too heavyweight for your use-case (or you&#8217;re just starting to work with
+to the Iris/Oncall system. We use the <code class="docutils literal notranslate"><span class="pre">sync_targets.py</span> <span class="pre">script</span></code> in <code class="docutils literal notranslate"><span class="pre">src/iris/bin</span></code>
+for our user management, syncing Iris’s list of users from Oncall. If this
+is too heavyweight for your use-case (or you’re just starting to work with
 Iris), we have a small user administration tool that can populate the Iris
 database without setting up this sync script: <a class="reference external" href="https://github.com/jrgp/iris-admin">iris-admin</a>.</p>
 </div>
 <div class="section" id="integrating-iris-and-oncall">
-<h2>Integrating Iris and Oncall<a class="headerlink" href="#integrating-iris-and-oncall" title="Permalink to this headline">¶</a></h2>
+<h2>Integrating Iris and Oncall<a class="headerlink" href="#integrating-iris-and-oncall" title="Permalink to this heading">¶</a></h2>
 <p>Iris uses Oncall for two primary functions: user management and role lookup.</p>
-<p>User management with Oncall is controlled via the <code class="docutils literal"><span class="pre">sync_targets.py</span></code> script in
-<code class="docutils literal"><span class="pre">src/iris/bin</span></code>. This is configured with the <code class="docutils literal"><span class="pre">oncall-api</span></code> key in the Iris
-config file. In our provided example <code class="docutils literal"><span class="pre">config.dev.yaml</span></code>, this is set to
-<code class="docutils literal"><span class="pre">localhost:8080</span></code>. Running the target sync script will sync all teams, users,
+<p>User management with Oncall is controlled via the <code class="docutils literal notranslate"><span class="pre">sync_targets.py</span></code> script in
+<code class="docutils literal notranslate"><span class="pre">src/iris/bin</span></code>. This is configured with the <code class="docutils literal notranslate"><span class="pre">oncall-api</span></code> key in the Iris
+config file. In our provided example <code class="docutils literal notranslate"><span class="pre">config.dev.yaml</span></code>, this is set to
+<code class="docutils literal notranslate"><span class="pre">localhost:8080</span></code>. Running the target sync script will sync all teams, users,
 and user contact info from Oncall into Iris.</p>
-<p>For role lookup, Iris queries Oncall with the <code class="docutils literal"><span class="pre">oncall</span></code> class in
-<code class="docutils literal"><span class="pre">src/iris/role_lookup/oncall.py</span></code>. In an Iris plan, users can specify roles
-such as &#8220;oncall-primary&#8221; and &#8220;oncall-secondary&#8221;. Then, in the Iris sender,
+<p>For role lookup, Iris queries Oncall with the <code class="docutils literal notranslate"><span class="pre">oncall</span></code> class in
+<code class="docutils literal notranslate"><span class="pre">src/iris/role_lookup/oncall.py</span></code>. In an Iris plan, users can specify roles
+such as “oncall-primary” and “oncall-secondary”. Then, in the Iris sender,
 Iris will look up the current on-call for the specified team using a REST API
-call to Oncall. This is again configured with the <code class="docutils literal"><span class="pre">oncall-api</span></code> key in the
+call to Oncall. This is again configured with the <code class="docutils literal notranslate"><span class="pre">oncall-api</span></code> key in the
 Iris config file.</p>
 </div>
 <div class="section" id="development-setup-of-iris-and-oncall">
-<h2>Development Setup of Iris and Oncall<a class="headerlink" href="#development-setup-of-iris-and-oncall" title="Permalink to this headline">¶</a></h2>
+<h2>Development Setup of Iris and Oncall<a class="headerlink" href="#development-setup-of-iris-and-oncall" title="Permalink to this heading">¶</a></h2>
 <ol class="arabic simple">
-<li>Set up MySQL for both Iris and Oncall. In both projects, database schemas and dummy data can be found in the <code class="docutils literal"><span class="pre">db</span></code> directory. These can be loaded with <code class="docutils literal"><span class="pre">mysql</span> <span class="pre">-u</span>&#160; <span class="pre">user</span> <span class="pre">-p</span> <span class="pre">&lt;</span> <span class="pre">schema_0.sql</span></code>, and so on for the other sql files. You may need to toggle the <code class="docutils literal"><span class="pre">ONLY_FULL_GROUP_BY</span></code> MySQL mode with the query: <code class="docutils literal"><span class="pre">SET</span> <span class="pre">GLOBAL</span> <span class="pre">sql_mode=(SELECT</span> <span class="pre">REPLACE(&#64;&#64;sql_mode,'ONLY_FULL_GROUP_BY',''));</span></code></li>
-<li>For both projects, install required dependencies in a virtualenv, then run them locally using <code class="docutils literal"><span class="pre">make</span></code>.</li>
-<li>Manage Oncall users, either using the LDAP sync script or with <a class="reference external" href="https://github.com/dwang159/oncall-admin">oncall-admin</a>. Load users and contact info into Oncall, then use the Oncall UI (hosted on <code class="docutils literal"><span class="pre">localhost:8080</span></code> by default) to create teams and on-call events/rotations.</li>
-<li>Modify the Iris config file, changing the <code class="docutils literal"><span class="pre">oncall-api</span></code> key to the location where Oncall is being hosted (<code class="docutils literal"><span class="pre">localhost:8080</span></code> by default). In addition, in the <code class="docutils literal"><span class="pre">role_lookups</span></code> key, uncomment the oncall line.</li>
-<li>Using the Iris virtualenv, run the <code class="docutils literal"><span class="pre">sync_targets.py</span></code> script using <code class="docutils literal"><span class="pre">make</span> <span class="pre">targets</span></code>. This should sync users from Oncall to Iris.</li>
-<li>To test integration, use the Iris frontend (hosted at <code class="docutils literal"><span class="pre">localhost:16649</span></code> by default) to create an Iris plan using the &#8220;oncall-primary&#8221; role with a team defined in Oncall. Ensure this team has an active primary event in Oncall, then test the plan in the Iris UI. Running the Iris sender (<code class="docutils literal"><span class="pre">make</span> <span class="pre">sender</span></code>) should then result in  logged message sent to the primary on-call of the test team.</li>
+<li><p>Set up MySQL for both Iris and Oncall. In both projects, database schemas and dummy data can be found in the <code class="docutils literal notranslate"><span class="pre">db</span></code> directory. These can be loaded with <code class="docutils literal notranslate"><span class="pre">mysql</span> <span class="pre">-u</span>&#160; <span class="pre">user</span> <span class="pre">-p</span> <span class="pre">&lt;</span> <span class="pre">schema_0.sql</span></code>, and so on for the other sql files. You may need to toggle the <code class="docutils literal notranslate"><span class="pre">ONLY_FULL_GROUP_BY</span></code> MySQL mode with the query: <code class="docutils literal notranslate"><span class="pre">SET</span> <span class="pre">GLOBAL</span> <span class="pre">sql_mode=(SELECT</span> <span class="pre">REPLACE(&#64;&#64;sql_mode,'ONLY_FULL_GROUP_BY',''));</span></code></p></li>
+<li><p>For both projects, install required dependencies in a virtualenv, then run them locally using <code class="docutils literal notranslate"><span class="pre">make</span></code>.</p></li>
+<li><p>Manage Oncall users, either using the LDAP sync script or with <a class="reference external" href="https://github.com/dwang159/oncall-admin">oncall-admin</a>. Load users and contact info into Oncall, then use the Oncall UI (hosted on <code class="docutils literal notranslate"><span class="pre">localhost:8080</span></code> by default) to create teams and on-call events/rotations.</p></li>
+<li><p>Modify the Iris config file, changing the <code class="docutils literal notranslate"><span class="pre">oncall-api</span></code> key to the location where Oncall is being hosted (<code class="docutils literal notranslate"><span class="pre">localhost:8080</span></code> by default). In addition, in the <code class="docutils literal notranslate"><span class="pre">role_lookups</span></code> key, uncomment the oncall line.</p></li>
+<li><p>Using the Iris virtualenv, run the <code class="docutils literal notranslate"><span class="pre">sync_targets.py</span></code> script using <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">targets</span></code>. This should sync users from Oncall to Iris.</p></li>
+<li><p>To test integration, use the Iris frontend (hosted at <code class="docutils literal notranslate"><span class="pre">localhost:16649</span></code> by default) to create an Iris plan using the “oncall-primary” role with a team defined in Oncall. Ensure this team has an active primary event in Oncall, then test the plan in the Iris UI. Running the Iris sender (<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">sender</span></code>) should then result in  logged message sent to the primary on-call of the test team.</p></li>
 </ol>
 </div>
 </div>
@@ -229,29 +232,29 @@ Iris config file.</p>
            
           </div>
           <footer>
-  
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
-      
-      
-        <a href="admin_manual.html" class="btn btn-neutral float-left" title="Iris admin manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
-      
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="admin_manual.html" class="btn btn-neutral float-left" title="Iris admin manual" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
-  
 
   <hr/>
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2017, The Iris team
+        &#169; Copyright 2017, The Iris team.
 
     </p>
   </div>
-  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
-
         </div>
       </div>
 
@@ -259,7 +262,6 @@ Iris config file.</p>
 
   </div>
   
-
 
   <script type="text/javascript">
       jQuery(function () {
