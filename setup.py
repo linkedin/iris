@@ -65,7 +65,7 @@ setuptools.setup(
         'prometheus': ['prometheus_client'],
         'dev': [
             'gunicorn==20.1.0',
-            'Sphinx==1.5.6',
+            'Sphinx==8.1.3',
             'sphinxcontrib-httpdomain',
             'sphinx_rtd_theme',
             # test deps
