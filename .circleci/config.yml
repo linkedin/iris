@@ -20,7 +20,7 @@ jobs:
           name: Install dependencies
           command: |
             sudo apt-get update
-            sudo apt-get install libsasl2-dev python-dev libldap2-dev libssl-dev mysql-server
+            sudo apt-get install libsasl2-dev python-dev libldap2-dev libssl-dev default-mysql-server
       - run:
           name: Prepare virtualenv
           command: |
