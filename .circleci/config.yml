@@ -13,6 +13,10 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Install Chrome pubkey
+          command: |
+            wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+      - run:
           name: Install dependencies
           command: |
             sudo apt-get update
