@@ -26,6 +26,7 @@ jobs:
           command: |
             virtualenv venv
             source venv/bin/activate
+            pip install --upgrade setuptools
             python setup.py develop
             pip install -e '.[dev,kazoo]'
       - run:
