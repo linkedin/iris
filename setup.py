@@ -27,7 +27,6 @@ setuptools.setup(
     packages=setuptools.find_packages('src'),
     include_package_data=True,
     install_requires=[
-        'streql==3.0.2',
         'dnspython',
         'phonenumbers==7.4.1',
         'twilio==6.44.1',

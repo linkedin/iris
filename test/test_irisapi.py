@@ -54,6 +54,7 @@ class TestAuth(falcon.testing.TestCase):
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)
+        api.add_route('/foo/bar/', dummy)
         self.app = api
 
         window = int(time.time()) // 5
@@ -124,6 +125,7 @@ class TestAuth(falcon.testing.TestCase):
         api = falcon.API(middleware=[ReqBodyMiddleware(), AuthMiddleware()])
         dummy = self.DummyResource()
         api.add_route('/foo/bar', dummy)
+        api.add_route('/foo/bar/', dummy)
         self.app = api
 
         window = int(time.time()) // 5
