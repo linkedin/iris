@@ -764,7 +764,7 @@ class ReqBodyMiddleware(object):
     '''
 
     def process_request(self, req, resp):
-        req.context['body'] = req.stream.read()
+        req.context['body'] = req.stream.read(req.content_length or 0)
 
 
 class AuthMiddleware(object):
