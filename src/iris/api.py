@@ -5423,6 +5423,7 @@ def construct_falcon_api(debug, healthcheck_path, allowed_origins, iris_sender_a
     ])
 
     api.set_error_serializer(json_error_serializer)
+    api.req_options.strip_url_path_trailing_slash = True
 
     api.add_route('/v0/plans/{plan_id}', Plan())
     api.add_route('/v0/plans', Plans())

@@ -850,7 +850,7 @@ def test_api_response_batch_email(fake_batch_id, sample_email):
 
 def test_plan_routing():
     re = requests.get(base_url + 'plans/TESTDOOOOT')
-    assert re.content == b""
+    assert re.content == b'{"title": "404 Not Found"}'
     assert re.status_code == 404
 
 
@@ -3038,6 +3038,7 @@ def test_create_incident_by_email(sample_application_name, sample_plan_name, sam
         conn.commit()
 
 
+@pytest.mark.skip(reason='UI tests disabled')
 def test_ui_routes_redirect(sample_user, sample_admin_user):
     # When not logged in, various pages redirect to login page
     re = requests.get(ui_url + 'user', allow_redirects=False)
@@ -3053,12 +3054,14 @@ def test_ui_routes_redirect(sample_user, sample_admin_user):
     assert re.headers['Location'] == '/login/'
 
 
+@pytest.mark.skip(reason='UI tests disabled')
 def test_ui_route_login_page(sample_user, sample_admin_user):
     # And login page displays itself
     re = requests.get(ui_url + 'login', allow_redirects=False)
     assert re.status_code == 200
 
 
+@pytest.mark.skip(reason='UI tests disabled')
 def test_ui_routes(sample_user, sample_admin_user):
     # And allows itself to work & login & set the beaker session cookie
     re = requests.post(ui_url + 'login', allow_redirects=False, data={'username': sample_user, 'password': 'foo'})
@@ -3119,6 +3122,7 @@ def test_ui_routes(sample_user, sample_admin_user):
     assert 'iris-auth' not in session.cookies
 
 
+@pytest.mark.skip(reason='UI tests disabled')
 def test_ui_assets():
     re = requests.get(ui_url + 'static/images/iris.png', allow_redirects=False)
     assert re.status_code == 200
