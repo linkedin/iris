@@ -3,6 +3,7 @@ import time
 import logging
 import ujson
 from falcon import HTTP_201, HTTPBadRequest
+from sqlalchemy import text
 
 from iris import db
 from iris import utils
@@ -35,7 +36,7 @@ class grafana(webhook):
 
         with db.guarded_session() as session:
             plan = req.get_param('plan', True)
-            plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
+            plan_id = session.execute(text('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan'),
                                       {'plan': plan}).scalar()
             if not plan_id:
                 logger.warning('No active plan "%s" found', plan)
@@ -43,12 +44,12 @@ class grafana(webhook):
 
             app = req.context['app']
 
-            if not session.execute('SELECT EXISTS(SELECT 1 FROM `application` WHERE id = :id)', {'id': app['id']}).scalar():
+            if not session.execute(text('SELECT EXISTS(SELECT 1 FROM `application` WHERE id = :id)'),
+                                   {'id': app['id']}).scalar():
                 raise HTTPBadRequest('Invalid application')
 
             context_json_str = self.create_context(alert_params)
-
-            app_template_count = session.execute('''
+            query = '''
                 SELECT EXISTS (
                   SELECT 1 FROM
                   `plan_notification`
@@ -57,7 +58,8 @@ class grafana(webhook):
                   WHERE `plan_notification`.`plan_id` = :plan_id
                   AND `template_content`.`application_id` = :app_id
                 )
-            ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
+            '''
+            app_template_count = session.execute(text(query), {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
                 logger.warning('no plan template exists for this app')
@@ -73,11 +75,10 @@ class grafana(webhook):
                 'bucket_id': utils.generate_bucket_id()
             }
 
-            incident_id = session.execute(
-                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                           `current_step`, `active`, `application_id`, `bucket_id`)
-                   VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
-                data).lastrowid
+            query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                               `current_step`, `active`, `application_id`, `bucket_id`)
+                       VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)'''
+            incident_id = session.execute(text(query), data).lastrowid
 
             session.commit()
             session.close()

@@ -5,6 +5,7 @@ import logging
 import ujson
 import time
 from falcon import HTTP_201, HTTPBadRequest, HTTPNotFound
+from sqlalchemy import text
 
 from iris import db
 from iris import utils
@@ -42,7 +43,7 @@ class webhook(object):
         self.validate_post(alert_params)
 
         with db.guarded_session() as session:
-            plan_id = session.execute('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan',
+            plan_id = session.execute(text('SELECT `plan_id` FROM `plan_active` WHERE `name` = :plan'),
                                       {'plan': plan}).scalar()
             if not plan_id:
                 raise HTTPNotFound()
@@ -50,8 +51,7 @@ class webhook(object):
             app = req.context['app']
 
             context_json_str = self.create_context(alert_params)
-
-            app_template_count = session.execute('''
+            query = '''
                 SELECT EXISTS (
                   SELECT 1 FROM
                   `plan_notification`
@@ -60,7 +60,8 @@ class webhook(object):
                   WHERE `plan_notification`.`plan_id` = :plan_id
                   AND `template_content`.`application_id` = :app_id
                 )
-            ''', {'app_id': app['id'], 'plan_id': plan_id}).scalar()
+            '''
+            app_template_count = session.execute(text(query), {'app_id': app['id'], 'plan_id': plan_id}).scalar()
 
             if not app_template_count:
                 logger.warn('no plan template exists for this app')
@@ -76,11 +77,10 @@ class webhook(object):
                 'bucket_id': utils.generate_bucket_id()
             }
 
-            incident_id = session.execute(
-                '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
-                                           `current_step`, `active`, `application_id`, `bucket_id`)
-                   VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)''',
-                data).lastrowid
+            query = '''INSERT INTO `incident` (`plan_id`, `created`, `context`,
+                                               `current_step`, `active`, `application_id`, `bucket_id`)
+                       VALUES (:plan_id, :created, :context, 0, :active, :application_id, :bucket_id)'''
+            incident_id = session.execute(text(query), data).lastrowid
 
             session.commit()
             session.close()
