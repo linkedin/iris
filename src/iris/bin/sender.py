@@ -14,6 +14,7 @@ import gevent
 import signal
 import setproctitle
 import copy
+from sqlalchemy import text
 
 from collections import defaultdict
 from iris.plugins import init_plugins
@@ -771,7 +772,7 @@ def set_target_fallback_mode(message):
 
 def set_target_contact_by_priority(message):
     session = db.Session()
-    result = session.execute('''
+    query = '''
               SELECT `target_contact`.`destination` AS dest, `mode`.`name` AS mode_name, `mode`.`id` AS mode_id
               FROM `mode`
               JOIN `target` ON `target`.`name` = :target
@@ -816,7 +817,8 @@ def set_target_contact_by_priority(message):
                             AND   `application_mode`.`application_id` = `application`.`id`)
                 -- And ensure this only works for users
                 AND `target_type`.`name` = 'user'
-        ''', message)
+        '''
+    result = session.execute(text(query), message)
 
     try:
         [(destination, mode, mode_id)] = result
@@ -1130,10 +1132,10 @@ def update_message_sent_status(message, status):
     while True:
         retries += 1
         try:
-            session.execute('''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
-                        VALUES (:message_id, :status)
-                        ON DUPLICATE KEY UPDATE `status` =  :status''',
-                            {'message_id': message_id, 'status': status})
+            query = '''INSERT INTO `generic_message_sent_status` (`message_id`, `status`)
+                      VALUES (:message_id, :status)
+                      ON DUPLICATE KEY UPDATE `status` =  :status'''
+            session.execute(text(query), {'message_id': message_id, 'status': status})
             session.commit()
         except Exception:
             logger.warning('Failed setting message sent status for message %s (Try %s/%s)', message_id, retries, max_retries)
