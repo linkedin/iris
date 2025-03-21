@@ -4,6 +4,7 @@
 from .. import db
 from gevent import sleep
 import logging
+from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 MODE_CHANGE = 'mode-change'
@@ -28,10 +29,11 @@ def message_change(message_id, change_type, old, new, description):
         with db.guarded_session() as session:
             retries += 1
             try:
-                session.execute('''
+                query = '''
                   INSERT INTO `message_changelog` (`message_id`, `change_type`, `old`, `new`, `description`, `date`)
                   VALUES (:message_id, :change_type, :old, :new, :description, NOW())
-                ''', dict(message_id=message_id, change_type=change_type, old=old, new=new, description=description))
+                '''
+                session.execute(text(query), dict(message_id=message_id, change_type=change_type, old=old, new=new, description=description))
                 session.commit()
                 session.close()
             except Exception:

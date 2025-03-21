@@ -8,7 +8,7 @@ import logging
 import logging.handlers
 import os
 import uuid
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DataError
 import requests
@@ -228,8 +228,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
     users_to_mark_inactive = iris_usernames - oncall_usernames
 
     # get objects needed for insertion
-    target_types = {name: target_id for name, target_id in session.execute('SELECT `name`, `id` FROM `target_type`')}  # 'team' and 'user'
-    modes = {name: mode_id for name, mode_id in session.execute('SELECT `name`, `id` FROM `mode`')}
+    target_types = {name: target_id for name, target_id in session.execute(text('SELECT `name`, `id` FROM `target_type`'))}  # 'team' and 'user'
+    modes = {name: mode_id for name, mode_id in session.execute(text('SELECT `name`, `id` FROM `mode`'))}
     iris_team_names = {name.lower() for (name, ) in engine.execute('''SELECT `name` FROM `target` WHERE `type_id` = %s''', target_types['team'])}
     target_add_sql = 'INSERT INTO `target` (`name`, `type_id`) VALUES (%s, %s) ON DUPLICATE KEY UPDATE `active` = TRUE'
     oncall_add_sql = 'INSERT INTO `oncall_team` (`target_id`, `oncall_team_id`) VALUES (%s, %s)'
@@ -274,7 +274,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
             db_contacts = iris_users[username]
             oncall_contacts = oncall_users[username]
             # ensure that all users have a corresponding entry in user otherwise create it
-            target_id = session.execute('''SELECT `target`.`id`
+            query = '''
+                SELECT `target`.`id`
                 FROM `target`
                 LEFT JOIN `user` ON `target`.`id` = `user`.`target_id`
                 WHERE `target`.`name` = :name
@@ -284,7 +285,8 @@ def sync_from_oncall(config, engine, purge_old_users=True):
                         FROM `target_type`
                         WHERE `name` = "user"
                     );
-                ''', {'name': username}).scalar()
+                '''
+            target_id = session.execute(text(query), {'name': username}).scalar()
             if target_id:
                 logger.info('Backfilling user entry for %s', username)
                 engine.execute(user_add_sql, (target_id, ))
@@ -328,7 +330,11 @@ def sync_from_oncall(config, engine, purge_old_users=True):
 
     matching_target_names = iris_team_names.intersection(oncall_team_names)
     if matching_target_names:
-        existing_up_to_date_oncall_teams = {name.lower() for (name, ) in session.execute('''SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id` WHERE `target`.`name` IN :matching_names''', {'matching_names': tuple(matching_target_names)})}
+        query = '''
+            SELECT `target`.`name` FROM `target` JOIN `oncall_team` ON `oncall_team`.`target_id` = `target`.`id`
+            WHERE `target`.`name` IN :matching_names
+        '''
+        existing_up_to_date_oncall_teams = {name.lower() for (name, ) in session.execute(text(query), {'matching_names': tuple(matching_target_names)})}
         # up to date target names that don't have an entry in the oncall_team table yet
         matching_target_names_no_oncall_entry = matching_target_names - existing_up_to_date_oncall_teams
 
@@ -588,12 +594,13 @@ def batch_remove_ldap_memberships(session, list_id, members):
     # query that has thousands of entries.
     deletes_per_match = 50
     for memberships_this_batch in batch_items_from_list(members, deletes_per_match):
-        affected = session.execute('''DELETE `mailing_list_membership`
-                                      FROM `mailing_list_membership`
-                                      JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
-                                      WHERE `list_id` = :list_id
-                                      AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                                      AND `destination` IN :members''',
+        query = '''DELETE `mailing_list_membership`
+                   FROM `mailing_list_membership`
+                   JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
+                   WHERE `list_id` = :list_id
+                   AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                   AND `destination` IN :members'''
+        affected = session.execute(text(query),
                                    {'list_id': list_id, 'members': tuple(memberships_this_batch)}).rowcount
         session.commit()
         sleep(update_sleep)
@@ -621,10 +628,10 @@ def sync_ldap_lists(ldap_settings, engine):
 
     mailing_list_type_name = 'mailing-list'
 
-    list_type_id = session.execute('SELECT `id` FROM `target_type` WHERE `name` = :name', {'name': mailing_list_type_name}).scalar()
+    list_type_id = session.execute(text('SELECT `id` FROM `target_type` WHERE `name` = :name'), {'name': mailing_list_type_name}).scalar()
     if not list_type_id:
         try:
-            list_type_id = session.execute('INSERT INTO `target_type` (`name`) VALUES (:name)', {'name': mailing_list_type_name}).lastrowid
+            list_type_id = session.execute(text('INSERT INTO `target_type` (`name`) VALUES (:name)'), {'name': mailing_list_type_name}).lastrowid
             session.commit()
             logger.info('Created target_type "%s" with id %s', mailing_list_type_name, list_type_id)
         except (IntegrityError, DataError):
@@ -640,7 +647,7 @@ def sync_ldap_lists(ldap_settings, engine):
     metrics.set('ldap_memberships_found', 0)
     logger.info('Found %s ldap lists', ldap_lists_count)
 
-    existing_ldap_lists = {row[0] for row in session.execute('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id''', {'type_id': list_type_id})}
+    existing_ldap_lists = {row[0] for row in session.execute(text('''SELECT `name` FROM `target` WHERE `target`.`type_id` = :type_id'''), {'type_id': list_type_id})}
     existing_ldap_lower = {name.lower() for name in existing_ldap_lists}
     existing_case_sensitive_map = {name.lower(): name for name in existing_ldap_lists}
     incoming_case_sensitive_map = {item[1].lower(): item[1] for item in ldap_lists}
@@ -657,9 +664,10 @@ def sync_ldap_lists(ldap_settings, engine):
         for ldap_list in rename_list:
             old_name = existing_case_sensitive_map[ldap_list]
             new_name = incoming_case_sensitive_map[ldap_list]
-            list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
-                                       AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': old_name}).scalar()
-            session.execute('UPDATE `target` SET `name` = :name WHERE `id` = :list_id', {'name': new_name, 'list_id': list_id})
+            query = '''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
+                       AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")'''
+            list_id = session.execute(text(query), {'name': old_name}).scalar()
+            session.execute(text('UPDATE `target` SET `name` = :name WHERE `id` = :list_id'), {'name': new_name, 'list_id': list_id})
             session.commit()
             logger.info('Renamed ldap list %s to %s', old_name, new_name)
 
@@ -688,13 +696,15 @@ def sync_ldap_lists(ldap_settings, engine):
 
         created = False
 
-        list_id = session.execute('''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
-                                       AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")''', {'name': list_name}).scalar()
+        query = '''SELECT `target`.`id` FROM `target` WHERE `target`.`name` = :name
+                   AND type_id IN ( SELECT `target_type`.`id` FROM `target_type` WHERE `name` = "mailing-list")'''
+        list_id = session.execute(text(query), {'name': list_name}).scalar()
 
         if not list_id:
             try:
-                list_id = session.execute('''INSERT INTO `target` (`type_id`, `name`)
-                                             VALUES (:type_id, :name)''', {'type_id': list_type_id, 'name': list_name}).lastrowid
+                query = '''INSERT INTO `target` (`type_id`, `name`)
+                           VALUES (:type_id, :name)'''
+                list_id = session.execute(text(query), {'type_id': list_type_id, 'name': list_name}).lastrowid
                 session.commit()
             except (IntegrityError, DataError):
                 logger.exception('Failed adding row to target table for mailing list %s. Skipping this list.', list_name)
@@ -702,7 +712,8 @@ def sync_ldap_lists(ldap_settings, engine):
                 continue
 
             try:
-                session.execute('''INSERT INTO `mailing_list` (`target_id`, `count`) VALUES (:list_id, :count)''', {'list_id': list_id, 'count': num_members})
+                query = '''INSERT INTO `mailing_list` (`target_id`, `count`) VALUES (:list_id, :count)'''
+                session.execute(text(query), {'list_id': list_id, 'count': num_members})
                 session.commit()
             except (IntegrityError, DataError):
                 logger.exception('Failed adding row to mailing_list table for mailing list %s (ID: %s). Skipping this list.', list_name, list_id)
@@ -714,16 +725,18 @@ def sync_ldap_lists(ldap_settings, engine):
             created = True
 
         if not created:
-            session.execute('UPDATE `mailing_list` SET `count` = :count WHERE `target_id` = :list_id', {'count': num_members, 'list_id': list_id})
+            query = 'UPDATE `mailing_list` SET `count` = :count WHERE `target_id` = :list_id'
+            session.execute(text(query), {'count': num_members, 'list_id': list_id})
             session.commit()
 
-        existing_members = {row[0] for row in session.execute('''
-                            SELECT `target_contact`.`destination`
-                            FROM `mailing_list_membership`
-                            JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
-                            WHERE `mailing_list_membership`.`list_id` = :list_id
-                            AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                            ''', {'list_id': list_id})}
+        query = '''
+            SELECT `target_contact`.`destination`
+            FROM `mailing_list_membership`
+            JOIN `target_contact` ON `target_contact`.`target_id` = `mailing_list_membership`.`user_id`
+            WHERE `mailing_list_membership`.`list_id` = :list_id
+            AND `target_contact`.`mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+        '''
+        existing_members = {row[0] for row in session.execute(text(query), {'list_id': list_id})}
 
         add_members = members - existing_members
         kill_members = existing_members - members
@@ -733,15 +746,18 @@ def sync_ldap_lists(ldap_settings, engine):
 
             for member in add_members:
                 try:
-                    user_id = session.execute('''SELECT `target_id` FROM `target_contact`
-                                                JOIN `target` ON `target`.`id` = `target_id`
-                                                WHERE `destination` = :name AND `active` = 1
-                                                AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
-                                                AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')''', {'name': member}).scalar()
+                    query = '''
+                        SELECT `target_id` FROM `target_contact`
+                        JOIN `target` ON `target`.`id` = `target_id`
+                        WHERE `destination` = :name AND `active` = 1
+                        AND `mode_id` = (SELECT `id` FROM `mode` WHERE `name` = 'email')
+                        AND `target`.`type_id` = (SELECT `id` FROM `target_type` WHERE `name` = 'user')
+                    '''
+                    user_id = session.execute(text(query), {'name': member}).scalar()
                     if user_id is None:
                         continue
-                    session.execute('''INSERT INTO `mailing_list_membership` (`list_id`, `user_id`) VALUES (:list_id,:user_id)
-                                    ''', {'list_id': list_id, 'user_id': user_id})
+                    query = '''INSERT INTO `mailing_list_membership` (`list_id`, `user_id`) VALUES (:list_id,:user_id)'''
+                    session.execute(text(query), {'list_id': list_id, 'user_id': user_id})
                     session.commit()
                     logger.info('Added %s to list %s', member, list_name)
                     user_add_count += 1

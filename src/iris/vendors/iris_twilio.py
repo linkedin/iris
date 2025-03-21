@@ -7,6 +7,7 @@ from iris.custom_import import import_custom_module
 from twilio.rest import Client
 from twilio.http.http_client import TwilioHttpClient
 from iris import db
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 import time
 import urllib.parse
@@ -67,8 +68,9 @@ class iris_twilio(object):
     def initialize_twilio_message_status(self, sid, message_id):
         session = db.Session()
         try:
-            session.execute('''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
-                               VALUES (:sid, :mid)''', {'sid': sid, 'mid': message_id})
+            query = '''INSERT INTO `twilio_delivery_status` (`twilio_sid`, `message_id`)
+                       VALUES (:sid, :mid)'''
+            session.execute(text(query), {'sid': sid, 'mid': message_id})
             session.commit()
         except IntegrityError:
             logger.exception('Failed initializing twilio delivery status row. sid: %s, mid: %s', sid, message_id)
