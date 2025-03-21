@@ -10,6 +10,7 @@ import iris.cache
 from iris import metrics
 from iris import utils
 import logging
+from sqlalchemy import text
 import ujson
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ class ApplicationQuota(object):
 
     def get_new_rules(self):
         session = self.db.Session()
-        for row in session.execute(get_application_quotas_query):
+        for row in session.execute(text(get_application_quotas_query)):
             yield row
         session.close()
 
@@ -222,7 +223,7 @@ class ApplicationQuota(object):
         last_incident = self.last_incidents.get(application)
         if last_incident:
             last_incident_id, last_incident_created = last_incident
-            claimed = session.execute(check_incident_claimed_query, {'id': last_incident_id}).scalar()
+            claimed = session.execute(text(check_incident_claimed_query), {'id': last_incident_id}).scalar()
 
             if claimed:
                 logger.info('Skipping creating incident for application %s as existing incident %s is not claimed', application, last_incident_id)
@@ -250,7 +251,7 @@ class ApplicationQuota(object):
             'bucket_id': utils.generate_bucket_id()
         }
 
-        incident_id = session.execute(create_incident_query, incident_data).lastrowid
+        incident_id = session.execute(text(create_incident_query), incident_data).lastrowid
 
         session.commit()
         session.close()

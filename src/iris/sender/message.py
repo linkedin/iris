@@ -3,6 +3,7 @@
 
 from .. import db
 import logging
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -13,12 +14,12 @@ def update_message_mode(message):
         return
 
     session = db.Session()
-    mode_id = session.execute('SELECT `id` FROM `mode` WHERE `name` = :mode', message).scalar()
+    mode_id = session.execute(text('SELECT `id` FROM `mode` WHERE `name` = :mode'), message).scalar()
 
     # Need to update mode_id in the dictionary as its gets set in DB in other parts of the sender
     if mode_id:
         message['mode_id'] = mode_id
-        session.execute('UPDATE `message` SET `mode_id` = :mode_id WHERE `id` = :message_id', message)
+        session.execute(text('UPDATE `message` SET `mode_id` = :mode_id WHERE `id` = :message_id'), message)
         session.commit()
     else:
         logger.warning('Cannot update mode for message %(message_id)s to %(mode)s as looking up its ID failed', message)
