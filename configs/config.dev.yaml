@@ -17,6 +17,7 @@ db: &db
       database: iris
       charset: utf8
     str: "%(scheme)s://%(user)s:%(password)s@%(host)s/%(database)s?charset=%(charset)s"
+    use_ssl: False
   query_limit: 500
   kwargs:
     pool_recycle: 3600
