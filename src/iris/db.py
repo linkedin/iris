@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from .validators import IrisValidationException
 from falcon import HTTPBadRequest, HTTPNotFound, HTTPForbidden, HTTPUnauthorized
 import logging
+import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,17 @@ def init(config):
     global ss_dict_cursor
     global Session
 
-    engine = create_engine(config['db']['conn']['str'] % config['db']['conn']['kwargs'],
-                           **config['db']['kwargs'])
+    connect_args = {}
+    if config['db']['conn'].get('use_ssl'):
+        ssl_ctx = ssl.create_default_context()
+        connect_args["ssl"] = ssl_ctx
+
+    engine = create_engine(
+        config['db']['conn']['str'] % config['db']['conn']['kwargs'],
+        connect_args=connect_args,
+        **config['db']['kwargs']
+    )
+
     dict_cursor = engine.dialect.dbapi.cursors.DictCursor
     ss_dict_cursor = engine.dialect.dbapi.cursors.SSDictCursor
     Session = sessionmaker(bind=engine)
