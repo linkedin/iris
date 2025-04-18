@@ -11,7 +11,7 @@ import multiprocessing
 import gunicorn.app.base
 import iris
 import iris.config
-import imp
+import importlib
 
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
@@ -29,20 +29,22 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
 
     def load(self):
         import iris
-        imp.reload(iris)
-        imp.reload(iris.config)
+        importlib.reload(iris)
+        importlib.reload(iris.config)
         config = iris.config.load_config(sys.argv[1])
 
         import iris.api
         app = iris.api.get_api(config)
 
         if not self.skip_build_assets:
+            gunicorn_arbiter = None  # Initialize gunicorn_arbiter to None
             for r in gc.get_referrers(self):
                 if isinstance(r, dict) and '_num_workers' in r:
                     gunicorn_arbiter = r
+                    break  # Exit loop as soon as gunicorn_arbiter is found
 
-            # only build assets on one worker to avoid race conditions
-            if gunicorn_arbiter['worker_age'] % self.options['workers'] == 0:
+            # Ensure gunicorn_arbiter has been assigned before using it
+            if gunicorn_arbiter and gunicorn_arbiter['worker_age'] % self.options['workers'] == 0:
                 import iris.ui
                 iris.ui.build_assets()
 

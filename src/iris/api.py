@@ -766,6 +766,14 @@ def is_valid_tracking_settings(t, k, tpl):
     return True, None
 
 
+def get_order_expression(field: str) -> str:
+    """Return just the SQL expression part of incident_columns[field], stripping any alias."""
+    expr = incident_columns.get(field)
+    if not expr:
+        return None
+    return expr.split(' as ')[0]
+
+
 def gen_tag_where_subquery(connection, id_field, tag_table, resource_id, kwargs):
     '''
         return a subquery to be used in a where clause for filtering based on tags
@@ -910,18 +918,6 @@ def gen_where_filter_clause(connection, filters, filter_types, kwargs):
                 val = filter_escaped_value_transforms[col](val)
             where.append(operators[op] % (filters[col], val))
     return where
-
-
-def generate_grouped_query(query, allowed_columns, requested_fields):
-    '''modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually'''
-    # avoid DISTINCT grouping
-    modified_query = query.replace("SELECT DISTINCT", "SELECT")
-    # Construct the counts query
-    group_by_clause = ", ".join([f"`{column}`" for column in requested_fields if column in allowed_columns])
-    if len(group_by_clause) == 0:
-        raise HTTPBadRequest('Did not find any valid fields requested')
-    count_query = f"SELECT {group_by_clause}, COUNT(*) as `group_count` FROM ({modified_query}) AS subquery GROUP BY {group_by_clause}"
-    return count_query
 
 
 def format_count_results(results):
@@ -1371,6 +1367,83 @@ class Plan(object):
         resp.body = '[]'
 
 
+# This function performs a grouped count across requested fields for templates, returning counts per value
+# for each requested field. It supports tag metadata and consolidates all SQL into a single query per field
+# to improve performance and eliminate ONLY_FULL_GROUP_BY errors. When only tag fields are requested, it performs
+# a separate total count since tags alone aren't reliable for row count estimation.
+def count_fields_for_plan_fields(cursor, where_clause, fields, allowed_columns, extra_joins=""):
+    field_counts = {}
+    non_tag_fields = [f for f in fields if f != 'tags']
+
+    if not non_tag_fields and 'tags' not in fields:
+        return {}, 0
+
+    total_count = 0
+
+    # Consolidated non-tag counts
+    if non_tag_fields:
+        union_queries = []
+        for field in non_tag_fields:
+            if field not in allowed_columns:
+                continue
+            expr = allowed_columns[field].split(' as ')[0].strip()
+            subquery = f"""
+                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
+                FROM `plan`
+                JOIN `target` ON `plan`.`user_id` = `target`.`id`
+                LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
+                {extra_joins}
+                WHERE {where_clause}
+                GROUP BY {expr}
+            """
+            union_queries.append(subquery)
+
+        cursor.execute(" UNION ALL ".join(union_queries))
+        for row in cursor.fetchall():
+            field = row['field']
+            value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(field, {})[value] = count
+
+        # get total count from first field if not already set
+        if not total_count and field_counts:
+            total_count = sum(field_counts[next(iter(field_counts))].values())
+
+    # Tags
+    if 'tags' in fields:
+        tag_query = f'''
+            SELECT plan_metadata_tag.name, plan_metadata_tag.value, COUNT(*) as group_count
+            FROM plan_metadata_tag
+            JOIN plan ON plan_metadata_tag.plan_id = plan.id
+            JOIN target ON plan.user_id = target.id
+            LEFT OUTER JOIN plan_active ON plan.id = plan_active.plan_id
+            {extra_joins}
+            WHERE {where_clause}
+            GROUP BY plan_metadata_tag.name, plan_metadata_tag.value
+        '''
+        cursor.execute(tag_query)
+        for row in cursor.fetchall():
+            tag_name = row['name']
+            tag_value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(tag_name, {})[tag_value] = count
+
+    # Tags-only fallback total count since tags are not reliable for obtaining a total count
+    if not non_tag_fields:
+        count_query = f"""
+            SELECT COUNT(*) AS total_count
+            FROM `plan`
+            JOIN `target` ON `plan`.`user_id` = `target`.`id`
+            LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
+            {extra_joins}
+            WHERE {where_clause}
+        """
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()['total_count']
+
+    return field_counts, total_count
+
+
 class Plans(object):
     allow_read_no_auth = True
 
@@ -1465,9 +1538,14 @@ class Plans(object):
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
         if not fields:
-            fields = plan_columns
+            fields = list(plan_columns.keys())
+        requested_fields = list(fields)
+        if not counts_only:
+            if 'created' not in fields:
+                fields.append('created')
+            if 'id' not in fields:
+                fields.append('id')
 
-        # validate that if we are fetching counts we are not asking for 'id', 'created', 'description', 'tracking_template' as they are all essentially unique to each plan
         unsupported_count_fields = ['id', 'created', 'description', 'tracking_template']
         if counts_only:
             for word in unsupported_count_fields:
@@ -1479,16 +1557,15 @@ class Plans(object):
         connection = db.engine.raw_connection()
         cursor = connection.cursor(db.ss_dict_cursor)
 
-        # search for plans which have steps that target a specific user
+        # Optional join for plan target filters
+        extra_joins = ""
         for target_field in plan_target_fields:
-            if req.params.get(target_field, None):
+            if req.params.get(target_field):
                 target_query = plan_target_query
-                where = []
-                where += gen_where_filter_clause(connection, plan_target_filters, plan_filter_types, req.params)
-                if where:
-                    target_query = target_query + ' WHERE ' + ' AND '.join(where)
-
-                query = query + ' JOIN (' + target_query + ') `plan_notification_subset` ON `plan_notification_subset`.`plan_id` = `plan`.`id`'
+                where_clause = gen_where_filter_clause(connection, plan_target_filters, plan_filter_types, req.params)
+                if where_clause:
+                    target_query += ' WHERE ' + ' AND '.join(where_clause)
+                extra_joins = f'JOIN ({target_query}) `plan_notification_subset` ON `plan_notification_subset`.`plan_id` = `plan`.`id`'
                 break
 
         where = []
@@ -1500,22 +1577,30 @@ class Plans(object):
             else:
                 where.append('`plan_active`.`plan_id` IS NULL')
 
-        where += gen_where_filter_clause(
-            connection, plan_filters, plan_filter_types, req.params)
-
+        where += gen_where_filter_clause(connection, plan_filters, plan_filter_types, req.params)
         tag_subqueries = gen_tag_wheres(connection, 'plan_id', 'plan_metadata_tag', '`plan`.`id`', req.params)
         if tag_subqueries:
             where.extend(tag_subqueries)
 
-        if where:
-            query = query + ' WHERE ' + ' AND '.join(where)
+        where_clause = ' AND '.join(where) if where else '1'
+
+        if counts_only:
+            field_counts, total_count = count_fields_for_plan_fields(cursor, where_clause, fields, plan_columns, extra_joins)
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({
+                'field_counts': field_counts,
+                'total_count': total_count,
+            })
+            return
+
+        if extra_joins:
+            query = f"{query} {extra_joins}"
+        if where_clause:
+            query = f"{query} WHERE {where_clause}"
 
         if query_limit is not None:
-            query += ' ORDER BY `plan`.`created` DESC LIMIT %s' % query_limit
-
-        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
-        if counts_only:
-            query = generate_grouped_query(query, plan_columns, fields)
+            query += ' ORDER BY created LIMIT %s' % query_limit
 
         cursor.execute(query)
         results = []
@@ -1530,13 +1615,13 @@ class Plans(object):
                 plan['dynamic_tracking'] = bool(plan.get('dynamic_tracking'))
             results.append(plan)
 
-        if counts_only:
-            count_dict = format_count_results(results)
-            payload = ujson.dumps(count_dict)
-            connection.close()
-            resp.status = HTTP_200
-            resp.body = payload
-            return
+        # remove any extra keys we had to add to satisfy grouping if they were not requested
+        extra_keys = set(fields) - set(requested_fields)
+        if extra_keys:
+            for plan in results:
+                for key in extra_keys:
+                    if key in plan:
+                        plan.pop(key, None)
 
         payload = ujson.dumps(results)
         connection.close()
@@ -1825,6 +1910,87 @@ class Plans(object):
         resp.set_header('Location', '/plans/%s' % plan_id)
 
 
+def count_fields_for_incidents(cursor, where_clause, fields, allowed_columns, extra_joins=''):
+    field_counts = {}
+    non_tag_fields = [f for f in fields if f != 'tags']
+
+    total_count = 0
+
+    # Consolidated non-tag query
+    if non_tag_fields:
+        union_queries = []
+        for field in non_tag_fields:
+            if field not in allowed_columns:
+                continue
+            expr = allowed_columns[field].split(' as ')[0].strip()
+            subquery = f"""
+                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
+                FROM incident
+                JOIN plan ON incident.plan_id = plan.id
+                JOIN application ON incident.application_id = application.id
+                LEFT OUTER JOIN target ON incident.owner_id = target.id
+                LEFT OUTER JOIN template_variable
+                    ON template_variable.application_id = application.id
+                    AND template_variable.title_variable = 1
+                {extra_joins}
+                WHERE {where_clause}
+                GROUP BY {expr}
+            """
+            union_queries.append(subquery)
+
+        final_query = " UNION ALL ".join(union_queries)
+        cursor.execute(final_query)
+        for row in cursor.fetchall():
+            field = row['field']
+            value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(field, {})[value] = count
+        if field_counts:
+            total_count = sum(field_counts[next(iter(field_counts))].values())
+
+    # Tag query
+    if 'tags' in fields:
+        tag_query = f'''
+            SELECT incident_metadata_tag.name, incident_metadata_tag.value, COUNT(*) AS group_count
+            FROM incident_metadata_tag
+            JOIN incident ON incident.id = incident_metadata_tag.incident_id
+            JOIN plan ON incident.plan_id = plan.id
+            JOIN application ON incident.application_id = application.id
+            LEFT OUTER JOIN target ON incident.owner_id = target.id
+            LEFT OUTER JOIN template_variable
+                ON template_variable.application_id = application.id
+                AND template_variable.title_variable = 1
+            {extra_joins}
+            WHERE {where_clause}
+            GROUP BY incident_metadata_tag.name, incident_metadata_tag.value
+        '''
+        cursor.execute(tag_query)
+        for row in cursor.fetchall():
+            tag_name = row['name']
+            tag_value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(tag_name, {})[tag_value] = count
+
+    if not non_tag_fields:
+        # Tags-only case, so fetch a reliable count from incident table
+        count_query = f'''
+            SELECT COUNT(*) as total
+            FROM incident
+            JOIN plan ON incident.plan_id = plan.id
+            JOIN application ON incident.application_id = application.id
+            LEFT OUTER JOIN target ON incident.owner_id = target.id
+            LEFT OUTER JOIN template_variable
+                ON template_variable.application_id = application.id
+                AND template_variable.title_variable = 1
+            {extra_joins}
+            WHERE {where_clause}
+        '''
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()['total']
+
+    return field_counts, total_count
+
+
 class Incidents(object):
     allow_read_no_auth = True
 
@@ -1950,32 +2116,34 @@ class Incidents(object):
         '''
         counts_only = req.get_param_as_bool('counts')
         req.params.pop('counts', None)
-        fields = req.get_param_as_list('fields')
+        fields = req.get_param_as_list('fields') or list(incident_columns.keys())
         req.params.pop('fields', None)
-        if not fields:
-            fields = incident_columns
-        req.params.pop('fields', None)
+        requested_fields = list(fields)
+
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         target = req.get_param_as_list('target')
         req.params.pop('target', None)
-        order = req.get_param('order', default=desc_order)
+        order = req.get_param('order', default='DESC')
         req.params.pop('order', None)
-        if order not in [asc_order, desc_order]:
-            raise HTTPBadRequest('Invalid order parameter', 'Order parameter must be either "ASC" or "DESC"')
         order_by = req.get_param('order_by')
         req.params.pop('order_by', None)
-        if order_by is not None and order_by not in incident_order_by_fields:
-            raise falcon.HTTPBadRequest(
-                title='Invalid Parameter',
-                description="Invalid 'order_by' parameter"
-            )
 
-        # validate that if we are fetching counts we are not asking for context, created, updated as they are all essentially unique to each incident
+        if order_by is not None and order_by not in incident_order_by_fields:
+            raise HTTPBadRequest(title='Invalid Parameter', description="Invalid 'order_by' parameter")
+
+        if order_by and order_by not in fields:
+            fields.append(order_by)
+        elif order_by is None:
+            if 'created' not in fields:
+                fields.append('created')
+            if 'id' not in fields:
+                fields.append('id')
+
         unsupported_count_fields = ['id', 'context', 'created', 'updated']
         if counts_only:
             for word in unsupported_count_fields:
-                if any(word in string for string in fields):
+                if word in requested_fields:
                     raise HTTPBadRequest('%s not supported fields when fetching counts' % unsupported_count_fields)
 
         query = incident_query % ', '.join(incident_columns[f] for f in fields if f in incident_columns)
@@ -1987,47 +2155,11 @@ class Incidents(object):
         sql_values = []
         claimed_filter = req.get_param_as_bool('claimed')
         if claimed_filter is not None:
-            if claimed_filter:
-                where.append('''`incident`.`owner_id` IS NOT NULL''')
-            else:
-                where.append('''`incident`.`owner_id` IS NULL''')
+            where.append('`incident`.`owner_id` IS NOT NULL' if claimed_filter else '`incident`.`owner_id` IS NULL')
 
         if target and not self.external_sender_incident_processing:
-            where.append('''`message`.`target_id` IN
-                (SELECT `id`
-                FROM `target`
-                WHERE `target`.`name` IN %s
-            )''')
+            where.append('''`message`.`target_id` IN (SELECT `id` FROM `target` WHERE `target`.`name` IN %s)''')
             sql_values.append(tuple(target))
-        if self.external_sender_incident_processing and target:
-            message_query_string = 'messages?limit=1000&incident_id__gt=0'
-            if req.params.get('created__ge'):
-                message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
-            if req.params.get('created__le'):
-                message_query_string += '&sent__le=' + str(req.params.get('created__le'))
-            for t in target:
-                message_query_string = message_query_string + '&target=' + str(t)
-            # get messages for incident
-            try:
-                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
-                r = external_sender_client.get(message_query_string, verify=self.verify)
-                if r.ok:
-                    incident_IDs = []
-                    messages = r.json()
-                    if len(messages) > 0:
-                        for message in messages:
-                            incident_IDs.append(message.get('incident_id'))
-                        where.append('''`incident`.`id` IN %s''')
-                        sql_values.append(tuple(incident_IDs))
-                    elif target:
-                        # if target field is specified and there are no matching messages that means there are no incidents that match the query
-                        resp.status = HTTP_200
-                        resp.body = ujson.dumps([])
-                        return
-                else:
-                    logger.error('failed retrieving messages from external sender %s', r.text)
-            except Exception as e:
-                logger.exception('failed to establish connection with iris message processor')
 
         tag_subqueries = gen_tag_wheres(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
         if tag_subqueries:
@@ -2036,25 +2168,38 @@ class Incidents(object):
         if not (where or query_limit):
             raise HTTPBadRequest('Incident query too broad, add filter or limit')
 
+        where_clause = ' AND '.join(where) if where else '1'
+
+        if counts_only:
+            cursor = connection.cursor(db.ss_dict_cursor)
+            field_counts, total_count = count_fields_for_incidents(
+                cursor, where_clause, requested_fields, incident_columns, ''
+            )
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({
+                'field_counts': field_counts,
+                'total_count': total_count,
+            })
+            return
+
         if where:
-            query = query + ' WHERE ' + ' AND '.join(where)
+            query += ' WHERE ' + where_clause
 
         if order_by is not None:
-            query += ' ORDER BY %s %s' % (incident_order_by_fields[order_by], order)
+            order_expr = get_order_expression(order_by)
+            query += ' ORDER BY %s %s' % (order_expr, order)
         else:
-            query += ' ORDER BY `incident`.`created` DESC, `incident`.`id` DESC'
+            created_expr = get_order_expression('created')
+            id_expr = get_order_expression('id')
+            query += ' ORDER BY %s DESC, %s DESC' % (created_expr, id_expr)
 
         if query_limit is not None:
             query += ' LIMIT %s' % query_limit
 
-        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
-        if counts_only:
-            query = generate_grouped_query(query, incident_columns, fields)
-
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query, sql_values)
         results = []
-        # format 'tags' if necessary
         for incident in cursor:
             if 'tags' in incident:
                 if incident['tags'] is None:
@@ -2063,13 +2208,13 @@ class Incidents(object):
                     incident['tags'] = ujson.loads(incident['tags'])
             results.append(incident)
 
-        if counts_only:
-            count_dict = format_count_results(results)
-            payload = ujson.dumps(count_dict)
-            connection.close()
-            resp.status = HTTP_200
-            resp.body = payload
-            return
+        # Remove any extra keys added only for sorting or grouping
+        extra_keys = set(fields) - set(requested_fields)
+        if extra_keys:
+            for incident in results:
+                for key in extra_keys:
+                    if key in incident:
+                        incident.pop(key, None)
 
         if 'context' in fields:
             if 'title_variable_name' in fields:
@@ -3382,6 +3527,79 @@ class Template(object):
         resp.body = ujson.dumps(active)
 
 
+def count_fields_for_template_fields(cursor, where_clause, fields, allowed_columns, extra_joins=""):
+    field_counts = {}
+    non_tag_fields = [f for f in fields if f != 'tags']
+
+    if not non_tag_fields and 'tags' not in fields:
+        return {}, 0
+
+    total_count = 0
+
+    # Consolidated non-tag counts
+    if non_tag_fields:
+        union_queries = []
+        for field in non_tag_fields:
+            if field not in allowed_columns:
+                continue
+            expr = allowed_columns[field].split(' as ')[0].strip()
+            subquery = f"""
+                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
+                FROM `template`
+                JOIN `target` ON `template`.`user_id` = `target`.`id`
+                LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+                {extra_joins}
+                WHERE {where_clause}
+                GROUP BY {expr}
+            """
+            union_queries.append(subquery)
+
+        cursor.execute(" UNION ALL ".join(union_queries))
+        for row in cursor.fetchall():
+            field = row['field']
+            value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(field, {})[value] = count
+
+        # get total count from first field if not already set
+        if not total_count and field_counts:
+            total_count = sum(field_counts[next(iter(field_counts))].values())
+
+    # Tags
+    if 'tags' in fields:
+        tag_query = f'''
+            SELECT template_metadata_tag.name, template_metadata_tag.value, COUNT(*) as group_count
+            FROM template_metadata_tag
+            JOIN template ON template_metadata_tag.template_id = template.id
+            JOIN target ON template.user_id = target.id
+            LEFT OUTER JOIN template_active ON template.id = template_active.template_id
+            {extra_joins}
+            WHERE {where_clause}
+            GROUP BY template_metadata_tag.name, template_metadata_tag.value
+        '''
+        cursor.execute(tag_query)
+        for row in cursor.fetchall():
+            tag_name = row['name']
+            tag_value = row['value']
+            count = row['group_count']
+            field_counts.setdefault(tag_name, {})[tag_value] = count
+
+    # Tags-only fallback total count
+    if not non_tag_fields:
+        count_query = f"""
+            SELECT COUNT(*) AS total_count
+            FROM `template`
+            JOIN `target` ON `template`.`user_id` = `target`.`id`
+            LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+            {extra_joins}
+            WHERE {where_clause}
+        """
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()['total_count']
+
+    return field_counts, total_count
+
+
 class Templates(object):
     allow_read_no_auth = True
 
@@ -3391,12 +3609,9 @@ class Templates(object):
         query_limit = req.get_param_as_int('limit')
         req.params.pop('limit', None)
         fields = req.get_param_as_list('fields')
-        fields = [f for f in fields if f in template_columns] if fields else None
-        if not fields:
-            fields = template_columns
+        fields = [f for f in fields if f in template_columns] if fields else list(template_columns)
         req.params.pop('fields', None)
 
-        # validate that if we are fetching counts we are not asking for id, created as they are all essentially unique to each templates
         unsupported_count_fields = ["id", "created", "updated"]
         if counts_only:
             for word in unsupported_count_fields:
@@ -3409,10 +3624,7 @@ class Templates(object):
         active = req.get_param_as_bool('active')
         req.params.pop('active', None)
         if active is not None:
-            if active:
-                where.append('`template_active`.`template_id` IS NOT NULL')
-            else:
-                where.append('`template_active`.`template_id` IS NULL')
+            where.append('`template_active`.`template_id` IS NOT NULL' if active else '`template_active`.`template_id` IS NULL')
 
         connection = db.engine.raw_connection()
         where += gen_where_filter_clause(connection, template_filters, template_filter_types, req.params)
@@ -3421,35 +3633,29 @@ class Templates(object):
         if tag_subqueries:
             where.extend(tag_subqueries)
 
-        if where:
-            query = query + ' WHERE ' + ' AND '.join(where)
+        where_clause = ' AND '.join(where) if where else '1'
 
-        if query_limit is not None:
-            query += ' ORDER BY `template`.`created` DESC LIMIT %s' % query_limit
+        if query_limit:
+            query += f' ORDER BY `template`.`created` DESC LIMIT {query_limit}'
 
-        # modify query to retrieve total counts for distinct combinations of specified columns while avoiding the return of each unique row individually
         if counts_only:
-            query = generate_grouped_query(query, template_columns, fields)
+            cursor = connection.cursor(db.ss_dict_cursor)
+            field_counts, total_count = count_fields_for_template_fields(cursor, where_clause, fields, template_columns)
+            connection.close()
+            resp.status = HTTP_200
+            resp.body = ujson.dumps({
+                'field_counts': field_counts,
+                'total_count': total_count,
+            })
+            return
 
         cursor = connection.cursor(db.ss_dict_cursor)
         cursor.execute(query)
         results = []
-        # format 'tags' if necessary
         for template in cursor:
             if 'tags' in template:
-                if template['tags'] is None:
-                    template['tags'] = []
-                else:
-                    template['tags'] = ujson.loads(template['tags'])
+                template['tags'] = ujson.loads(template['tags']) if template['tags'] else []
             results.append(template)
-
-        if counts_only:
-            count_dict = format_count_results(results)
-            payload = ujson.dumps(count_dict)
-            connection.close()
-            resp.status = HTTP_200
-            resp.body = payload
-            return
 
         payload = ujson.dumps(results)
         connection.close()
@@ -4644,42 +4850,6 @@ class ApplicationPlans(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
-        '''
-        Search endpoint for active plans that support a given app.
-        A plan supports an app if one of its steps uses a template
-        that defines content for that application.
-
-        **Example request**:
-
-        .. sourcecode:: http
-
-           GET /v0/applications/app-foo/plans?name__contains=bar& HTTP/1.1
-
-        **Example response**:
-
-        .. sourcecode:: http
-
-           HTTP/1.1 200 OK
-           Content-Type: application/json
-
-           [
-               {
-                   "description": "This is plan bar",
-                   "threshold_count": 10,
-                   "creator": "user1",
-                   "created": 1478154275,
-                   "aggregation_reset": 300,
-                   "aggregation_window": 300,
-                   "threshold_window": 900,
-                   "tracking_type": null,
-                   "tracking_template": null,
-                   "tracking_key": null,
-                   "active": 1,
-                   "id": 123456,
-                   "name": "bar-sla0"
-               }
-           ]
-        '''
         fields = req.get_param_as_list('fields')
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
@@ -4690,7 +4860,17 @@ class ApplicationPlans(object):
         cursor = connection.cursor(db.dict_cursor)
         where = ['`application`.`name` = %s']
         where += gen_where_filter_clause(
-            connection, plan_filters, plan_filter_types, req.params)
+            connection, plan_filters, plan_filter_types, req.params
+        )
+
+        # Apply ANY_VALUE wrapping where needed
+        select_clauses = []
+        for f in fields:
+            if f == "id" or f == "tags":
+                select_clauses.append(plan_columns[f])
+            else:
+                expr = plan_columns[f].split(" as ")[0].strip()
+                select_clauses.append(f"ANY_VALUE({expr}) AS `{f}`")
 
         query = '''SELECT %s
                    FROM `plan_active` LEFT JOIN `plan` ON `plan_active`.`plan_id` = `plan`.`id`
@@ -4701,11 +4881,14 @@ class ApplicationPlans(object):
                    JOIN `application` ON `template_content`.`application_id` = `application`.`id`
                    JOIN `target` ON `target`.`id` = `plan`.`user_id`
                    WHERE %s
-                   GROUP BY `plan`.`id`''' % (','.join(plan_columns[f] for f in fields if f in plan_columns),
-                                              ' AND '.join(where))
+                   GROUP BY `plan`.`id`''' % (
+            ','.join(select_clauses),
+            ' AND '.join(where)
+        )
 
         cursor.execute(query, app_name)
-        resp.body = ujson.dumps(cursor)
+        results = cursor.fetchall()
+        resp.body = ujson.dumps(results)
         cursor.close()
         connection.close()
 
@@ -4762,6 +4945,14 @@ class ApplicationTemplates(object):
             connection, template_filters, template_filter_types, req.params
         )
 
+        select_clauses = []
+        for f in fields:
+            if f == "id" or f == "tags":
+                select_clauses.append(template_columns[f])
+            else:
+                expr = template_columns[f].split(" as ")[0].strip()
+                select_clauses.append(f"ANY_VALUE({expr}) AS `{f}`")
+
         query = """SELECT %s
                    FROM `template`
                    JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
@@ -4770,12 +4961,13 @@ class ApplicationTemplates(object):
                    JOIN `target` ON `target`.`id` = `template`.`user_id`
                    WHERE %s
                    GROUP BY `template`.`id`""" % (
-            ",".join(template_columns[f] for f in fields if f in template_columns),
+            ",".join(select_clauses),
             " AND ".join(where),
         )
 
         cursor.execute(query, app_name)
-        resp.body = ujson.dumps(cursor)
+        results = cursor.fetchall()
+        resp.body = ujson.dumps(results)
         cursor.close()
         connection.close()
 
@@ -4814,7 +5006,6 @@ class Applications(object):
 
         cursor.execute(query)
         apps = []
-        # format 'tags' if necessary
         for app in cursor.fetchall():
             if 'tags' in app:
                 if app['tags'] is None:
@@ -4823,13 +5014,9 @@ class Applications(object):
                     app['tags'] = ujson.loads(app['tags'])
             apps.append(app)
 
-        addional_fields = {'variables', 'default_modes', 'supported_modes', 'owners', 'custom_sender_addresses', 'categories'}
-        if requested_fields is None or any(field in addional_fields for field in requested_fields):
-
-            # keep a map of application id to apps index so we can apply the selected rows to the correct app
-            app_id_idx_map = {}
-            for idx, app in enumerate(apps):
-                app_id_idx_map[app['id']] = idx
+        additional_fields = {'variables', 'default_modes', 'supported_modes', 'owners', 'custom_sender_addresses', 'categories'}
+        if requested_fields is None or any(field in additional_fields for field in requested_fields):
+            app_id_idx_map = {app['id']: idx for idx, app in enumerate(apps)}
 
             if requested_fields is None or 'variables' in requested_fields:
                 query = get_all_vars_query
@@ -4841,7 +5028,9 @@ class Applications(object):
                     app['variables'] = []
                     app['required_variables'] = []
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
                     apps[app_idx]['variables'].append(row['name'])
                     if row['required']:
                         apps[app_idx]['required_variables'].append(row['name'])
@@ -4856,7 +5045,9 @@ class Applications(object):
                 for idx in app_id_idx_map.values():
                     apps[idx]['default_modes'] = {}
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
                     apps[app_idx]['default_modes'][row['priority']] = row['mode']
 
             if requested_fields is None or 'supported_modes' in requested_fields:
@@ -4867,7 +5058,9 @@ class Applications(object):
                 for idx in app_id_idx_map.values():
                     apps[idx]['supported_modes'] = []
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
                     apps[app_idx]['supported_modes'].append(row['name'])
 
             if requested_fields is None or 'owners' in requested_fields:
@@ -4878,7 +5071,9 @@ class Applications(object):
                 for idx in app_id_idx_map.values():
                     apps[idx]['owners'] = []
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
                     apps[app_idx]['owners'].append(row['name'])
 
             if requested_fields is None or 'custom_sender_addresses' in requested_fields:
@@ -4889,7 +5084,9 @@ class Applications(object):
                 for idx in app_id_idx_map.values():
                     apps[idx]['custom_sender_addresses'] = {}
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
                     apps[app_idx]['custom_sender_addresses'][row['mode_name']] = row['address']
 
             if requested_fields is None or 'categories' in requested_fields:
@@ -4900,17 +5097,24 @@ class Applications(object):
                 for idx in app_id_idx_map.values():
                     apps[idx]['categories'] = []
                 for row in cursor:
-                    app_idx = app_id_idx_map[row['app_id']]
-                    apps[app_idx]['categories'].append({'id': row['id'], 'name': row['name'], 'description': row['description'], 'mode': row['mode']})
+                    app_idx = app_id_idx_map.get(row['app_id'])
+                    if app_idx is None:
+                        continue
+                    apps[app_idx]['categories'].append({
+                        'id': row['id'],
+                        'name': row['name'],
+                        'description': row['description'],
+                        'mode': row['mode']
+                    })
 
         for app in apps:
             if requested_fields is not None and 'id' not in requested_fields:
-                del app['id']
-        payload = apps
+                app.pop('id', None)
+
+        resp.body = ujson.dumps(apps)
+        resp.status = HTTP_200
         cursor.close()
         connection.close()
-        resp.status = HTTP_200
-        resp.body = ujson.dumps(payload)
 
     def on_post(self, req, resp):
 
@@ -6029,8 +6233,8 @@ class ReprioritizationMode(object):
     enforce_user = True
 
     def on_delete(self, req, resp, username, src_mode_name):
-        '''
-        Delete a reprioritization mode for a user's mode setting
+        """
+        Delete a reprioritization mode for a user mode setting
 
         **Example request**:
 
@@ -6046,7 +6250,7 @@ class ReprioritizationMode(object):
            Content-Type: application/json
 
            []
-        '''
+        """
         with db.guarded_session() as session:
             affected_rows = session.execute(text(delete_reprioritization_settings_query), {
                 'target_name': username,
