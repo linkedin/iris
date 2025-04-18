@@ -3635,12 +3635,17 @@ class Templates(object):
 
         where_clause = ' AND '.join(where) if where else '1'
 
+        if where:
+            query += f' WHERE {where_clause}'
+
         if query_limit:
             query += f' ORDER BY `template`.`created` DESC LIMIT {query_limit}'
 
         if counts_only:
             cursor = connection.cursor(db.ss_dict_cursor)
-            field_counts, total_count = count_fields_for_template_fields(cursor, where_clause, fields, template_columns)
+            field_counts, total_count = count_fields_for_template_fields(
+                cursor, where_clause, fields, template_columns
+            )
             connection.close()
             resp.status = HTTP_200
             resp.body = ujson.dumps({
