@@ -11,6 +11,7 @@ import random
 import re
 import time
 from collections import Counter, defaultdict
+from typing import Optional, Dict, Tuple, List, Any
 from urllib.parse import parse_qs
 
 import falcon
@@ -766,7 +767,7 @@ def is_valid_tracking_settings(t, k, tpl):
     return True, None
 
 
-def get_order_expression(field: str) -> str:
+def get_order_expression(field: str) -> Optional[str]:
     """Return just the SQL expression part of incident_columns[field], stripping any alias."""
     expr = incident_columns.get(field)
     if not expr:
@@ -1367,83 +1368,6 @@ class Plan(object):
         resp.body = '[]'
 
 
-# This function performs a grouped count across requested fields for templates, returning counts per value
-# for each requested field. It supports tag metadata and consolidates all SQL into a single query per field
-# to improve performance and eliminate ONLY_FULL_GROUP_BY errors. When only tag fields are requested, it performs
-# a separate total count since tags alone aren't reliable for row count estimation.
-def count_fields_for_plan_fields(cursor, where_clause, fields, allowed_columns, extra_joins=""):
-    field_counts = {}
-    non_tag_fields = [f for f in fields if f != 'tags']
-
-    if not non_tag_fields and 'tags' not in fields:
-        return {}, 0
-
-    total_count = 0
-
-    # Consolidated non-tag counts
-    if non_tag_fields:
-        union_queries = []
-        for field in non_tag_fields:
-            if field not in allowed_columns:
-                continue
-            expr = allowed_columns[field].split(' as ')[0].strip()
-            subquery = f"""
-                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
-                FROM `plan`
-                JOIN `target` ON `plan`.`user_id` = `target`.`id`
-                LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
-                {extra_joins}
-                WHERE {where_clause}
-                GROUP BY {expr}
-            """
-            union_queries.append(subquery)
-
-        cursor.execute(" UNION ALL ".join(union_queries))
-        for row in cursor.fetchall():
-            field = row['field']
-            value = row['value']
-            count = row['group_count']
-            field_counts.setdefault(field, {})[value] = count
-
-        # get total count from first field if not already set
-        if not total_count and field_counts:
-            total_count = sum(field_counts[next(iter(field_counts))].values())
-
-    # Tags
-    if 'tags' in fields:
-        tag_query = f'''
-            SELECT plan_metadata_tag.name, plan_metadata_tag.value, COUNT(*) as group_count
-            FROM plan_metadata_tag
-            JOIN plan ON plan_metadata_tag.plan_id = plan.id
-            JOIN target ON plan.user_id = target.id
-            LEFT OUTER JOIN plan_active ON plan.id = plan_active.plan_id
-            {extra_joins}
-            WHERE {where_clause}
-            GROUP BY plan_metadata_tag.name, plan_metadata_tag.value
-        '''
-        cursor.execute(tag_query)
-        for row in cursor.fetchall():
-            tag_name = row['name']
-            tag_value = row['value']
-            count = row['group_count']
-            field_counts.setdefault(tag_name, {})[tag_value] = count
-
-    # Tags-only fallback total count since tags are not reliable for obtaining a total count
-    if not non_tag_fields:
-        count_query = f"""
-            SELECT COUNT(*) AS total_count
-            FROM `plan`
-            JOIN `target` ON `plan`.`user_id` = `target`.`id`
-            LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
-            {extra_joins}
-            WHERE {where_clause}
-        """
-        cursor.execute(count_query)
-        total_count = cursor.fetchone()['total_count']
-
-    return field_counts, total_count
-
-
 class Plans(object):
     allow_read_no_auth = True
 
@@ -1585,7 +1509,7 @@ class Plans(object):
         where_clause = ' AND '.join(where) if where else '1'
 
         if counts_only:
-            field_counts, total_count = count_fields_for_plan_fields(cursor, where_clause, fields, plan_columns, extra_joins)
+            field_counts, total_count = self.count_fields_for_plan_fields(cursor, where_clause, fields, plan_columns, extra_joins)
             connection.close()
             resp.status = HTTP_200
             resp.body = ujson.dumps({
@@ -1909,86 +1833,142 @@ class Plans(object):
         resp.body = ujson.dumps(plan_id)
         resp.set_header('Location', '/plans/%s' % plan_id)
 
+    @staticmethod
+    def count_fields_for_plan_fields(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str = ""
+    ) -> Tuple[Dict[str, Dict[str, int]], int]:
+        """
+        Performs a grouped count across requested fields for plans, returning counts per value
+        for each requested field. Supports tag metadata and consolidates all SQL into a single
+        query per field to eliminate ONLY_FULL_GROUP_BY errors. When only tag fields are requested,
+        performs a separate total count since tags alone aren't reliable for row count estimation.
+        """
+        field_counts: Dict[str, Dict[str, int]] = {}
+        non_tag_fields = [f for f in fields if f != 'tags']
 
-def count_fields_for_incidents(cursor, where_clause, fields, allowed_columns, extra_joins=''):
-    field_counts = {}
-    non_tag_fields = [f for f in fields if f != 'tags']
+        # No fields requested
+        if not non_tag_fields and 'tags' not in fields:
+            return {}, 0
 
-    total_count = 0
+        total_count = 0
 
-    # Consolidated non-tag query
-    if non_tag_fields:
+        # Consolidated non-tag field counts
+        if non_tag_fields:
+            field_counts.update(
+                Plans._get_non_tag_field_counts(cursor, where_clause, non_tag_fields, allowed_columns, extra_joins)
+            )
+            total_count = (
+                sum(field_counts[next(iter(field_counts))].values())
+                if field_counts else 0
+            )
+
+        # Tag-based grouped counts
+        if 'tags' in fields:
+            tag_counts = Plans._get_tag_field_counts(cursor, where_clause, extra_joins)
+            for tag_name, tag_values in tag_counts.items():
+                field_counts.setdefault(tag_name, {}).update(tag_values)
+
+        # If only tags were requested, fetch total separately
+        if not non_tag_fields:
+            total_count = Plans._get_total_count_for_tags_only(cursor, where_clause, extra_joins)
+
+        return field_counts, total_count
+
+    @staticmethod
+    def _get_non_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Runs a UNION ALL query across each requested non-tag field, returning
+        grouped value counts for each field using the original JOIN structure.
+        """
+        result: Dict[str, Dict[str, int]] = {}
         union_queries = []
-        for field in non_tag_fields:
+
+        for field in fields:
             if field not in allowed_columns:
                 continue
             expr = allowed_columns[field].split(' as ')[0].strip()
             subquery = f"""
                 SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
-                FROM incident
-                JOIN plan ON incident.plan_id = plan.id
-                JOIN application ON incident.application_id = application.id
-                LEFT OUTER JOIN target ON incident.owner_id = target.id
-                LEFT OUTER JOIN template_variable
-                    ON template_variable.application_id = application.id
-                    AND template_variable.title_variable = 1
+                FROM `plan`
+                JOIN `target` ON `plan`.`user_id` = `target`.`id`
+                LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
                 {extra_joins}
                 WHERE {where_clause}
                 GROUP BY {expr}
             """
             union_queries.append(subquery)
 
-        final_query = " UNION ALL ".join(union_queries)
-        cursor.execute(final_query)
-        for row in cursor.fetchall():
-            field = row['field']
-            value = row['value']
-            count = row['group_count']
-            field_counts.setdefault(field, {})[value] = count
-        if field_counts:
-            total_count = sum(field_counts[next(iter(field_counts))].values())
+        if union_queries:
+            cursor.execute(" UNION ALL ".join(union_queries))
+            for row in cursor.fetchall():
+                field = row['field']
+                value = row['value']
+                count = row['group_count']
+                result.setdefault(field, {})[value] = count
 
-    # Tag query
-    if 'tags' in fields:
+        return result
+
+    @staticmethod
+    def _get_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Executes the tag aggregation query to count tags grouped by (name, value).
+        Uses LEFT JOINs to maintain parity with the main plan table joins.
+        """
+        result: Dict[str, Dict[str, int]] = {}
+
         tag_query = f'''
-            SELECT incident_metadata_tag.name, incident_metadata_tag.value, COUNT(*) AS group_count
-            FROM incident_metadata_tag
-            JOIN incident ON incident.id = incident_metadata_tag.incident_id
-            JOIN plan ON incident.plan_id = plan.id
-            JOIN application ON incident.application_id = application.id
-            LEFT OUTER JOIN target ON incident.owner_id = target.id
-            LEFT OUTER JOIN template_variable
-                ON template_variable.application_id = application.id
-                AND template_variable.title_variable = 1
+            SELECT plan_metadata_tag.name, plan_metadata_tag.value, COUNT(*) as group_count
+            FROM plan_metadata_tag
+            JOIN plan ON plan_metadata_tag.plan_id = plan.id
+            JOIN target ON plan.user_id = target.id
+            LEFT OUTER JOIN plan_active ON plan.id = plan_active.plan_id
             {extra_joins}
             WHERE {where_clause}
-            GROUP BY incident_metadata_tag.name, incident_metadata_tag.value
+            GROUP BY plan_metadata_tag.name, plan_metadata_tag.value
         '''
         cursor.execute(tag_query)
         for row in cursor.fetchall():
             tag_name = row['name']
             tag_value = row['value']
             count = row['group_count']
-            field_counts.setdefault(tag_name, {})[tag_value] = count
+            result.setdefault(tag_name, {})[tag_value] = count
 
-    if not non_tag_fields:
-        # Tags-only case, so fetch a reliable count from incident table
-        count_query = f'''
-            SELECT COUNT(*) as total
-            FROM incident
-            JOIN plan ON incident.plan_id = plan.id
-            JOIN application ON incident.application_id = application.id
-            LEFT OUTER JOIN target ON incident.owner_id = target.id
-            LEFT OUTER JOIN template_variable
-                ON template_variable.application_id = application.id
-                AND template_variable.title_variable = 1
+        return result
+
+    @staticmethod
+    def _get_total_count_for_tags_only(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> int:
+        """
+        Fetches the total number of matching rows from the `plan` table when only
+        tag fields are requested. Tags themselves do not provide reliable totals.
+        """
+        count_query = f"""
+            SELECT COUNT(*) AS total_count
+            FROM `plan`
+            JOIN `target` ON `plan`.`user_id` = `target`.`id`
+            LEFT OUTER JOIN `plan_active` ON `plan`.`id` = `plan_active`.`plan_id`
             {extra_joins}
             WHERE {where_clause}
-        '''
+        """
         cursor.execute(count_query)
-        total_count = cursor.fetchone()['total']
-
-    return field_counts, total_count
+        return cursor.fetchone()['total_count']
 
 
 class Incidents(object):
@@ -2172,7 +2152,7 @@ class Incidents(object):
 
         if counts_only:
             cursor = connection.cursor(db.ss_dict_cursor)
-            field_counts, total_count = count_fields_for_incidents(
+            field_counts, total_count = self.count_fields_for_incidents(
                 cursor, where_clause, requested_fields, incident_columns, ''
             )
             connection.close()
@@ -2539,6 +2519,150 @@ class Incidents(object):
                 self.custom_incident_handler_dispatcher.process_create(incident_data)
             except Exception:
                 logger.exception('Encountered exception during custom_incident_handler_dispatcher incident creation task: %s', incident_data)
+
+    @staticmethod
+    def count_fields_for_incidents(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str = ''
+    ) -> Tuple[Dict[str, Dict[str, int]], int]:
+        """
+        Performs a grouped count across requested fields for incidents, returning counts per value
+        for each requested field. Supports tag metadata and consolidates all SQL into a single
+        query per field to eliminate ONLY_FULL_GROUP_BY errors. When only tag fields are requested,
+        performs a separate total count since tags alone aren't reliable for row count estimation.
+        """
+        field_counts: Dict[str, Dict[str, int]] = {}
+        non_tag_fields = [f for f in fields if f != 'tags']
+
+        total_count = 0
+
+        # Consolidated non-tag field counts
+        if non_tag_fields:
+            field_counts.update(
+                Incidents._get_non_tag_field_counts(cursor, where_clause, non_tag_fields, allowed_columns, extra_joins)
+            )
+            total_count = (
+                sum(field_counts[next(iter(field_counts))].values())
+                if field_counts else 0
+            )
+
+        # Tag-based grouped counts
+        if 'tags' in fields:
+            tag_counts = Incidents._get_tag_field_counts(cursor, where_clause, extra_joins)
+            for tag_name, tag_values in tag_counts.items():
+                field_counts.setdefault(tag_name, {}).update(tag_values)
+
+        # Tags-only fallback total count
+        if not non_tag_fields:
+            total_count = Incidents._get_total_count_for_tags_only(cursor, where_clause, extra_joins)
+
+        return field_counts, total_count
+
+    @staticmethod
+    def _get_non_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Runs a UNION ALL query across each requested non-tag field, returning
+        grouped value counts for each field using the original JOIN structure.
+        """
+        result: Dict[str, Dict[str, int]] = {}
+        union_queries = []
+
+        for field in fields:
+            if field not in allowed_columns:
+                continue
+            expr = allowed_columns[field].split(' as ')[0].strip()
+            subquery = f"""
+                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
+                FROM incident
+                JOIN plan ON incident.plan_id = plan.id
+                JOIN application ON incident.application_id = application.id
+                LEFT OUTER JOIN target ON incident.owner_id = target.id
+                LEFT OUTER JOIN template_variable
+                    ON template_variable.application_id = application.id
+                    AND template_variable.title_variable = 1
+                {extra_joins}
+                WHERE {where_clause}
+                GROUP BY {expr}
+            """
+            union_queries.append(subquery)
+
+        if union_queries:
+            cursor.execute(" UNION ALL ".join(union_queries))
+            for row in cursor.fetchall():
+                field = row['field']
+                value = row['value']
+                count = row['group_count']
+                result.setdefault(field, {})[value] = count
+
+        return result
+
+    @staticmethod
+    def _get_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Executes the tag aggregation query to count incident tags grouped by (name, value).
+        """
+        result: Dict[str, Dict[str, int]] = {}
+
+        tag_query = f'''
+            SELECT incident_metadata_tag.name, incident_metadata_tag.value, COUNT(*) AS group_count
+            FROM incident_metadata_tag
+            JOIN incident ON incident.id = incident_metadata_tag.incident_id
+            JOIN plan ON incident.plan_id = plan.id
+            JOIN application ON incident.application_id = application.id
+            LEFT OUTER JOIN target ON incident.owner_id = target.id
+            LEFT OUTER JOIN template_variable
+                ON template_variable.application_id = application.id
+                AND template_variable.title_variable = 1
+            {extra_joins}
+            WHERE {where_clause}
+            GROUP BY incident_metadata_tag.name, incident_metadata_tag.value
+        '''
+        cursor.execute(tag_query)
+        for row in cursor.fetchall():
+            tag_name = row['name']
+            tag_value = row['value']
+            count = row['group_count']
+            result.setdefault(tag_name, {})[tag_value] = count
+
+        return result
+
+    @staticmethod
+    def _get_total_count_for_tags_only(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> int:
+        """
+        Fetches the total number of matching rows from the `incident` table when only
+        tag fields are requested. Tags themselves do not provide reliable totals.
+        """
+        count_query = f'''
+            SELECT COUNT(*) as total
+            FROM incident
+            JOIN plan ON incident.plan_id = plan.id
+            JOIN application ON incident.application_id = application.id
+            LEFT OUTER JOIN target ON incident.owner_id = target.id
+            LEFT OUTER JOIN template_variable
+                ON template_variable.application_id = application.id
+                AND template_variable.title_variable = 1
+            {extra_joins}
+            WHERE {where_clause}
+        '''
+        cursor.execute(count_query)
+        return cursor.fetchone()['total']
 
 
 class Incident(object):
@@ -3527,79 +3651,6 @@ class Template(object):
         resp.body = ujson.dumps(active)
 
 
-def count_fields_for_template_fields(cursor, where_clause, fields, allowed_columns, extra_joins=""):
-    field_counts = {}
-    non_tag_fields = [f for f in fields if f != 'tags']
-
-    if not non_tag_fields and 'tags' not in fields:
-        return {}, 0
-
-    total_count = 0
-
-    # Consolidated non-tag counts
-    if non_tag_fields:
-        union_queries = []
-        for field in non_tag_fields:
-            if field not in allowed_columns:
-                continue
-            expr = allowed_columns[field].split(' as ')[0].strip()
-            subquery = f"""
-                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
-                FROM `template`
-                JOIN `target` ON `template`.`user_id` = `target`.`id`
-                LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
-                {extra_joins}
-                WHERE {where_clause}
-                GROUP BY {expr}
-            """
-            union_queries.append(subquery)
-
-        cursor.execute(" UNION ALL ".join(union_queries))
-        for row in cursor.fetchall():
-            field = row['field']
-            value = row['value']
-            count = row['group_count']
-            field_counts.setdefault(field, {})[value] = count
-
-        # get total count from first field if not already set
-        if not total_count and field_counts:
-            total_count = sum(field_counts[next(iter(field_counts))].values())
-
-    # Tags
-    if 'tags' in fields:
-        tag_query = f'''
-            SELECT template_metadata_tag.name, template_metadata_tag.value, COUNT(*) as group_count
-            FROM template_metadata_tag
-            JOIN template ON template_metadata_tag.template_id = template.id
-            JOIN target ON template.user_id = target.id
-            LEFT OUTER JOIN template_active ON template.id = template_active.template_id
-            {extra_joins}
-            WHERE {where_clause}
-            GROUP BY template_metadata_tag.name, template_metadata_tag.value
-        '''
-        cursor.execute(tag_query)
-        for row in cursor.fetchall():
-            tag_name = row['name']
-            tag_value = row['value']
-            count = row['group_count']
-            field_counts.setdefault(tag_name, {})[tag_value] = count
-
-    # Tags-only fallback total count
-    if not non_tag_fields:
-        count_query = f"""
-            SELECT COUNT(*) AS total_count
-            FROM `template`
-            JOIN `target` ON `template`.`user_id` = `target`.`id`
-            LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
-            {extra_joins}
-            WHERE {where_clause}
-        """
-        cursor.execute(count_query)
-        total_count = cursor.fetchone()['total_count']
-
-    return field_counts, total_count
-
-
 class Templates(object):
     allow_read_no_auth = True
 
@@ -3643,7 +3694,7 @@ class Templates(object):
 
         if counts_only:
             cursor = connection.cursor(db.ss_dict_cursor)
-            field_counts, total_count = count_fields_for_template_fields(
+            field_counts, total_count = self.count_fields_for_template_fields(
                 cursor, where_clause, fields, template_columns
             )
             connection.close()
@@ -3742,6 +3793,142 @@ class Templates(object):
         resp.status = HTTP_201
         resp.set_header('Location', '/templates/%s' % template_id)
         resp.body = ujson.dumps(template_id)
+
+    @staticmethod
+    def count_fields_for_template_fields(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str = ""
+    ) -> Tuple[Dict[str, Dict[str, int]], int]:
+        """
+        Performs a grouped count across requested fields for templates, returning counts per value
+        for each requested field. Supports tag metadata and consolidates all SQL into a single
+        query per field to eliminate ONLY_FULL_GROUP_BY errors. When only tag fields are requested,
+        performs a separate total count since tags alone aren't reliable for row count estimation.
+        """
+        field_counts: Dict[str, Dict[str, int]] = {}
+        non_tag_fields = [f for f in fields if f != 'tags']
+
+        # No fields requested
+        if not non_tag_fields and 'tags' not in fields:
+            return {}, 0
+
+        total_count = 0
+
+        # Consolidated non-tag field counts
+        if non_tag_fields:
+            field_counts.update(
+                Templates._get_non_tag_field_counts(cursor, where_clause, non_tag_fields, allowed_columns, extra_joins)
+            )
+            total_count = (
+                sum(field_counts[next(iter(field_counts))].values())
+                if field_counts else 0
+            )
+
+        # Tag-based grouped counts
+        if 'tags' in fields:
+            tag_counts = Templates._get_tag_field_counts(cursor, where_clause, extra_joins)
+            for tag_name, tag_values in tag_counts.items():
+                field_counts.setdefault(tag_name, {}).update(tag_values)
+
+        # Tags-only fallback total count
+        if not non_tag_fields:
+            total_count = Templates._get_total_count_for_tags_only(cursor, where_clause, extra_joins)
+
+        return field_counts, total_count
+
+    @staticmethod
+    def _get_non_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        fields: List[str],
+        allowed_columns: Dict[str, str],
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Runs a UNION ALL query across each requested non-tag field, returning
+        grouped value counts for each field using the original JOIN structure.
+        """
+        result: Dict[str, Dict[str, int]] = {}
+        union_queries = []
+
+        for field in fields:
+            if field not in allowed_columns:
+                continue
+            expr = allowed_columns[field].split(' as ')[0].strip()
+            subquery = f"""
+                SELECT '{field}' AS field, {expr} AS value, COUNT(*) AS group_count
+                FROM `template`
+                JOIN `target` ON `template`.`user_id` = `target`.`id`
+                LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+                {extra_joins}
+                WHERE {where_clause}
+                GROUP BY {expr}
+            """
+            union_queries.append(subquery)
+
+        if union_queries:
+            cursor.execute(" UNION ALL ".join(union_queries))
+            for row in cursor.fetchall():
+                field = row['field']
+                value = row['value']
+                count = row['group_count']
+                result.setdefault(field, {})[value] = count
+
+        return result
+
+    @staticmethod
+    def _get_tag_field_counts(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> Dict[str, Dict[str, int]]:
+        """
+        Executes the tag aggregation query to count template tags grouped by (name, value).
+        """
+        result: Dict[str, Dict[str, int]] = {}
+
+        tag_query = f'''
+            SELECT template_metadata_tag.name, template_metadata_tag.value, COUNT(*) as group_count
+            FROM template_metadata_tag
+            JOIN template ON template_metadata_tag.template_id = template.id
+            JOIN target ON template.user_id = target.id
+            LEFT OUTER JOIN template_active ON template.id = template_active.template_id
+            {extra_joins}
+            WHERE {where_clause}
+            GROUP BY template_metadata_tag.name, template_metadata_tag.value
+        '''
+        cursor.execute(tag_query)
+        for row in cursor.fetchall():
+            tag_name = row['name']
+            tag_value = row['value']
+            count = row['group_count']
+            result.setdefault(tag_name, {})[tag_value] = count
+
+        return result
+
+    @staticmethod
+    def _get_total_count_for_tags_only(
+        cursor: Any,
+        where_clause: str,
+        extra_joins: str
+    ) -> int:
+        """
+        Fetches the total number of matching rows from the `template` table when only
+        tag fields are requested. Tags themselves do not provide reliable totals.
+        """
+        count_query = f"""
+            SELECT COUNT(*) AS total_count
+            FROM `template`
+            JOIN `target` ON `template`.`user_id` = `target`.`id`
+            LEFT OUTER JOIN `template_active` ON `template`.`id` = `template_active`.`template_id`
+            {extra_joins}
+            WHERE {where_clause}
+        """
+        cursor.execute(count_query)
+        return cursor.fetchone()['total_count']
 
 
 class UserModes(object):
