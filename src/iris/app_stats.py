@@ -44,10 +44,18 @@ def calculate_app_stats(app, connection, cursor, fields_filter=None):
                                           AND `sent` < %(date_variable)s
                                           AND `application_id` = %(application_id)s''',
 
-        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) as incident_count
-                                                        FROM incident JOIN application ON application.id = %(application_id)s JOIN message ON message.incident_id = incident.id AND application.id = incident.application_id
-                                                        WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK AND incident.created < %(date_variable)s AND priority_id IN (SELECT id FROM priority WHERE name IN ("high","urgent"))
-                                                        GROUP BY incident.application_id ORDER BY incident_count DESC'''
+        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.id) AS incident_count
+                                                FROM incident
+                                                JOIN application ON application.id = %(application_id)s
+                                                JOIN message ON message.incident_id = incident.id AND application.id = incident.application_id
+                                                WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK
+                                                AND incident.created < %(date_variable)s
+                                                AND priority_id IN (
+                                                    SELECT id FROM priority WHERE name IN ('high', 'urgent')
+                                                )
+                                                GROUP BY application.id, application.name
+                                                ORDER BY incident_count DESC
+                                                '''
 
     }
 
@@ -185,23 +193,32 @@ def calculate_single_stat(connection, cursor, stat_name):
         'total_messages_sent': 'SELECT application.name, COUNT(*) as cnt FROM `message` JOIN application ON application.id = message.application_id WHERE `sent` < %(date_variable)s GROUP BY application.name ORDER BY cnt DESC, application.name ASC',
         'total_incidents_last_week': 'SELECT application.name, COUNT(*) as cnt FROM `incident` JOIN application ON application.id = incident.application_id WHERE `created` > %(date_variable)s - INTERVAL 1 WEEK AND `created` < %(date_variable)s GROUP BY application.name ORDER BY cnt DESC, application.name ASC',
         'total_messages_sent_last_week': 'SELECT application.name, COUNT(*) as cnt FROM `message` USE INDEX (ix_message_sent) JOIN application ON application.id = message.application_id WHERE `sent` > %(date_variable)s - INTERVAL 1 WEEK AND `sent` < %(date_variable)s GROUP BY application.name ORDER BY cnt DESC, application.name ASC',
-        'pct_incidents_claimed_last_week': '''SELECT application.name, (ROUND(COUNT(`owner_id`) / COUNT(*) * 100, 2)) as cnt
-                                               FROM `incident`
-                                               JOIN application ON application.id = incident.application_id
-                                               WHERE `created` > %(date_variable)s - INTERVAL 1 WEEK
-                                               AND `created` < %(date_variable)s
-                                               GROUP BY application.name ORDER BY cnt DESC, application.name ASC''',
+        'pct_incidents_claimed_last_week': '''SELECT application.name,
+                                                    ROUND(COUNT(owner_id) / COUNT(*) * 100, 2) AS cnt
+                                                FROM incident
+                                                JOIN application ON application.id = incident.application_id
+                                                WHERE created > %(date_variable)s - INTERVAL 1 WEEK
+                                                AND created < %(date_variable)s
+                                                GROUP BY application.id, application.name
+                                                ORDER BY cnt DESC, application.name ASC
+                                                ''',
         'total_call_retry_last_week': '''SELECT application.name, COUNT(*) as cnt
                                           FROM `twilio_retry` JOIN `message` ON `message`.`id` = `twilio_retry`.`message_id`
                                           JOIN application ON application.id = message.application_id
                                           WHERE `sent` > %(date_variable)s - INTERVAL 1 WEEK
                                           AND `sent` < %(date_variable)s GROUP BY application.name ORDER BY cnt DESC, application.name ASC''',
-        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.application_id, incident.id) AS incident_count
-                                                FROM incident JOIN application ON application.id = incident.application_id
-                                                JOIN message ON message.incident_id = incident.id WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK
+        'high_priority_incidents_last_week': '''SELECT application.name, COUNT(DISTINCT incident.id) AS incident_count
+                                                FROM incident
+                                                JOIN application ON application.id = incident.application_id
+                                                JOIN message ON message.incident_id = incident.id
+                                                WHERE incident.created > %(date_variable)s - INTERVAL 1 WEEK
                                                 AND incident.created < %(date_variable)s
-                                                AND priority_id IN ( SELECT id FROM priority WHERE name IN ('high', 'urgent') )
-                                                GROUP BY application.name ORDER BY incident_count DESC, application.name ASC'''
+                                                AND priority_id IN (
+                                                    SELECT id FROM priority WHERE name IN ('high', 'urgent')
+                                                )
+                                                GROUP BY application.id, application.name
+                                                ORDER BY incident_count DESC, application.name ASC
+                                                '''
 
     }
 
