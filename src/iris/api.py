@@ -2140,35 +2140,6 @@ class Incidents(object):
         if target and not self.external_sender_incident_processing:
             where.append('''`message`.`target_id` IN (SELECT `id` FROM `target` WHERE `target`.`name` IN %s)''')
             sql_values.append(tuple(target))
-        if self.external_sender_incident_processing and target:
-            message_query_string = 'messages?limit=1000&incident_id__gt=0'
-            if req.params.get('created__ge'):
-                message_query_string += '&sent__ge=' + str(req.params.get('created__ge'))
-            if req.params.get('created__le'):
-                message_query_string += '&sent__le=' + str(req.params.get('created__le'))
-            for t in target:
-                message_query_string = message_query_string + '&target=' + str(t)
-            # get messages for incident
-            try:
-                external_sender_client = client.IrisClient(self.external_sender_address, self.external_sender_version, self.external_sender_app, self.external_sender_key)
-                r = external_sender_client.get(message_query_string, verify=self.verify)
-                if r.ok:
-                    incident_IDs = []
-                    messages = r.json()
-                    if len(messages) > 0:
-                        for message in messages:
-                            incident_IDs.append(message.get('incident_id'))
-                        where.append('''`incident`.`id` IN %s''')
-                        sql_values.append(tuple(incident_IDs))
-                    elif target:
-                        # if target field is specified and there are no matching messages that means there are no incidents that match the query
-                        resp.status = HTTP_200
-                        resp.body = ujson.dumps([])
-                        return
-                else:
-                    logger.error('failed retrieving messages from external sender %s', r.text)
-            except Exception as e:
-                logger.exception('failed to establish connection with iris message processor')
 
         tag_subqueries = gen_tag_wheres(connection, 'incident_id', 'incident_metadata_tag', '`incident`.`id`', req.params)
         if tag_subqueries:
@@ -5071,42 +5042,6 @@ class ApplicationPlans(object):
     allow_read_no_auth = True
 
     def on_get(self, req, resp, app_name):
-        '''
-        Search endpoint for active plans that support a given app.
-        A plan supports an app if one of its steps uses a template
-        that defines content for that application.
-
-        **Example request**:
-
-        .. sourcecode:: http
-
-           GET /v0/applications/app-foo/plans?name__contains=bar& HTTP/1.1
-
-        **Example response**:
-
-        .. sourcecode:: http
-
-           HTTP/1.1 200 OK
-           Content-Type: application/json
-
-           [
-               {
-                   "description": "This is plan bar",
-                   "threshold_count": 10,
-                   "creator": "user1",
-                   "created": 1478154275,
-                   "aggregation_reset": 300,
-                   "aggregation_window": 300,
-                   "threshold_window": 900,
-                   "tracking_type": null,
-                   "tracking_template": null,
-                   "tracking_key": null,
-                   "active": 1,
-                   "id": 123456,
-                   "name": "bar-sla0"
-               }
-           ]
-        '''
         fields = req.get_param_as_list('fields')
         fields = [f for f in fields if f in plan_columns] if fields else None
         req.params.pop('fields', None)
