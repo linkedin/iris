@@ -36,7 +36,7 @@ from iris.sender import auditlog
 from iris.sender.quota import (get_application_quotas_query,
                                insert_application_quota_query, quota_int_keys,
                                required_quota_keys)
-from iris.utils import sanitize_unicode_dict
+from iris.utils import sanitize_unicode_dict, safe_execute_with_retries, safe_commit_with_retries
 from iris.vendors.iris_slack import iris_slack
 
 from . import app_stats, cache, client, db, ui, utils, sso
@@ -1762,7 +1762,8 @@ class Plans(object):
                     % plan_dict["name"],
                 )
             try:
-                plan_id = session.execute(text(insert_plan_query), plan_dict).lastrowid
+                result = safe_execute_with_retries(session, text(insert_plan_query), plan_dict)
+                plan_id = result.lastrowid
             except IntegrityError:
                 session.rollback()
                 session.close()
@@ -1813,9 +1814,9 @@ class Plans(object):
 
                     try:
                         if dynamic:
-                            session.execute(text(insert_dynamic_step_query), step)
+                            safe_execute_with_retries(session, text(insert_dynamic_step_query), step)
                         else:
-                            session.execute(text(insert_plan_step_query), step)
+                            safe_execute_with_retries(session, text(insert_plan_step_query), step)
                     except IntegrityError:
                         raise HTTPBadRequest('Invalid plan',
                                              'Invalid data for step %s' % index)
@@ -1825,9 +1826,10 @@ class Plans(object):
 
             query = '''INSERT INTO `plan_active` (`name`, `plan_id`)
                        VALUES (:name, :plan_id) ON DUPLICATE KEY UPDATE `plan_id`=:plan_id'''
-            session.execute(text(query), {'name': plan_name, 'plan_id': plan_id})
+            params = {'name': plan_name, 'plan_id': plan_id}
+            safe_execute_with_retries(session, text(query), params)
 
-            session.commit()
+            safe_commit_with_retries(session)
             session.close()
         resp.status = HTTP_201
         resp.body = ujson.dumps(plan_id)

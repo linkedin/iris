@@ -14,6 +14,10 @@ import re
 import msgpack
 import logging
 from random import randrange
+from sqlalchemy.exc import OperationalError, InternalError, SQLAlchemyError
+import pymysql
+
+MAX_RETRIES = 3
 
 logger = logging.getLogger(__name__)
 
@@ -382,3 +386,48 @@ def sanitize_unicode_dict(d):
         elif isinstance(value, dict):
             d[key] = sanitize_unicode_dict(value)
     return d
+
+
+class MaxDeadlockRetriesExceeded(Exception):
+    pass
+
+
+def safe_execute_with_retries(engine_or_session, sql_or_callable, params=None):
+    retries = 0
+    last_exception = None
+
+    while retries < MAX_RETRIES:
+        try:
+            if callable(sql_or_callable):
+                return sql_or_callable()
+            return engine_or_session.execute(sql_or_callable, params)
+        except (pymysql.err.OperationalError, pymysql.err.InternalError, OperationalError, InternalError) as e:
+            last_exception = e
+            retries += 1
+            sleep(1)
+            continue
+        except SQLAlchemyError:
+            raise
+
+    logger.exception("Max retries exceeded for safe_execute_with_retries. Last exception: %s", last_exception)
+    raise MaxDeadlockRetriesExceeded("Max retries exceeded for deadlock handling")
+
+
+def safe_commit_with_retries(session):
+    retries = 0
+    last_exception = None
+    while retries < MAX_RETRIES:
+        try:
+            session.commit()
+            return
+        except (pymysql.err.OperationalError, pymysql.err.InternalError, OperationalError, InternalError) as e:
+            last_exception = e
+            retries += 1
+            session.rollback()
+            sleep(1)
+        except SQLAlchemyError:
+            session.rollback()
+            raise
+
+    logger.exception("Max retries exceeded for commit deadlock handling. Last exception: %s", last_exception)
+    raise MaxDeadlockRetriesExceeded("Max retries exceeded for commit deadlock handling")
