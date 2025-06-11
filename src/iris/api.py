@@ -1736,8 +1736,9 @@ class Plans(object):
 
                 if 'dynamic_index' in step:
                     dynamic_indices.add(step['dynamic_index'])
-                if (step.get('wait', 0) * step.get('count', 0)) > longest_step:
-                    longest_step = step.get('wait', 0) * step.get('count', 0)
+                message_count = step.get('repeat', 0) + 1
+                if (step.get('wait', 0) * message_count) > longest_step:
+                    longest_step = step.get('wait', 0) * message_count
             plan_length += longest_step
 
         if dynamic_indices != set(range(len(dynamic_indices))):
