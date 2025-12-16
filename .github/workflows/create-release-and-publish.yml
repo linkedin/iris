@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v6
       - name: Get version
         id: get_version
         run: echo "version=$(grep -Po '\d*\.\d*\.\d*' src/iris/__init__.py)" >> $GITHUB_OUTPUT
@@ -28,7 +28,7 @@ jobs:
           draft: false
           prerelease: false
       - name: Set up Python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
       - name: Install dependencies
