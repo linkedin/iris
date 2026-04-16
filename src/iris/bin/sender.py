@@ -1795,7 +1795,7 @@ def main():
                 aggregate(runtime)
             except Exception:
                 metrics.incr('task_failure')
-                logger.exception("Exception occured in main loop.")
+                logger.exception("Exception occurred in main loop.")
 
         # If we're not leader, don't do the leader tasks and make sure those other
         # greenlets are stopped if they're running
